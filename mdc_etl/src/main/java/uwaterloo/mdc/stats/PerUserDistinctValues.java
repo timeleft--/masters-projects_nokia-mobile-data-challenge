@@ -75,15 +75,17 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 			ValueCardinality<Long> prevReading = prevTimeColsReadings.get(READINGS_AT_SAME_TIME+currKey);
 			if(prevReading == null){
 				// initialization
-				prevTimeColsReadings.put(READINGS_AT_SAME_TIME+currKey, new ValueCardinality<Long>(new Long(currValue),0));
+				prevReading = new ValueCardinality<Long>(new Long(currValue),0);
+				prevTimeColsReadings.put(READINGS_AT_SAME_TIME+currKey, prevReading);
 			}
-			if(prevReading.getKey().equals(currValue)){
+			Long longValue = Long.valueOf(currValue);
+			if(prevReading.getKey().equals(longValue)){
 				//Another reading at the same time
 				prevReading.setValue(prevReading.getValue() + 1);
 			} else {
 				opResult.get(READINGS_AT_SAME_TIME+currKey).addValue(prevReading.getValue().intValue());
 				
-				prevReading.setKey(Long.valueOf(currValue));
+				prevReading.setKey(longValue);
 				prevReading.setValue(1);
 			}
 		}
