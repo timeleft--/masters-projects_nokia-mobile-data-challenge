@@ -300,7 +300,7 @@ public abstract class CallableOperation<V> implements
 				try {
 					Thread.sleep(100);
 					delta += 100; //We will add them immediately to be visible!  
-					PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
+					PerfMon.increment(TimeMetrics.WAITING_LOCK, 100);
 				} catch (InterruptedException e) {
 					// Probably the program is shutting down
 					break;
