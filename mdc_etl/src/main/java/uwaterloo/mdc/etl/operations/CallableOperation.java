@@ -198,6 +198,7 @@ public abstract class CallableOperation<V> implements
 	}
 
 	private void delimiterProcedureInternal() {
+		delimiterProcedurePrep();
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
 		tuple.add(currValue);
@@ -213,6 +214,7 @@ public abstract class CallableOperation<V> implements
 	}
 
 	private void headerDelimiterProcedureInternal() {
+		headerDelimiterProcedurePrep();
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
 		keyList.add(currValue);
@@ -251,6 +253,16 @@ public abstract class CallableOperation<V> implements
 	 * Subclasses can override this to act on values
 	 */
 	protected abstract void delimiterProcedure();
+	
+	/**
+	 * Subclasses can override this to fill the map with column objects
+	 */
+	protected abstract void headerDelimiterProcedurePrep();
+
+	/**
+	 * Subclasses can override this to act on values
+	 */
+	protected abstract void delimiterProcedurePrep();
 
 	/**
 	 * Subclasses must override this to write their results out

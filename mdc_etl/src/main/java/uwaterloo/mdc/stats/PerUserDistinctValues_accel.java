@@ -24,5 +24,13 @@ public class PerUserDistinctValues_accel extends PerUserDistinctValues {
 			super.delimiterProcedure();
 		}
 	}
+	
+	@Override
+	protected void headerDelimiterProcedurePrep() {
+		if("start".equals(currValue) || "stop".equals(currValue)){
+			currValue += "_time";
+		}
+		super.headerDelimiterProcedurePrep();
+	}
 
 }

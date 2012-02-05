@@ -155,4 +155,16 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 		}
 		
 	}
+
+	@Override
+	protected void headerDelimiterProcedurePrep() {
+		// nothin
+		
+	}
+
+	@Override
+	protected void delimiterProcedurePrep() {
+		// nothin
+		
+	}
 }
