@@ -106,7 +106,7 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 			try {
 				Frequency freq = opResult.get(key);
 
-				if (key.contains("time")) {
+				if (key.contains("time") && !key.startsWith(READINGS_AT_SAME_TIME)) {
 					//Time frequencies are not useful and are very hard to calculate
 					// because of the large number of different values
 					int uniqueCount = freq.getUniqueCount();
