@@ -17,6 +17,7 @@ public class PerfMon {
 	public static String asString() {
 		StringBuilder resBuilder = new StringBuilder();
 		resBuilder.append("Millis since start: ").append(System.currentTimeMillis() - startTime);
+		resBuilder.append(" - Num Threads: ").append(Config.NUM_THREADS);
 		for(TimeMetrics metric: TimeMetrics.values()){
 			resBuilder.append(" - ").append(metric.toString()).append(": ").append(timeMeasures[metric.ordinal()]);
 		}

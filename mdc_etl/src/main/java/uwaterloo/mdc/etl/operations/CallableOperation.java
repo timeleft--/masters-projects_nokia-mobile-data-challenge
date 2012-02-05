@@ -63,7 +63,7 @@ public abstract class CallableOperation<V> implements
 	private final Reader inReader;
 	private FileInputStream inStream;
 
-	protected/* final */HashMap<String, V> result;
+	protected/* final */HashMap<String, V> opResult;
 	protected final LinkedList<String> keyList;
 	protected Iterator<String> keyIterator;
 
@@ -104,7 +104,7 @@ public abstract class CallableOperation<V> implements
 			currValueBuilder = new StringBuilder();
 			keyList = new LinkedList<String>();
 
-			result = new HashMap<String, V>();
+			opResult = new HashMap<String, V>();
 
 			char[] buff = new char[1];
 			long len = 0;
@@ -183,11 +183,13 @@ public abstract class CallableOperation<V> implements
 				}
 				buffer.clear();
 			}
+			
+			eoFileProcedure();
 
 			writeResults();
 
 			PerfMon.increment(TimeMetrics.FILES_PROCESSED, 1);
-			return result;
+			return opResult;
 		} finally {
 			if (inStream != null) {
 				inStream.close();
@@ -234,6 +236,11 @@ public abstract class CallableOperation<V> implements
 		keyIterator = keyList.iterator();
 		tuple = new ArrayList<String>(keyList.size());
 	}
+	
+	/**
+	 * Anything needs to be done at EOF (file)
+	 */
+	protected abstract void eoFileProcedure();
 
 	/**
 	 * Subclasses can override this to fill the map with column objects
@@ -353,7 +360,7 @@ public abstract class CallableOperation<V> implements
 
 	@SuppressWarnings("unchecked")
 	public HashMap<String, V> getResult() {
-		return (HashMap<String, V>) result.clone();
+		return (HashMap<String, V>) opResult.clone();
 	}
 
 	@SuppressWarnings("unchecked")

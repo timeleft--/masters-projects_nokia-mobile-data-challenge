@@ -2,6 +2,7 @@ package uwaterloo.mdc.stats;
 
 import java.io.File;
 import java.io.Writer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,7 +28,17 @@ public class CalcPerUserStats {
 	 */
 	public static void main(String[] args) throws Exception {
 		// TODO dataRoot from args
-		new CalcPerUserStats().count();
+		
+		CalcPerUserStats app = new CalcPerUserStats();
+		Arrays.sort(args);
+		if(Arrays.binarySearch(args, "--count") >= 0){
+			app.count();
+		} else if(Arrays.binarySearch(args, "--summary") >= 0){
+			app.summaryStats();
+		} else {
+			System.out.println("Ussage: --count OR --summary");
+		}
+
 	}
 
 	Map<String, Boolean> freqWriterLocks = Collections
@@ -37,6 +48,56 @@ public class CalcPerUserStats {
 			.synchronizedMap(new HashMap<String, Writer>());
 
 	private void count() throws Exception {
+		//To make sure the class is loaded
+		System.out.println(PerfMon.asString());
+		
+		CallableOperationFactory<Frequency> factory = new CallableOperationFactory<Frequency>();
+		
+		try {
+			ExecutorService exec = Executors
+					.newFixedThreadPool(Config.NUM_THREADS);
+
+			File dataRootFile = FileUtils.getFile(dataRoot);
+			for (File userDir : dataRootFile.listFiles()) {
+				for (File dataFile : userDir.listFiles()) {
+					//"accel.csv".equals(dataFile.getName()) ||
+					if ("distance_matrix.csv".equals(dataFile.getName())) {
+						continue;
+					}
+
+					PerUserDistinctValues distinctValues = (PerUserDistinctValues) factory.createOperation(PerUserDistinctValues.class,
+							this, dataFile, outPath);
+
+					// Future<HashMap<String, Frequency>> resultFuture =
+					exec.submit(distinctValues);
+
+				}
+			}
+			// This will make the executor accept no new threads
+			// and finish all existing threads in the queue
+			exec.shutdown();
+			// Wait until all threads are finish
+			while (!exec.isTerminated()) {
+				Thread.sleep(5000);
+				System.out.println(PerfMon.asString());
+			}
+		} finally {
+			long delta = System.currentTimeMillis();
+			for (Writer wr : freqWriterMap.values()) {
+				//This is just in case the program crashed
+				if (wr != null) {
+					wr.flush();
+					wr.close();
+				}
+			}
+			delta = System.currentTimeMillis() - delta;
+			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
+			
+			System.out.println(PerfMon.asString());
+		}
+	}
+	
+	private void summaryStats() throws Exception {
 		//To make sure the class is loaded
 		System.out.println(PerfMon.asString());
 		
