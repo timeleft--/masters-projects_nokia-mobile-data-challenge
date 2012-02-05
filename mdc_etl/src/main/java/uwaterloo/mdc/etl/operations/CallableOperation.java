@@ -198,9 +198,10 @@ public abstract class CallableOperation<V> implements
 	}
 
 	private void delimiterProcedureInternal() {
-		delimiterProcedurePrep();
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
+		
+		delimiterProcedurePrep();
 		tuple.add(currValue);
 		assert keyIterator.hasNext() : "The columns seem to be less than the values in this row!!";
 		currKey = keyIterator.next();
@@ -214,9 +215,10 @@ public abstract class CallableOperation<V> implements
 	}
 
 	private void headerDelimiterProcedureInternal() {
-		headerDelimiterProcedurePrep();
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
+		
+		headerDelimiterProcedurePrep();
 		keyList.add(currValue);
 		if (Config.USERID_COLNAME.equals(currValue)) {
 			return; // So that we don't have one extra frequency
