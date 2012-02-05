@@ -44,7 +44,7 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 		
 	}
 	private static final String READINGS_AT_SAME_TIME = "time_cardinality_";
-	private HashMap<String,ValueCardinality<Long>> prevTimeColsReadings = new HashMap<String,ValueCardinality<Long>>();
+	private HashMap<String,ValueCardinality<String>> prevTimeColsReadings = new HashMap<String,ValueCardinality<String>>();
 
 	@Deprecated
 	public PerUserDistinctValues(CalcPerUserStats master, char delimiter,
@@ -72,20 +72,20 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 		opResult.get(currKey).addValue(currValue);
 		
 		if (currKey.contains("time")) {
-			ValueCardinality<Long> prevReading = prevTimeColsReadings.get(READINGS_AT_SAME_TIME+currKey);
+			ValueCardinality<String> prevReading = prevTimeColsReadings.get(READINGS_AT_SAME_TIME+currKey);
 			if(prevReading == null){
 				// initialization
-				prevReading = new ValueCardinality<Long>(new Long(currValue),0);
+				prevReading = new ValueCardinality<String>(currValue,0);
 				prevTimeColsReadings.put(READINGS_AT_SAME_TIME+currKey, prevReading);
 			}
-			Long longValue = Long.valueOf(currValue);
-			if(prevReading.getKey().equals(longValue)){
+			
+			if(prevReading.getKey().equals(currValue)){
 				//Another reading at the same time
 				prevReading.setValue(prevReading.getValue() + 1);
 			} else {
-				opResult.get(READINGS_AT_SAME_TIME+currKey).addValue(prevReading.getValue().intValue());
+				opResult.get(READINGS_AT_SAME_TIME+currKey).addValue(prevReading.getValue().toString());
 				
-				prevReading.setKey(longValue);
+				prevReading.setKey(currValue);
 				prevReading.setValue(1);
 			}
 		}
@@ -151,8 +151,8 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 	protected void eoFileProcedure() {
 		for(String key: opResult.keySet()){
 			if(key.startsWith(READINGS_AT_SAME_TIME)){
-				ValueCardinality<Long> lastReading = prevTimeColsReadings.get(key);
-				opResult.get(key).addValue(lastReading.getValue().intValue());
+				ValueCardinality<String> lastReading = prevTimeColsReadings.get(key);
+				opResult.get(key).addValue(lastReading.getValue().toString());
 			}
 		}
 		
