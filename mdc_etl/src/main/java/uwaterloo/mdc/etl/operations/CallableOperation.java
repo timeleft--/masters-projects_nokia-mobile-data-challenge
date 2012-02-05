@@ -17,6 +17,8 @@ import java.util.concurrent.Callable;
 import org.apache.commons.io.FileUtils;
 
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.PerfMon;
+import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.stats.CalcPerUserStats;
 
 @SuppressWarnings("unused")
@@ -75,12 +77,7 @@ public abstract class CallableOperation<V> implements
 	protected final File dataFile;
 	protected CharSequence userid;
 
-	public CallableOperation(CalcPerUserStats master, File dataFile,
-			String outPath) throws IOException {
-		this(master, DEFAULT_DELIMITER, DEFAULT_EOL, DEFAULT_BUFF_SIZE,
-				dataFile, outPath);
-	}
-
+	@Deprecated
 	public CallableOperation(CalcPerUserStats master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
 			throws IOException {
@@ -155,8 +152,16 @@ public abstract class CallableOperation<V> implements
 			long len = 0;
 			char eolchi = eol0;
 			int eoli = 1;
-
-			while ((len = inReader.read(buffer)) != -1) {
+				
+			while (true){
+				long delta = System.currentTimeMillis();
+				len = inReader.read(buffer);
+				delta = System.currentTimeMillis() - delta; 
+				PerfMon.increment(TimeMetrics.IO_READ, delta);
+				if (len == -1) {
+					break;
+				}
+				
 				buffer.flip();
 				for (int i = 0; i < len; ++i) {
 					char ch = buff[i];
@@ -181,6 +186,7 @@ public abstract class CallableOperation<V> implements
 
 			writeResults();
 
+			PerfMon.increment(TimeMetrics.FILES_PROCESSED, 1);
 			return result;
 		} finally {
 			if (inStream != null) {
@@ -197,7 +203,7 @@ public abstract class CallableOperation<V> implements
 		currKey = keyIterator.next();
 		if (Config.USERID_COLNAME.equals(currKey)) {
 			if (userid == null) {
-				userid = currKey;
+				userid = currValue;
 			}
 			return; // So that we don't count userid
 		}
@@ -238,41 +244,57 @@ public abstract class CallableOperation<V> implements
 	 * Subclasses can override this to act on values
 	 */
 	protected abstract void delimiterProcedure();
+
 	/**
 	 * Subclasses must override this to write their results out
+	 * 
 	 * @throws IOException
 	 */
 	protected abstract void writeResults() throws IOException;
 
 	/**
 	 * Subclasses must override this to create the header of output file
+	 * 
 	 * @return header of output file
 	 */
 	protected abstract String getHeaderLine();
-	
-	protected Writer acquireWriter(String freqFileName, Map<String,Writer> writersMap) throws IOException {
-		Writer writer;
+
+	protected final Writer acquireWriter(String freqFileName,
+			Map<String, Writer> writersMap, Map<String, Boolean> locksMap)
+			throws IOException {
+		long delta = System.currentTimeMillis();
+		Writer writer = null;
 		while (true) {
 			// Loop to acquire the writer
 			synchronized (writersMap) {
 				if (!writersMap.containsKey(freqFileName)) {
 					writer = Channels.newWriter(
-							FileUtils
-									.openOutputStream(
-											FileUtils.getFile(outPath,
-													freqFileName))
+							FileUtils.openOutputStream(
+									FileUtils.getFile(outPath, freqFileName))
 									.getChannel(), Config.OUT_CHARSET);
 					writersMap.put(freqFileName, writer);
 
 					String header = getHeaderLine();
 					writer.write(header);
 
+					synchronized (locksMap) {
+						locksMap.put(freqFileName, Boolean.FALSE);
+					}
 				}
 
-				writer = writersMap.get(freqFileName);
-				if (writer != null) {
-					writersMap.put(freqFileName, null);
+				Boolean isWriterInUse = Boolean.TRUE;
+				synchronized (locksMap) {
+					isWriterInUse = locksMap.get(freqFileName);
+					if (!isWriterInUse) {
+						locksMap.put(freqFileName, Boolean.TRUE);
+					}
 				}
+				if (!isWriterInUse) {
+					writer = writersMap.get(freqFileName);
+				}
+				// if (writer != null) {
+				// writersMap.put(freqFileName, null);
+				// }
 			}
 			if (writer == null) {
 				try {
@@ -285,11 +307,19 @@ public abstract class CallableOperation<V> implements
 				break;
 			}
 		}
+		delta = System.currentTimeMillis() - delta; 
+		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
 		return writer;
 	}
 
+	protected final void releaseWriter(String freqFileName,
+			Map<String, Boolean> locksMap) throws IOException {
+		
+		synchronized (locksMap) {
+			locksMap.put(freqFileName, Boolean.FALSE);
+		}
+	}
 
-	
 	public char getDelimiter() {
 		return delimiter;
 	}

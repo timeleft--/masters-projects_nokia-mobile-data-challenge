@@ -9,8 +9,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.math.stat.Frequency;
 
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.PerfMon;
+import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
+import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 
 public class CalcPerUserStats {
 
@@ -26,10 +30,18 @@ public class CalcPerUserStats {
 		new CalcPerUserStats().count();
 	}
 
+	Map<String, Boolean> freqWriterLocks = Collections
+			.synchronizedMap(new HashMap<String, Boolean>());
+	
 	Map<String, Writer> freqWriterMap = Collections
 			.synchronizedMap(new HashMap<String, Writer>());
 
 	private void count() throws Exception {
+		//To make sure the class is loaded
+		System.out.println(PerfMon.asString());
+		
+		CallableOperationFactory<Frequency> factory = new CallableOperationFactory<Frequency>();
+		
 		try {
 			// TODO: ends with time or equals start is the time
 			ExecutorService exec = Executors
@@ -38,11 +50,12 @@ public class CalcPerUserStats {
 			File dataRootFile = FileUtils.getFile(dataRoot);
 			for (File userDir : dataRootFile.listFiles()) {
 				for (File dataFile : userDir.listFiles()) {
+					//"accel.csv".equals(dataFile.getName()) ||
 					if ("distance_matrix.csv".equals(dataFile.getName())) {
 						continue;
 					}
 
-					ExtractDistinctValues distinctValues = new ExtractDistinctValues(
+					PerUserDistinctValues distinctValues = (PerUserDistinctValues) factory.createOperation(PerUserDistinctValues.class,
 							this, dataFile, outPath);
 
 					// Future<HashMap<String, Frequency>> resultFuture =
@@ -56,17 +69,23 @@ public class CalcPerUserStats {
 			// Wait until all threads are finish
 			while (!exec.isTerminated()) {
 				Thread.sleep(5000);
+				System.out.println(PerfMon.asString());
 			}
 		} finally {
+			long delta = System.currentTimeMillis();
 			for (Writer wr : freqWriterMap.values()) {
 				// The use of anything itself as the lock to using it
 				// is definitely not the best thing to do, and is prone
-				// to null pointer exceptions.. TODO: use lock map
+				// to null pointer exceptions.. TODONE: use lock map
 				if (wr != null) {
 					wr.flush();
 					wr.close();
 				}
 			}
+			delta = System.currentTimeMillis() - delta;
+			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
+			
+			System.out.println(PerfMon.asString());
 		}
 	}
 
