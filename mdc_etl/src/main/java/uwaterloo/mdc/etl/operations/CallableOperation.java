@@ -152,16 +152,16 @@ public abstract class CallableOperation<V> implements
 			long len = 0;
 			char eolchi = eol0;
 			int eoli = 1;
-				
-			while (true){
+
+			while (true) {
 				long delta = System.currentTimeMillis();
 				len = inReader.read(buffer);
-				delta = System.currentTimeMillis() - delta; 
+				delta = System.currentTimeMillis() - delta;
 				PerfMon.increment(TimeMetrics.IO_READ, delta);
 				if (len == -1) {
 					break;
 				}
-				
+
 				buffer.flip();
 				for (int i = 0; i < len; ++i) {
 					char ch = buff[i];
@@ -292,14 +292,11 @@ public abstract class CallableOperation<V> implements
 				if (!isWriterInUse) {
 					writer = writersMap.get(freqFileName);
 				}
-				// if (writer != null) {
-				// writersMap.put(freqFileName, null);
-				// }
 			}
 			if (writer == null) {
 				try {
 					Thread.sleep(100);
-					delta += 100; //We will add them immediately to be visible!  
+					delta += 100; // We will add them immediately to be visible!
 					PerfMon.increment(TimeMetrics.WAITING_LOCK, 100);
 				} catch (InterruptedException e) {
 					// Probably the program is shutting down
@@ -309,17 +306,33 @@ public abstract class CallableOperation<V> implements
 				break;
 			}
 		}
-		delta = System.currentTimeMillis() - delta; 
+		delta = System.currentTimeMillis() - delta;
 		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
 		return writer;
 	}
 
-	protected final void releaseWriter(String freqFileName,
-			Map<String, Boolean> locksMap) throws IOException {
-		
-		synchronized (locksMap) {
-			locksMap.put(freqFileName, Boolean.FALSE);
+	protected final void releaseWriter(Writer writer, String freqFileName,
+			Map<String, Writer> writersMap, Map<String, Boolean> locksMap)
+			throws IOException {
+		long delta = System.currentTimeMillis();
+
+		// In case of per feature counting, we need to retain the writers
+		// synchronized (locksMap) {
+		// locksMap.put(freqFileName, Boolean.FALSE);
+		// }
+
+		synchronized (writersMap) {
+			writersMap.remove(freqFileName);
+			synchronized (locksMap) {
+				locksMap.remove(freqFileName);
+			}
 		}
+		delta = System.currentTimeMillis() - delta;
+		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
+		
+		// We also flush and close the writer.. if we retain it, we shouldn't
+		writer.flush();
+		writer.close();
 	}
 
 	public char getDelimiter() {

@@ -74,9 +74,7 @@ public class CalcPerUserStats {
 		} finally {
 			long delta = System.currentTimeMillis();
 			for (Writer wr : freqWriterMap.values()) {
-				// The use of anything itself as the lock to using it
-				// is definitely not the best thing to do, and is prone
-				// to null pointer exceptions.. TODONE: use lock map
+				//This is just in case the program crashed
 				if (wr != null) {
 					wr.flush();
 					wr.close();
