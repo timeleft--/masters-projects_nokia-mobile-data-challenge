@@ -18,7 +18,8 @@ import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 
-public class PerUserDistinctValues extends CallableOperation<Frequency> {
+public class PerUserDistinctValues extends
+		CallableOperation<SummaryStatistics, Frequency> {
 	public static class KeyIntegerValue<K> implements Map.Entry<K, Integer> {
 		protected K key;
 		protected Integer value;
@@ -47,15 +48,15 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 
 	}
 
-	private static final String READINGS_AT_SAME_TIME = "TIME_CARDINALITY_";
-	private static final String HOUR_OF_DAY = "HOUR_OF_DAY_";
-	private static final String DAY_OF_WEEK = "DAY_OF_WEEK_";
+	protected static final String READINGS_AT_SAME_TIME = "TIME_CARDINALITY_";
+	protected static final String HOUR_OF_DAY = "HOUR_OF_DAY_";
+	protected static final String DAY_OF_WEEK = "DAY_OF_WEEK_";
 
-	private TimeZone timeZoneOfRecord;
+	protected TimeZone timeZoneOfRecord;
 
-	private HashMap<String, KeyIntegerValue<String>> prevTimeColsReadings = new HashMap<String, KeyIntegerValue<String>>();
+	protected HashMap<String, KeyIntegerValue<String>> prevTimeColsReadings = new HashMap<String, KeyIntegerValue<String>>();
 
-	private SummaryStatistics timeDifferenceStatistics = new SummaryStatistics();
+	protected SummaryStatistics timeDifferenceStatistics = new SummaryStatistics();
 
 	@Deprecated
 	public PerUserDistinctValues(CalcPerUserStats master, char delimiter,
@@ -74,10 +75,8 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 				String upperCaseKey = key.toUpperCase();
 				colOpResult.put(READINGS_AT_SAME_TIME + upperCaseKey,
 						new Frequency());
-				colOpResult.put(HOUR_OF_DAY + upperCaseKey,
-						new Frequency());
-				colOpResult.put(DAY_OF_WEEK + upperCaseKey,
-						new Frequency());
+				colOpResult.put(HOUR_OF_DAY + upperCaseKey, new Frequency());
+				colOpResult.put(DAY_OF_WEEK + upperCaseKey, new Frequency());
 			}
 		}
 		super.headerEolProcedure();
@@ -89,6 +88,26 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 
 	protected void delimiterProcedure() {
 		colOpResult.get(currKey).addValue(currValue);
+
+		if (currKey.equals(getTimeColumnName())) {
+			// calculateDeltaTime
+			try {
+				long deltaTime = Long.parseLong(currValue);
+
+				String upperCaseTimeKey = getTimeColumnName().toUpperCase();
+				KeyIntegerValue<String> prevReading = prevTimeColsReadings
+						.get(upperCaseTimeKey);
+				if (prevReading != null) {
+					deltaTime -= Long.parseLong(prevReading.getKey());
+					timeDifferenceStatistics.addValue(deltaTime);
+				} else {
+					// meaningless, because it is probably the first record
+					// System.out.println("blah.. just making sure of something!");
+				}
+			} catch (NumberFormatException ex) {
+				// Ok calm down!
+			}
+		}
 
 		if (currKey.contains("time")) {
 			KeyIntegerValue<String> prevReading = prevTimeColsReadings
@@ -103,20 +122,26 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 				// Another reading at the same time
 				prevReading.setValue(prevReading.getValue() + 1);
 			} else {
-				colOpResult.get(READINGS_AT_SAME_TIME + currKey.toUpperCase()).addValue(
-						prevReading.getValue().toString());
+				colOpResult.get(READINGS_AT_SAME_TIME + currKey.toUpperCase())
+						.addValue(prevReading.getValue().toString());
 
 				prevReading.setKey(currValue);
 				prevReading.setValue(1);
 			}
 		} else if (currKey.startsWith("tz")) {
 			char timeZonePlusMinus = '+';
-			if(currValue.charAt(0) == '-'){
+			if (currValue.charAt(0) == '-') {
 				timeZonePlusMinus = '-';
 			}
-			//Offset in hours (from seconds)
-			int timeZoneOffset = Integer.parseInt(currValue.substring(1))/3600;
-			timeZoneOfRecord = TimeZone.getTimeZone("GMT"+timeZonePlusMinus+timeZoneOffset);
+			// Offset in hours (from seconds)
+			int timeZoneOffset = 0;
+			try {
+				timeZoneOffset = Integer.parseInt(currValue.substring(1)) / 3600;
+			} catch (NumberFormatException ex) {
+				// Ok calm down!
+			}
+			timeZoneOfRecord = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
+					+ timeZoneOffset);
 		}
 	}
 
@@ -133,14 +158,18 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 					calendar.setTimeInMillis(longTime);
 
 					colOpResult.get(HOUR_OF_DAY + upperCaseKey).addValue(
-							""+calendar.get(Calendar.HOUR_OF_DAY));
+							"" + calendar.get(Calendar.HOUR_OF_DAY));
 					colOpResult.get(DAY_OF_WEEK + upperCaseKey).addValue(
-							""+calendar.get(Calendar.DAY_OF_WEEK));
+							"" + calendar.get(Calendar.DAY_OF_WEEK));
 				}
 			}
 		}
 
 		super.eolProcedure();
+	}
+
+	protected String getTimeColumnName() {
+		return "time";
 	}
 
 	protected void writeResults() throws IOException {
@@ -206,7 +235,7 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 			if (key.startsWith(READINGS_AT_SAME_TIME)) {
 				KeyIntegerValue<String> lastReading = prevTimeColsReadings
 						.get(key.substring(READINGS_AT_SAME_TIME.length()));
-				if(lastReading == null){
+				if (lastReading == null) {
 					// no previous readings
 					continue;
 				}
@@ -227,5 +256,10 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 	protected void delimiterProcedurePrep() {
 		// nothin
 
+	}
+
+	@Override
+	protected SummaryStatistics getReturnValue() {
+		return timeDifferenceStatistics;
 	}
 }

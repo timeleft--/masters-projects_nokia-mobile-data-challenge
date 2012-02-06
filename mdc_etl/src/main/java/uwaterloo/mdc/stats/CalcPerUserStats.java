@@ -1,6 +1,7 @@
 package uwaterloo.mdc.stats;
 
 import java.io.File;
+import java.io.FilenameFilter;
 import java.io.Writer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -10,7 +11,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.PerfMon;
@@ -52,15 +55,22 @@ public class CalcPerUserStats {
 		// To make sure the class is loaded
 		System.out.println(PerfMon.asString());
 
-		CallableOperationFactory<Frequency> factory = new CallableOperationFactory<Frequency>();
+		CallableOperationFactory<SummaryStatistics, Frequency> factory = new CallableOperationFactory<SummaryStatistics, Frequency>();
 
 		try {
 			ExecutorService exec = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
 
+			FilenameFilter testFilter = new FilenameFilter() {
+				@Override
+				public boolean accept(File arg0, String arg1) {
+					return arg1.contains("media");
+				}
+			};
+			
 			File dataRootFile = FileUtils.getFile(dataRoot);
 			for (File userDir : dataRootFile.listFiles()) {
-				for (File dataFile : userDir.listFiles()) {
+				for (File dataFile : userDir.listFiles()) { //testFilter)) {
 					// "accel.csv".equals(dataFile.getName()) ||
 					if ("distance_matrix.csv".equals(dataFile.getName())) {
 						continue;

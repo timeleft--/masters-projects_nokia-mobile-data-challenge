@@ -12,11 +12,11 @@ import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.stats.CalcPerUserStats;
 
-public class CallableOperationFactory<V> {
+public class CallableOperationFactory<R, V> {
 	
-	private HashMap<String, Class<? extends CallableOperation<V>>> resultClazzes = new HashMap<String, Class<? extends CallableOperation<V>>>();
+	private HashMap<String, Class<? extends CallableOperation<R,V>>> resultClazzes = new HashMap<String, Class<? extends CallableOperation<R,V>>>();
 	
-	public CallableOperation<V> createOperation(Class<? extends CallableOperation<V>> prototype, CalcPerUserStats master,
+	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, CalcPerUserStats master,
 			File dataFile, String outPath) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 		return createOperation(prototype, master, CallableOperation.DEFAULT_DELIMITER,
 				CallableOperation.DEFAULT_EOL,
@@ -24,23 +24,23 @@ public class CallableOperationFactory<V> {
 	}
 
 	@SuppressWarnings("unchecked")
-	public CallableOperation<V> createOperation(Class<? extends CallableOperation<V>> prototype, CalcPerUserStats master,
+	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, CalcPerUserStats master,
 			char delimiter, String eol, int bufferSize, File dataFile,
 			String outPath) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 		long delta = System.currentTimeMillis();
 		String resultClassName = prototype.getCanonicalName() + "_" + FilenameUtils.removeExtension(dataFile.getName());
-		Class<? extends CallableOperation<V>> resultClazz = resultClazzes.get(resultClassName);
+		Class<? extends CallableOperation<R,V>> resultClazz = resultClazzes.get(resultClassName);
 		if(resultClazz == null){
 			try{
-			resultClazz = (Class<? extends CallableOperation<V>>) Class.forName(resultClassName);
+			resultClazz = (Class<? extends CallableOperation<R,V>>) Class.forName(resultClassName);
 			resultClazzes.put(resultClassName, resultClazz);
 			}catch(ClassNotFoundException e){
 				resultClazz = prototype;
 			}
 		}
 		
-		Constructor<? extends CallableOperation<V>> constructor = (Constructor<? extends CallableOperation<V>>) resultClazz.getConstructors()[0];
-		CallableOperation<V> result = constructor.newInstance(master,
+		Constructor<? extends CallableOperation<R,V>> constructor = (Constructor<? extends CallableOperation<R,V>>) resultClazz.getConstructors()[0];
+		CallableOperation<R,V> result = constructor.newInstance(master,
 			delimiter, eol, bufferSize, dataFile,
 			outPath);
 		

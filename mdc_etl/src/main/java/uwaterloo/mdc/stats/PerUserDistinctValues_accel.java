@@ -33,4 +33,8 @@ public class PerUserDistinctValues_accel extends PerUserDistinctValues {
 		super.headerDelimiterProcedurePrep();
 	}
 
+	@Override
+	protected String getTimeColumnName() {
+		return "start_time";
+	}
 }

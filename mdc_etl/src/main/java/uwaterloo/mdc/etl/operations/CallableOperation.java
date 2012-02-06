@@ -22,8 +22,8 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.stats.CalcPerUserStats;
 
 @SuppressWarnings("unused")
-public abstract class CallableOperation<V> implements
-		Callable<HashMap<String, V>> {
+public abstract class CallableOperation<R, V> implements
+		Callable<R> {
 
 	// Sadly, this didn't work because the writer didn't translate the character
 	// encoding as it should, and I couldn't use ASCII because java get confused
@@ -139,7 +139,7 @@ public abstract class CallableOperation<V> implements
 	}
 
 	@Override
-	public HashMap<String, V> call() throws Exception{
+	public R call() throws Exception{
 		try {
 			// ExecutorService inputExec;
 			// Future<Void> inputFuture;
@@ -189,7 +189,7 @@ public abstract class CallableOperation<V> implements
 			writeResults();
 
 			PerfMon.increment(TimeMetrics.FILES_PROCESSED, 1);
-			return colOpResult;
+			return getReturnValue();
 		}catch(Exception e){
 			e.printStackTrace();
 			throw e;
@@ -207,11 +207,12 @@ public abstract class CallableOperation<V> implements
 	private void delimiterProcedureInternal() {
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
+		assert keyIterator.hasNext() : "The columns seem to be less than the values in this row!!";
+		currKey = keyIterator.next();
 		
 		delimiterProcedurePrep();
 		tuple.add(currValue);
-		assert keyIterator.hasNext() : "The columns seem to be less than the values in this row!!";
-		currKey = keyIterator.next();
+		
 		if (Config.USERID_COLNAME.equals(currKey)) {
 			if (userid == null) {
 				userid = currValue;
@@ -287,6 +288,13 @@ public abstract class CallableOperation<V> implements
 	 */
 	protected abstract String getHeaderLine();
 
+	/**
+	 * 
+	 * @return the return value that should be returned as the future
+	 */
+	protected abstract R getReturnValue();
+
+	
 	protected final Writer acquireWriter(String freqFileName,
 			Map<String, Writer> writersMap, Map<String, Boolean> locksMap)
 			throws IOException {
