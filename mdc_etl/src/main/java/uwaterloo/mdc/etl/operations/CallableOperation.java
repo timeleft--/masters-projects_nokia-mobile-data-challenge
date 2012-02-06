@@ -63,7 +63,7 @@ public abstract class CallableOperation<V> implements
 	private final Reader inReader;
 	private FileInputStream inStream;
 
-	protected/* final */HashMap<String, V> opResult;
+	protected/* final */HashMap<String, V> colOpResult;
 	protected final LinkedList<String> keyList;
 	protected Iterator<String> keyIterator;
 
@@ -104,7 +104,7 @@ public abstract class CallableOperation<V> implements
 			currValueBuilder = new StringBuilder();
 			keyList = new LinkedList<String>();
 
-			opResult = new HashMap<String, V>();
+			colOpResult = new HashMap<String, V>();
 
 			char[] buff = new char[1];
 			long len = 0;
@@ -139,7 +139,7 @@ public abstract class CallableOperation<V> implements
 	}
 
 	@Override
-	public HashMap<String, V> call() throws Exception {
+	public HashMap<String, V> call() throws Exception{
 		try {
 			// ExecutorService inputExec;
 			// Future<Void> inputFuture;
@@ -189,10 +189,17 @@ public abstract class CallableOperation<V> implements
 			writeResults();
 
 			PerfMon.increment(TimeMetrics.FILES_PROCESSED, 1);
-			return opResult;
+			return colOpResult;
+		}catch(Exception e){
+			e.printStackTrace();
+			throw e;
 		} finally {
 			if (inStream != null) {
-				inStream.close();
+				try {
+					inStream.close();
+				} catch (IOException e) {
+					// nothing to do!
+				}
 			}
 		}
 	}
@@ -374,7 +381,7 @@ public abstract class CallableOperation<V> implements
 
 	@SuppressWarnings("unchecked")
 	public HashMap<String, V> getResult() {
-		return (HashMap<String, V>) opResult.clone();
+		return (HashMap<String, V>) colOpResult.clone();
 	}
 
 	@SuppressWarnings("unchecked")

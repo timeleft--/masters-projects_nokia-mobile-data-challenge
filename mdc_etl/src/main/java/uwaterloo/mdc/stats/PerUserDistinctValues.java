@@ -3,12 +3,15 @@ package uwaterloo.mdc.stats;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TimeZone;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.PerfMon;
@@ -16,11 +19,11 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 
 public class PerUserDistinctValues extends CallableOperation<Frequency> {
-	public static class ValueCardinality<K> implements Map.Entry<K, Integer>{
+	public static class KeyIntegerValue<K> implements Map.Entry<K, Integer> {
 		protected K key;
 		protected Integer value;
-		
-		public ValueCardinality(K key, Integer value) {
+
+		public KeyIntegerValue(K key, Integer value) {
 			this.key = key;
 			this.value = value;
 		}
@@ -41,10 +44,18 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 			this.value = value;
 			return value;
 		}
-		
+
 	}
-	private static final String READINGS_AT_SAME_TIME = "time_cardinality_";
-	private HashMap<String,ValueCardinality<String>> prevTimeColsReadings = new HashMap<String,ValueCardinality<String>>();
+
+	private static final String READINGS_AT_SAME_TIME = "TIME_CARDINALITY_";
+	private static final String HOUR_OF_DAY = "HOUR_OF_DAY_";
+	private static final String DAY_OF_WEEK = "DAY_OF_WEEK_";
+
+	private TimeZone timeZoneOfRecord;
+
+	private HashMap<String, KeyIntegerValue<String>> prevTimeColsReadings = new HashMap<String, KeyIntegerValue<String>>();
+
+	private SummaryStatistics timeDifferenceStatistics = new SummaryStatistics();
 
 	@Deprecated
 	public PerUserDistinctValues(CalcPerUserStats master, char delimiter,
@@ -53,47 +64,88 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
 
 	}
-	
+
 	@Override
 	protected void headerEolProcedure() {
-		for(String key: keyList){
-			if(key.contains("time")){
-				opResult.put(READINGS_AT_SAME_TIME+key, new Frequency());
+		for (String key : keyList) {
+			if (key.contains("time")) {
+				// toUpperCase prevent catching these fields in the write
+				// results function
+				String upperCaseKey = key.toUpperCase();
+				colOpResult.put(READINGS_AT_SAME_TIME + upperCaseKey,
+						new Frequency());
+				colOpResult.put(HOUR_OF_DAY + upperCaseKey,
+						new Frequency());
+				colOpResult.put(DAY_OF_WEEK + upperCaseKey,
+						new Frequency());
 			}
 		}
 		super.headerEolProcedure();
 	}
-	
+
 	protected void headerDelimiterProcedure() {
-		opResult.put(currValue, new Frequency());
+		colOpResult.put(currValue, new Frequency());
 	}
 
 	protected void delimiterProcedure() {
-		opResult.get(currKey).addValue(currValue);
-		
+		colOpResult.get(currKey).addValue(currValue);
+
 		if (currKey.contains("time")) {
-			ValueCardinality<String> prevReading = prevTimeColsReadings.get(READINGS_AT_SAME_TIME+currKey);
-			if(prevReading == null){
+			KeyIntegerValue<String> prevReading = prevTimeColsReadings
+					.get(currKey);
+			if (prevReading == null) {
 				// initialization
-				prevReading = new ValueCardinality<String>(currValue,0);
-				prevTimeColsReadings.put(READINGS_AT_SAME_TIME+currKey, prevReading);
+				prevReading = new KeyIntegerValue<String>(currValue, 0);
+				prevTimeColsReadings.put(currKey.toUpperCase(), prevReading);
 			}
-			
-			if(prevReading.getKey().equals(currValue)){
-				//Another reading at the same time
+
+			if (prevReading.getKey().equals(currValue)) {
+				// Another reading at the same time
 				prevReading.setValue(prevReading.getValue() + 1);
 			} else {
-				opResult.get(READINGS_AT_SAME_TIME+currKey).addValue(prevReading.getValue().toString());
-				
+				colOpResult.get(READINGS_AT_SAME_TIME + currKey.toUpperCase()).addValue(
+						prevReading.getValue().toString());
+
 				prevReading.setKey(currValue);
 				prevReading.setValue(1);
 			}
+		} else if (currKey.startsWith("tz")) {
+			char timeZonePlusMinus = '+';
+			if(currValue.charAt(0) == '-'){
+				timeZonePlusMinus = '-';
+			}
+			//Offset in hours (from seconds)
+			int timeZoneOffset = Integer.parseInt(currValue.substring(1))/3600;
+			timeZoneOfRecord = TimeZone.getTimeZone("GMT"+timeZonePlusMinus+timeZoneOffset);
 		}
+	}
+
+	@Override
+	protected void eolProcedure() {
+		if (prevTimeColsReadings != null) { // avoid header's eol
+			for (String key : colOpResult.keySet()) {
+				if (key.contains("time")) {
+					String upperCaseKey = key.toUpperCase();
+					KeyIntegerValue<String> prevReading = prevTimeColsReadings
+							.get(upperCaseKey);
+					long longTime = Long.parseLong(prevReading.getKey()) * 1000;
+					Calendar calendar = Calendar.getInstance(timeZoneOfRecord);
+					calendar.setTimeInMillis(longTime);
+
+					colOpResult.get(HOUR_OF_DAY + upperCaseKey).addValue(
+							""+calendar.get(Calendar.HOUR_OF_DAY));
+					colOpResult.get(DAY_OF_WEEK + upperCaseKey).addValue(
+							""+calendar.get(Calendar.DAY_OF_WEEK));
+				}
+			}
+		}
+
+		super.eolProcedure();
 	}
 
 	protected void writeResults() throws IOException {
 		long delta;
-		for (String key : opResult.keySet()) {
+		for (String key : colOpResult.keySet()) {
 			if (Config.USERID_COLNAME.equals(key)) {
 				continue;
 			}
@@ -104,10 +156,11 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 			Writer freqWriter = acquireWriter(freqFileName,
 					master.freqWriterMap, master.freqWriterLocks);
 			try {
-				Frequency freq = opResult.get(key);
+				Frequency freq = colOpResult.get(key);
 
-				if (key.contains("time") && !key.startsWith(READINGS_AT_SAME_TIME)) {
-					//Time frequencies are not useful and are very hard to calculate
+				if (key.contains("time")) {
+					// Time frequencies are not useful and are very hard to
+					// calculate
 					// because of the large number of different values
 					int uniqueCount = freq.getUniqueCount();
 					delta = System.currentTimeMillis();
@@ -146,27 +199,33 @@ public class PerUserDistinctValues extends CallableOperation<Frequency> {
 	protected String getHeaderLine() {
 		return "userid\tvalue\tcount\tpctage\n";
 	}
-	
+
 	@Override
 	protected void eoFileProcedure() {
-		for(String key: opResult.keySet()){
-			if(key.startsWith(READINGS_AT_SAME_TIME)){
-				ValueCardinality<String> lastReading = prevTimeColsReadings.get(key);
-				opResult.get(key).addValue(lastReading.getValue().toString());
+		for (String key : colOpResult.keySet()) {
+			if (key.startsWith(READINGS_AT_SAME_TIME)) {
+				KeyIntegerValue<String> lastReading = prevTimeColsReadings
+						.get(key.substring(READINGS_AT_SAME_TIME.length()));
+				if(lastReading == null){
+					// no previous readings
+					continue;
+				}
+				colOpResult.get(key)
+						.addValue(lastReading.getValue().toString());
 			}
 		}
-		
+
 	}
 
 	@Override
 	protected void headerDelimiterProcedurePrep() {
 		// nothin
-		
+
 	}
 
 	@Override
 	protected void delimiterProcedurePrep() {
 		// nothin
-		
+
 	}
 }

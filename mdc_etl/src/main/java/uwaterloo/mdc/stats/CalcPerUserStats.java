@@ -28,31 +28,32 @@ public class CalcPerUserStats {
 	 */
 	public static void main(String[] args) throws Exception {
 		// TODO dataRoot from args
-		
+
 		CalcPerUserStats app = new CalcPerUserStats();
 		Arrays.sort(args);
-		if(Arrays.binarySearch(args, "--count") >= 0){
-			app.count();
-		} else if(Arrays.binarySearch(args, "--summary") >= 0){
-			app.summaryStats();
-		} else {
-			System.out.println("Ussage: --count OR --summary");
-		}
+		// if(Arrays.binarySearch(args, "--count") >= 0){
+		app.count();
+		// } else
+		// if(Arrays.binarySearch(args, "--summary") >= 0){
+		// app.summaryStats();
+		// } else {
+		// System.out.println("Ussage: --count OR --summary");
+		// }
 
 	}
 
 	Map<String, Boolean> freqWriterLocks = Collections
 			.synchronizedMap(new HashMap<String, Boolean>());
-	
+
 	Map<String, Writer> freqWriterMap = Collections
 			.synchronizedMap(new HashMap<String, Writer>());
 
 	private void count() throws Exception {
-		//To make sure the class is loaded
+		// To make sure the class is loaded
 		System.out.println(PerfMon.asString());
-		
+
 		CallableOperationFactory<Frequency> factory = new CallableOperationFactory<Frequency>();
-		
+
 		try {
 			ExecutorService exec = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
@@ -60,13 +61,14 @@ public class CalcPerUserStats {
 			File dataRootFile = FileUtils.getFile(dataRoot);
 			for (File userDir : dataRootFile.listFiles()) {
 				for (File dataFile : userDir.listFiles()) {
-					//"accel.csv".equals(dataFile.getName()) ||
+					// "accel.csv".equals(dataFile.getName()) ||
 					if ("distance_matrix.csv".equals(dataFile.getName())) {
 						continue;
 					}
 
-					PerUserDistinctValues distinctValues = (PerUserDistinctValues) factory.createOperation(PerUserDistinctValues.class,
-							this, dataFile, outPath);
+					PerUserDistinctValues distinctValues = (PerUserDistinctValues) factory
+							.createOperation(PerUserDistinctValues.class, this,
+									dataFile, outPath);
 
 					// Future<HashMap<String, Frequency>> resultFuture =
 					exec.submit(distinctValues);
@@ -84,7 +86,7 @@ public class CalcPerUserStats {
 		} finally {
 			long delta = System.currentTimeMillis();
 			for (Writer wr : freqWriterMap.values()) {
-				//This is just in case the program crashed
+				// This is just in case the program crashed
 				if (wr != null) {
 					wr.flush();
 					wr.close();
@@ -92,60 +94,17 @@ public class CalcPerUserStats {
 			}
 			delta = System.currentTimeMillis() - delta;
 			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-			
+
 			System.out.println(PerfMon.asString());
 		}
 	}
-	
-	private void summaryStats() throws Exception {
-		//To make sure the class is loaded
-		System.out.println(PerfMon.asString());
-		
-		CallableOperationFactory<Frequency> factory = new CallableOperationFactory<Frequency>();
-		
-		try {
-			// TODO: ends with time or equals start is the time
-			ExecutorService exec = Executors
-					.newFixedThreadPool(Config.NUM_THREADS);
 
-			File dataRootFile = FileUtils.getFile(dataRoot);
-			for (File userDir : dataRootFile.listFiles()) {
-				for (File dataFile : userDir.listFiles()) {
-					//"accel.csv".equals(dataFile.getName()) ||
-					if ("distance_matrix.csv".equals(dataFile.getName())) {
-						continue;
-					}
-
-					PerUserDistinctValues distinctValues = (PerUserDistinctValues) factory.createOperation(PerUserDistinctValues.class,
-							this, dataFile, outPath);
-
-					// Future<HashMap<String, Frequency>> resultFuture =
-					exec.submit(distinctValues);
-
-				}
-			}
-			// This will make the executor accept no new threads
-			// and finish all existing threads in the queue
-			exec.shutdown();
-			// Wait until all threads are finish
-			while (!exec.isTerminated()) {
-				Thread.sleep(5000);
-				System.out.println(PerfMon.asString());
-			}
-		} finally {
-			long delta = System.currentTimeMillis();
-			for (Writer wr : freqWriterMap.values()) {
-				//This is just in case the program crashed
-				if (wr != null) {
-					wr.flush();
-					wr.close();
-				}
-			}
-			delta = System.currentTimeMillis() - delta;
-			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-			
-			System.out.println(PerfMon.asString());
-		}
-	}
+	// Actually there are no quantitative values at all, so :
+	// min, max, mean, geometric mean, n, sum, sum of squares, standard
+	// deviation, variance, percentiles, skewness, kurtosis, median
+	// are all irrelevant.. maybe do that the results from count
+	// private void summaryStats() throws Exception {
+	//
+	// }
 
 }

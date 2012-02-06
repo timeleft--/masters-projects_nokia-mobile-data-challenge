@@ -8,5 +8,5 @@ public class Config {
 	public static final String OUT_CHARSET = "US-ASCII";
 	
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 4;
+	public static final int NUM_THREADS = 1;
 }
