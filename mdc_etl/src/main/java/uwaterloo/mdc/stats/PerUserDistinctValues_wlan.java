@@ -19,7 +19,7 @@ public class PerUserDistinctValues_wlan extends PerUserDistinctValues {
 				int rssi = Integer.parseInt(currValue);
 
 				// 0 to 5 where 0 is very strong
-				rssi = (rssi - 20) / 100;
+				rssi = (rssi / 20)-1;
 
 				currValue = rssi + "";
 
