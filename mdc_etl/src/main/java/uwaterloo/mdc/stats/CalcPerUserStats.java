@@ -197,49 +197,59 @@ public class CalcPerUserStats {
 
 		File dataRootFile = FileUtils.getFile(dataRoot);
 
-		Writer resultWriter = Channels.newWriter(
-				FileUtils.openOutputStream(
-						FileUtils.getFile(outPath,
-								"counts_allinputs_allusers.csv")).getChannel(),
-				Config.OUT_CHARSET);
-		try {
-			resultWriter.append("userid");
+		StringBuilder headerBuilder = new StringBuilder();
+		headerBuilder.append("userid");
 
-			int currMaxCols = 0;
-			File[] headerFiles = null;
-			for (int i = 0; i < 200; ++i) {
-				FilenameFilter headerFilter = new UserIdFilter(i);
-				File[] tempFiles = dataRootFile.listFiles(headerFilter);
-				if (tempFiles.length > currMaxCols) {
-					currMaxCols = tempFiles.length;
-					headerFiles = tempFiles;
-					System.out.println("Current max is: " + currMaxCols
-							+ " for user: " + i);
-				}
+		int currMaxCols = 0;
+		File[] headerFiles = null;
+		for (int i = 0; i < 200; ++i) {
+			FilenameFilter headerFilter = new UserIdFilter(i);
+			File[] tempFiles = dataRootFile.listFiles(headerFilter);
+			if (tempFiles.length > currMaxCols) {
+				currMaxCols = tempFiles.length;
+				headerFiles = tempFiles;
+				System.out.println("Current max is: " + currMaxCols
+						+ " for user: " + i);
 			}
-			Arrays.sort(headerFiles);
+		}
+		Arrays.sort(headerFiles);
 
-			int numCols = headerFiles.length;
+		int numCols = headerFiles.length;
 
-			for (int j = 0; j < numCols; ++j) {
-				String pfx = headerFiles[j].getName();
+		for (int j = 0; j < numCols; ++j) {
+			String pfx = headerFiles[j].getName();
 
-				pfx = pfx.substring(0, pfx.lastIndexOf("-"));
-				resultWriter.append('\t').append(pfx).append("-value")
-						.append('\t').append(pfx).append("-count").append('\t')
-						.append(pfx).append("-perctg");
+			pfx = pfx.substring(0, pfx.lastIndexOf("-"));
+			headerBuilder.append('\t').append(pfx).append("-value")
+					.append('\t').append(pfx).append("-count").append('\t')
+					.append(pfx).append("-perctg");
+		}
+		headerBuilder.append('\n');
+		String header = headerBuilder.toString();
+		headerBuilder = null;
+
+		for (int i = 1; i < 200; ++i) {
+			String userId = numberToId(i);
+			FilenameFilter userFilter = new UserIdFilter(i);
+			File[] userFiles = dataRootFile.listFiles(userFilter);
+			
+			if (userFiles.length == 0) { // || userFiles.length != numCols){
+				// System.out.println("User " + i +
+				// " with less columnss.. bastard!");
+				continue; // no files for this user (id > max)
 			}
-			resultWriter.append('\n');
+			
+			
+			Writer resultWriter = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outPath, "counts_allinputs_"
+									+ userId + ".csv")).getChannel(),
+					Config.OUT_CHARSET);
+			resultWriter.append(header).append('\n');
+			userId = quote(userId);
+			try {
 
-			for (int i = 1; i < 200; ++i) {
-				FilenameFilter userFilter = new UserIdFilter(i);
-				File[] userFiles = dataRootFile.listFiles(userFilter);
 
-				if (userFiles.length == 0) { // || userFiles.length != numCols){
-					// System.out.println("User " + i +
-					// " with less columnss.. bastard!");
-					continue; // no files for this user (id > max)
-				}
 
 				Arrays.sort(userFiles);
 
@@ -258,7 +268,7 @@ public class CalcPerUserStats {
 					allFilesConsumed = true;
 
 					StringBuilder resultLine = new StringBuilder();
-					resultLine.append(quote(numberToId(i)));
+					resultLine.append(userId);
 
 					for (int j = 0; j < userFiles.length; ++j) {
 						int k = j;
@@ -294,10 +304,11 @@ public class CalcPerUserStats {
 						resultWriter.append(resultLine.toString()).append('\n');
 					}
 				}
+
+			} finally {
+				resultWriter.flush();
+				resultWriter.close();
 			}
-		} finally {
-			resultWriter.flush();
-			resultWriter.close();
 		}
 	}
 
