@@ -1,14 +1,13 @@
 package uwaterloo.mdc.stats;
 
 import java.io.File;
-import java.io.IOException;
 
 public class PerUserDistinctValues_calllog extends PerUserDistinctValues {
 
 	@Deprecated
 	public PerUserDistinctValues_calllog(CalcPerUserStats master,
 			char delimiter, String eol, int bufferSize, File dataFile,
-			String outPath) throws IOException {
+			String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
 	}
 

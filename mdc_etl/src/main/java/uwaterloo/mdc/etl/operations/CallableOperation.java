@@ -19,11 +19,28 @@ import org.apache.commons.io.FileUtils;
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
-import uwaterloo.mdc.stats.CalcPerUserStats;
 
+/**
+ * An abstraction of operations on columns of CSV files. A hash map is
+ * constructed with an entry for each column, the values held depends on the
+ * operation and is left as a a type parameter V. The operation can also return
+ * a future result of a type R different than V.
+ * 
+ * To perform the operation, subclasses have to override hook methods. There is
+ * a hook called whenever a value is read (delimeter hook), and whenever a line
+ * in the CSV is consumed (eol hook). For header line of the CSV, this hook is
+ * wrapped in another hook, with a header prefix, to allow special handling of
+ * the header line. Hooks are called Procedures, sorry!
+ * 
+ * @author yaboulna
+ * 
+ * @param <R>
+ *            Return value of the operation
+ * @param <V>
+ *            The value stored for each column
+ */
 @SuppressWarnings("unused")
-public abstract class CallableOperation<R, V> implements
-		Callable<R> {
+public abstract class CallableOperation<R, V> implements Callable<R> {
 
 	// Sadly, this didn't work because the writer didn't translate the character
 	// encoding as it should, and I couldn't use ASCII because java get confused
@@ -72,15 +89,15 @@ public abstract class CallableOperation<R, V> implements
 	protected String currKey;
 	protected ArrayList<String> tuple;
 
-	protected final CalcPerUserStats master;
+	protected final Object master;
 	protected final String outPath;
 	protected final File dataFile;
 	protected CharSequence userid;
 
 	@Deprecated
-	public CallableOperation(CalcPerUserStats master, char delimiter,
+	public CallableOperation(Object master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
-			throws IOException {
+			throws Exception {
 		try {
 			this.master = master;
 			this.outPath = outPath;
@@ -139,7 +156,7 @@ public abstract class CallableOperation<R, V> implements
 	}
 
 	@Override
-	public R call() throws Exception{
+	public R call() throws Exception {
 		try {
 			// ExecutorService inputExec;
 			// Future<Void> inputFuture;
@@ -183,15 +200,16 @@ public abstract class CallableOperation<R, V> implements
 				}
 				buffer.clear();
 			}
-			
+
 			eoFileProcedure();
 
 			writeResults();
 
 			PerfMon.increment(TimeMetrics.FILES_PROCESSED, 1);
 			return getReturnValue();
-		}catch(Exception e){
+		} catch (Exception e) {
 			e.printStackTrace();
+			//TODO: should we be tolerant to errors or fix them???
 			throw e;
 		} finally {
 			if (inStream != null) {
@@ -204,15 +222,15 @@ public abstract class CallableOperation<R, V> implements
 		}
 	}
 
-	private void delimiterProcedureInternal() {
+	private void delimiterProcedureInternal() throws Exception {
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
 		assert keyIterator.hasNext() : "The columns seem to be less than the values in this row!!";
 		currKey = keyIterator.next();
-		
+
 		delimiterProcedurePrep();
 		tuple.add(currValue);
-		
+
 		if (Config.USERID_COLNAME.equals(currKey)) {
 			if (userid == null) {
 				userid = currValue;
@@ -222,10 +240,10 @@ public abstract class CallableOperation<R, V> implements
 		delimiterProcedure();
 	}
 
-	private void headerDelimiterProcedureInternal() {
+	private void headerDelimiterProcedureInternal() throws Exception {
 		currValue = currValueBuilder.toString().trim();
 		currValueBuilder.setLength(0);
-		
+
 		headerDelimiterProcedurePrep();
 		keyList.add(currValue);
 		if (Config.USERID_COLNAME.equals(currValue)) {
@@ -236,97 +254,111 @@ public abstract class CallableOperation<R, V> implements
 
 	/**
 	 * Subclasses can override this to do something with the keyList
+	 * @throws Exception 
 	 */
-	protected void headerEolProcedure() {
-		eolProcedure();
+	protected void headerEolProcedure() throws Exception {
+		//Always causes trouble in subclasses: eolProcedure();
+		// Sacrifice being dry:
+		keyIterator = keyList.iterator();
+		tuple = new ArrayList<String>(keyList.size());
 	}
 
 	/**
 	 * Subclasses can override this to do something with the whole tuple
+	 * @throws Exception 
 	 */
-	protected void eolProcedure() {
+	protected void eolProcedure() throws Exception {
 		keyIterator = keyList.iterator();
 		tuple = new ArrayList<String>(keyList.size());
 	}
-	
+
 	/**
 	 * Anything needs to be done at EOF (file)
 	 */
-	protected abstract void eoFileProcedure();
+	protected abstract void eoFileProcedure() throws Exception;
 
 	/**
 	 * Subclasses can override this to fill the map with column objects
 	 */
-	protected abstract void headerDelimiterProcedure();
+	protected abstract void headerDelimiterProcedure() throws Exception;
 
 	/**
 	 * Subclasses can override this to act on values
 	 */
-	protected abstract void delimiterProcedure();
-	
+	protected abstract void delimiterProcedure() throws Exception;
+
 	/**
 	 * Subclasses can override this to fill the map with column objects
 	 */
-	protected abstract void headerDelimiterProcedurePrep();
+	protected abstract void headerDelimiterProcedurePrep() throws Exception;
 
 	/**
 	 * Subclasses can override this to act on values
 	 */
-	protected abstract void delimiterProcedurePrep();
+	protected abstract void delimiterProcedurePrep() throws Exception;
 
 	/**
 	 * Subclasses must override this to write their results out
 	 * 
 	 * @throws IOException
 	 */
-	protected abstract void writeResults() throws IOException;
+	protected abstract void writeResults() throws Exception;
 
 	/**
 	 * Subclasses must override this to create the header of output file
 	 * 
 	 * @return header of output file
 	 */
-	protected abstract String getHeaderLine();
+	protected abstract String getHeaderLine() throws Exception;
 
 	/**
 	 * 
 	 * @return the return value that should be returned as the future
 	 */
-	protected abstract R getReturnValue();
+	protected abstract R getReturnValue() throws Exception;
 
-	
-	protected final Writer acquireWriter(String freqFileName,
+	/**
+	 * To standardize the way different threads acquire writers, they must go
+	 * through this method. No guards are taken to enforce this!
+	 * 
+	 * @param fileName
+	 * @param writersMap
+	 * @param locksMap
+	 * @return
+	 * @throws IOException
+	 */
+	protected final Writer acquireWriter(String fileName,
 			Map<String, Writer> writersMap, Map<String, Boolean> locksMap)
-			throws IOException {
+			throws Exception {
 		long delta = System.currentTimeMillis();
 		Writer writer = null;
 		while (true) {
 			// Loop to acquire the writer
 			synchronized (writersMap) {
-				if (!writersMap.containsKey(freqFileName)) {
+				if (!writersMap.containsKey(fileName)) {
 					writer = Channels.newWriter(
 							FileUtils.openOutputStream(
-									FileUtils.getFile(outPath, freqFileName))
+									FileUtils.getFile(outPath, fileName))
 									.getChannel(), Config.OUT_CHARSET);
-					writersMap.put(freqFileName, writer);
+					writersMap.put(fileName, writer);
 
 					String header = getHeaderLine();
 					writer.write(header);
 
 					synchronized (locksMap) {
-						locksMap.put(freqFileName, Boolean.FALSE);
+						locksMap.put(fileName, Boolean.FALSE);
 					}
 				}
 
 				Boolean isWriterInUse = Boolean.TRUE;
 				synchronized (locksMap) {
-					isWriterInUse = locksMap.get(freqFileName);
+					isWriterInUse = locksMap.get(fileName);
 					if (!isWriterInUse) {
-						locksMap.put(freqFileName, Boolean.TRUE);
+						locksMap.put(fileName, Boolean.TRUE);
 					}
 				}
 				if (!isWriterInUse) {
-					writer = writersMap.get(freqFileName);
+					writer = writersMap.get(fileName);
 				}
 			}
 			if (writer == null) {
@@ -347,7 +379,17 @@ public abstract class CallableOperation<R, V> implements
 		return writer;
 	}
 
-	protected final void releaseWriter(Writer writer, String freqFileName,
+	/**
+	 * To standardize the way different threads release writers, they must go
+	 * through this method. No guards are taken to enforce this!
+	 * 
+	 * @param writer
+	 * @param fileName
+	 * @param writersMap
+	 * @param locksMap
+	 * @throws IOException
+	 */
+	protected final void releaseWriter(Writer writer, String fileName,
 			Map<String, Writer> writersMap, Map<String, Boolean> locksMap)
 			throws IOException {
 		long delta = System.currentTimeMillis();
@@ -358,14 +400,14 @@ public abstract class CallableOperation<R, V> implements
 		// }
 
 		synchronized (writersMap) {
-			writersMap.remove(freqFileName);
+			writersMap.remove(fileName);
 			synchronized (locksMap) {
-				locksMap.remove(freqFileName);
+				locksMap.remove(fileName);
 			}
 		}
 		delta = System.currentTimeMillis() - delta;
 		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
-		
+
 		// We also flush and close the writer.. if we retain it, we shouldn't
 		writer.flush();
 		writer.close();

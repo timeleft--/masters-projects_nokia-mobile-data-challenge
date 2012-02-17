@@ -9,6 +9,7 @@ import java.nio.channels.Channels;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
@@ -25,7 +26,7 @@ import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 
-public class CalcPerUserStats {
+class CalcPerUserStats {
 
 	private static final String EMPTY_COUNTS_LINE = "\t?\t?\t?";
 
@@ -40,13 +41,21 @@ public class CalcPerUserStats {
 		// TODO dataRoot from args
 
 		CalcPerUserStats app = new CalcPerUserStats();
-		Arrays.sort(args);
-		if (Arrays.binarySearch(args, "--count") >= 0) {
+		List<String> argList = Arrays.asList(args);
+		int argIx = 0;
+		if ((argIx = argList.indexOf("--count")) >= 0) {
 			app.count();
-		} else if (Arrays.binarySearch(args, "--summary") >= 0) {
-			app.summaryStats();
+		} else if ((argIx = argList.indexOf("--concatPerUser")) >= 0) {
+			app.concatPerUser();
+		} else if ((argIx = argList.indexOf("--concatPerInput")) >= 0) {
+			if (argList.size() < argIx + 2) {
+				System.out.println("Which input?");
+			}
+			String inputNameFragment = argList.get(argIx + 1);
+			app.concatPerInput(inputNameFragment);
+
 		} else {
-			System.out.println("Ussage: --count OR --summary");
+			System.out.println("Ussage: --count OR --concatPerUser OR --concatPerInput");
 		}
 
 	}
@@ -167,7 +176,7 @@ public class CalcPerUserStats {
 	 * 
 	 * @throws Exception
 	 */
-	private void summaryStats() throws Exception {
+	private void concatPerUser() throws Exception {
 
 		class UserIdFilter implements FilenameFilter {
 			int id;
@@ -224,7 +233,7 @@ public class CalcPerUserStats {
 					.append('\t').append(pfx).append("-count").append('\t')
 					.append(pfx).append("-perctg");
 		}
-		headerBuilder.append('\n');
+		// headerBuilder.append('\n');
 		String header = headerBuilder.toString();
 		headerBuilder = null;
 
@@ -232,14 +241,13 @@ public class CalcPerUserStats {
 			String userId = numberToId(i);
 			FilenameFilter userFilter = new UserIdFilter(i);
 			File[] userFiles = dataRootFile.listFiles(userFilter);
-			
+
 			if (userFiles.length == 0) { // || userFiles.length != numCols){
 				// System.out.println("User " + i +
 				// " with less columnss.. bastard!");
 				continue; // no files for this user (id > max)
 			}
-			
-			
+
 			Writer resultWriter = Channels.newWriter(
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outPath, "counts_allinputs_"
@@ -248,8 +256,6 @@ public class CalcPerUserStats {
 			resultWriter.append(header).append('\n');
 			userId = quote(userId);
 			try {
-
-
 
 				Arrays.sort(userFiles);
 
@@ -270,8 +276,10 @@ public class CalcPerUserStats {
 					StringBuilder resultLine = new StringBuilder();
 					resultLine.append(userId);
 
+					// Number of files that this user doesnt have;
+					int skippedForThisUser = 0; //TODO: test!
 					for (int j = 0; j < userFiles.length; ++j) {
-						int k = j;
+						int k = j + skippedForThisUser;
 
 						while (!userFiles[j]
 								.getName()
@@ -281,6 +289,7 @@ public class CalcPerUserStats {
 										headerFiles[k].getName().length() - 8))) {
 							resultLine.append(EMPTY_COUNTS_LINE);
 							++k;
+							++skippedForThisUser;
 						}
 
 						String featureLine = buffReader[j].readLine();
@@ -310,6 +319,154 @@ public class CalcPerUserStats {
 				resultWriter.close();
 			}
 		}
+	}
+
+	private void concatPerInput(final String inputNameFragment)
+			throws Exception {
+
+		class InputFilter implements FilenameFilter {
+			String uid;
+
+			InputFilter(int id) {
+				this.uid = numberToId(id) + ".csv";
+			}
+
+			@Override
+			public boolean accept(File dir, String name) {
+				// if (name.contains("wlan-ssid") ||
+				// name.contains("accel-avdelt")
+				// || name.contains("mac_") || name.contains("name")
+				// || name.contains("gsm-cell_id")
+				// || name.contains("last_mod")
+				// || name.contains("process-path")
+				// || name.contains("accel-data")
+				// || name.contains("signaldbm")
+				// || name.contains("calllog-duration")
+				// || name.contains("calllog-number")
+				// || name.contains("contacts")) {
+				// return false; // skip those huge files in the concatenation
+				// }
+				return name.contains(inputNameFragment) && name.endsWith(uid);
+			}
+
+		}
+
+		File dataRootFile = FileUtils.getFile(dataRoot);
+
+		StringBuilder headerBuilder = new StringBuilder();
+		headerBuilder.append("userid");
+
+		int currMaxCols = 0;
+		File[] headerFiles = null;
+		for (int i = 0; i < 200; ++i) {
+			FilenameFilter headerFilter = new InputFilter(i);
+			File[] tempFiles = dataRootFile.listFiles(headerFilter);
+			if (tempFiles.length > currMaxCols) {
+				currMaxCols = tempFiles.length;
+				headerFiles = tempFiles;
+				System.out.println("Current max is: " + currMaxCols
+						+ " for user: " + i);
+			}
+		}
+		Arrays.sort(headerFiles);
+
+		int numCols = headerFiles.length;
+
+		for (int j = 0; j < numCols; ++j) {
+			String pfx = headerFiles[j].getName();
+
+			pfx = pfx.substring(0, pfx.lastIndexOf("-"));
+			headerBuilder.append('\t').append(pfx).append("-value")
+					.append('\t').append(pfx).append("-count").append('\t')
+					.append(pfx).append("-perctg");
+		}
+		// headerBuilder.append('\n');
+		String header = headerBuilder.toString();
+		headerBuilder = null;
+
+		Writer resultWriter = Channels.newWriter(
+				FileUtils.openOutputStream(
+						FileUtils.getFile(outPath, "counts_"
+								+ inputNameFragment + "_allusers.csv"))
+						.getChannel(), Config.OUT_CHARSET);
+		resultWriter.append(header).append('\n');
+
+		try {
+
+			for (int i = 1; i < 200; ++i) {
+				String userId = numberToId(i);
+				userId = quote(userId);
+
+				FilenameFilter userFilter = new InputFilter(i);
+				File[] userFiles = dataRootFile.listFiles(userFilter);
+
+				if (userFiles.length == 0) { // || userFiles.length != numCols){
+					// System.out.println("User " + i +
+					// " with less columnss.. bastard!");
+					continue; // no files for this user (id > max)
+				}
+
+				Arrays.sort(userFiles);
+
+				BufferedReader[] buffReader = new BufferedReader[userFiles.length];
+				for (int j = 0; j < userFiles.length; ++j) {
+					Reader userReader = Channels.newReader(FileUtils
+							.openInputStream(FileUtils.getFile(userFiles[j]))
+							.getChannel(), Config.OUT_CHARSET); // This is
+																// output from
+																// earlier
+					buffReader[j] = new BufferedReader(userReader);
+					buffReader[j].readLine(); // the header line
+				}
+				boolean allFilesConsumed = false;
+				while (!allFilesConsumed) {
+					allFilesConsumed = true;
+
+					StringBuilder resultLine = new StringBuilder();
+					resultLine.append(userId);
+					// Number of files that this user doesnt have;
+					int skippedForThisUser = 0;
+					for (int j = 0; j < userFiles.length; ++j) {
+						int k = j + skippedForThisUser;
+
+						while (!userFiles[j]
+								.getName()
+								.substring(0,
+										userFiles[j].getName().length() - 8)
+								.equals(headerFiles[k].getName().substring(0,
+										headerFiles[k].getName().length() - 8))) {
+							resultLine.append(EMPTY_COUNTS_LINE);
+							++k;
+							++skippedForThisUser;
+						}
+
+						String featureLine = buffReader[j].readLine();
+						if (featureLine != null) {
+							String[] featureTokens = featureLine.split("\\\t");
+							resultLine.append('\t')
+									.append(quote(featureTokens[1]))
+									// value
+									.append('\t').append(featureTokens[2])
+									.append('\t').append(featureTokens[3]);
+							// resultLine.append(featureLine.substring(featureLine
+							// .indexOf('\t')));
+							allFilesConsumed = false;
+							// System.out.println("Still has values:"+userFiles[j].getName());
+						} else {
+							resultLine.append(EMPTY_COUNTS_LINE);
+						}
+
+					}
+					if (!allFilesConsumed) {
+						resultWriter.append(resultLine.toString()).append('\n');
+					}
+				}
+			}
+		} finally {
+			resultWriter.flush();
+			resultWriter.close();
+		}
+
 	}
 
 	private String quote(String orig) {

@@ -15,10 +15,20 @@
 			<artifactId>commons-io</artifactId>
 			<version>2.1</version>
 		</dependency>
+<!-- 				<dependency> -->
+<!-- 					<groupId>mdc2012-deps</groupId> -->
+<!-- 					<artifactId>weka</artifactId> -->
+<!-- 					<version>3.6</version> -->
+<!-- 				</dependency> -->
 				<dependency>
 					<groupId>mdc2012-deps</groupId>
-					<artifactId>weka</artifactId>
-					<version>3.6</version>
+					<artifactId>mallet</artifactId>
+					<version>20120106</version>
+				</dependency>
+				<dependency>
+					<groupId>mdc2012-deps</groupId>
+					<artifactId>mallet-deps</artifactId>
+					<version>20120106</version>
 				</dependency>
 				<dependency>
 					<groupId>org.apache.commons</groupId>

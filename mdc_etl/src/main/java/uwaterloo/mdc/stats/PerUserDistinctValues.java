@@ -1,7 +1,6 @@
 package uwaterloo.mdc.stats;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.Writer;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -61,13 +60,13 @@ public class PerUserDistinctValues extends
 	@Deprecated
 	public PerUserDistinctValues(CalcPerUserStats master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
-			throws IOException {
+			throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
 
 	}
 
 	@Override
-	protected void headerEolProcedure() {
+	protected void headerEolProcedure() throws Exception {
 		for (String key : keyList) {
 			if (key.contains("time")) {
 				// toUpperCase prevent catching these fields in the write
@@ -146,7 +145,7 @@ public class PerUserDistinctValues extends
 	}
 
 	@Override
-	protected void eolProcedure() {
+	protected void eolProcedure() throws Exception {
 		if (prevTimeColsReadings != null) { // avoid header's eol
 			for (String key : colOpResult.keySet()) {
 				if (key.contains("time")) {
@@ -168,11 +167,17 @@ public class PerUserDistinctValues extends
 		super.eolProcedure();
 	}
 
+	/**
+	 * Since the CSVs of MDC represent time series, the column representing time
+	 * must be treated specially.
+	 * 
+	 * @return The anem of the column representing time
+	 */
 	protected String getTimeColumnName() {
 		return "time";
 	}
 
-	protected void writeResults() throws IOException {
+	protected void writeResults() throws Exception {
 		long delta;
 		for (String key : colOpResult.keySet()) {
 			if (Config.USERID_COLNAME.equals(key)) {
@@ -183,7 +188,8 @@ public class PerUserDistinctValues extends
 					+ FilenameUtils.removeExtension(dataFile.getName()) + "-"
 					+ key + "-" + userid + ".csv";
 			Writer freqWriter = acquireWriter(freqFileName,
-					master.freqWriterMap, master.freqWriterLocks);
+					((CalcPerUserStats) master).freqWriterMap,
+					((CalcPerUserStats) master).freqWriterLocks);
 			try {
 				Frequency freq = colOpResult.get(key);
 
@@ -218,8 +224,9 @@ public class PerUserDistinctValues extends
 					PerfMon.increment(TimeMetrics.IO_WRITE, delta);
 				}
 			} finally {
-				releaseWriter(freqWriter, freqFileName, master.freqWriterMap,
-						master.freqWriterLocks);
+				releaseWriter(freqWriter, freqFileName,
+						((CalcPerUserStats) master).freqWriterMap,
+						((CalcPerUserStats) master).freqWriterLocks);
 			}
 		}
 

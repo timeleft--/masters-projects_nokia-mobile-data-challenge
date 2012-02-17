@@ -1,7 +1,6 @@
 package uwaterloo.mdc.stats;
 
 import java.io.File;
-import java.io.IOException;
 
 
 public class PerUserDistinctValues_accel extends PerUserDistinctValues {
@@ -11,7 +10,7 @@ public class PerUserDistinctValues_accel extends PerUserDistinctValues {
 	@Deprecated
 	public PerUserDistinctValues_accel(CalcPerUserStats master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
-			throws IOException {
+			throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
  
 	}

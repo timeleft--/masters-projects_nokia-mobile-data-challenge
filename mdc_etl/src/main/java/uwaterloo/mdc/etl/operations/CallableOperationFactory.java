@@ -10,13 +10,23 @@ import org.apache.commons.io.FilenameUtils;
 
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
-import uwaterloo.mdc.stats.CalcPerUserStats;
 
+/**
+ * This factory allows for different handling for different files within a user's file set.
+ * It looks for a class having the same name of the operations class prototype, but with the 
+ * data file name postfixed to it. It must be in the same package as the prototype class. 
+ * If such class exists it instantiates it, otherwise it instantiates the prototype class.  
+ * 
+ * @author yaboulna
+ *
+ * @param <R>
+ * @param <V>
+ */
 public class CallableOperationFactory<R, V> {
 	
 	private HashMap<String, Class<? extends CallableOperation<R,V>>> resultClazzes = new HashMap<String, Class<? extends CallableOperation<R,V>>>();
 	
-	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, CalcPerUserStats master,
+	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, Object master,
 			File dataFile, String outPath) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 		return createOperation(prototype, master, CallableOperation.DEFAULT_DELIMITER,
 				CallableOperation.DEFAULT_EOL,
@@ -24,7 +34,7 @@ public class CallableOperationFactory<R, V> {
 	}
 
 	@SuppressWarnings("unchecked")
-	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, CalcPerUserStats master,
+	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, Object master,
 			char delimiter, String eol, int bufferSize, File dataFile,
 			String outPath) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 		long delta = System.currentTimeMillis();
