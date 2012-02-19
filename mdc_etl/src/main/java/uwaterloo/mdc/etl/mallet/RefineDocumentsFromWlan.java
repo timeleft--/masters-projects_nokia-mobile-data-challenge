@@ -85,9 +85,9 @@ public class RefineDocumentsFromWlan extends
 	@Override
 	protected void eoFileProcedure() throws Exception {
 		// Process the last set of observations
-		forceStatsWrite(userHierarchy.get(pendingVisitDir.getName()),
-					pendingVisitDir);
-	
+		if (pendingEndTims != -1) {
+			forceStatsWrite();
+		}
 	}
 
 	@Override
@@ -142,35 +142,32 @@ public class RefineDocumentsFromWlan extends
 			if (prevRSSI == null) {
 				prevRSSI = Config.WLAN_RSSI_MAX;
 			}
-			macAddressesDistance += (-currRSSI + prevRSSI) ^ 2;
+			macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI ) ^ 2);
+//			macAddressesDistance = macAddressesDistance + Math.abs(prevRSSI-currRSSI);
 		}
 		for (Integer prevRssi : prevAccessPoints.values()) {
 			// This AP is not visible any more, so add its RSSI
-			macAddressesDistance += (Config.WLAN_RSSI_MAX - prevRssi) ^ 2;
+			macAddressesDistance = macAddressesDistance + ((Config.WLAN_RSSI_MAX - prevRssi) ^ 2);
+//			macAddressesDistance = macAddressesDistance + Math.abs(Config.WLAN_RSSI_MAX - prevRssi);
 		}
 
+//		macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
 		macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
 
 		File docStartDir = null;
-		// File docEndFile = null;
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
 		int newDocIx = -1;
 
-		boolean force = false;
-
 		// TODO: Consider using a Sigmoid function instead of simple
 		// TODO: do we need to do anything with recordDelta?
-		if (force
-				|| macAddressesDistance > Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
+		if (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
 			FilenameFilter timeFilter = new TimeFilter();
 
 			File userDir = FileUtils.getFile(outPath, userid);
 			for (File visitDir : userDir.listFiles(timeFilter)) {
 				int visitStartTime = Integer.parseInt(StringUtils
 						.removeLastNChars(visitDir.getName(), 1));
-				// visitDir.getName()
-				// .substring(0, visitDir.getName().length() - 1));
 				if (visitStartTime > prevTime) {
 					break;
 				} else {
@@ -178,19 +175,7 @@ public class RefineDocumentsFromWlan extends
 				}
 			}
 
-			// if (docStartDir == null) {
-			// // docEndFile = FileUtils.getFile(userDir,
-			// WLAN_NOVISITS_FILENAME);
-			// docEndFile = new KeyValuePair<String,
-			// String>(Long.toString(prevTime)+Config.TIMETRUSTED_WLAN, "");
-			// noVisitHierarchy.add(docEndFile);
-			// visitNoVisitFreq.addValue(FREQ_NOVISIT_WLAN_VAR);
-			// } else {
-
 			if (docStartDir != null) {
-				//Always keep track of the last used dir
-				pendingVisitDir = docStartDir;
-				
 				visitHierarchy = userHierarchy.get(docStartDir.getName());
 				if (visitHierarchy == null) {
 					visitHierarchy = new LinkedList<KeyValuePair<String, String>>();
@@ -215,8 +200,6 @@ public class RefineDocumentsFromWlan extends
 				for (KeyValuePair<String, String> visit : visitHierarchy) {
 					int locEndTime = Integer.parseInt(StringUtils
 							.removeLastNChars(visit.getKey(), 5));
-					// visit.getKey().substring(
-					// 0, visit.getKey().length() - 5));
 					if (locEndTime < prevTime) {
 						break;
 					} else {
@@ -228,167 +211,120 @@ public class RefineDocumentsFromWlan extends
 					}
 				}
 			}
+
 			if (docEndFile == null) {
 				// The end time of the visit was before the record time
-				// docEndFile = FileUtils.getFile(userDir,
-				// WLAN_NOVISITS_FILENAME);
 				visitNoVisitFreq.addValue(FREQ_NOVISIT_WLAN_VAR);
 
 				// We are now tracking a new microlocation
-				pendingEndTims = -1;
-				apsStat = new SummaryStatistics();
+				forceStatsWrite();
 				return;
+			} // else {
+			visitNoVisitFreq.addValue(FREQ_VISIT_WLAN_VAR);
 
+			String visitEndTimeStr = StringUtils.removeLastNChars(
+					docEndFile.getKey(), 5);
+
+			long visitEndTime = Long.parseLong(visitEndTimeStr);
+			if (pendingEndTims != -1 && pendingEndTims != visitEndTime) {
+				// log("\tWARNING\tShould have appended the stat for visit ending: "
+				// + pendingEndTims);
+				forceStatsWrite();
 			}
 
-			// TODO: Consider using a Sigmoid function instead of simple
-			// thresholding
-			if (macAddressesDistance > Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
+			// Do not split if the reading is towards the end of the
+			// visit, because this will result in a fragmented
+			// document whose WLAN readings are not specified
+			// We also provision for this happening when curr is
+			// processed, thus the check for end-curr
+			// Sooner or later, in both cases, force will be used
+			if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)
+					&& (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)) {
 
 				long microlocStartTime = prevprevtime;
 				if (microlocStartTime == -1) {
 					String visitStartDirName = docStartDir.getName();
 					microlocStartTime = Long.parseLong(StringUtils
 							.removeLastNChars(visitStartDirName, 1));
-					// visitStartDirName
-					// .substring(0, visitStartDirName.length() - 1));
 				}
-				String visitEndTimeStr = StringUtils.removeLastNChars(
-						docEndFile.getKey(), 5);
-				// FilenameUtils.removeExtension();
-				// visitEndTimeStr = visitEndTimeStr.substring(0,
-				// visitEndTimeStr.length() - 1);
 
-				long visitEndTime = Long.parseLong(visitEndTimeStr);
-				if (pendingEndTims != -1 && pendingEndTims != visitEndTime) {
-					// log("\tWARNING\tShould have appended the stat for visit ending: "
-					// + pendingEndTims);
-					forceStatsWrite(
-							userHierarchy.get(pendingVisitDir.getName()),
-							pendingVisitDir);
-				}
-				// Do not split if the reading is towards the end of the
-				// visit, because this will result in a fragmented
-				// document whose WLAN readings are not specified
-				// We also provision for this happening when curr is
-				// processed, thus the check for end-curr
-				// Sooner or later, in both cases, force will be used
-				if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)
-						&& (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)) {
-
-					String placeId = docEndFile.getValue();
-					int tabIx = placeId.indexOf('\t');
-					if (tabIx != -1) {
-						// This is not the first time the visit is split
-						placeId = placeId.substring(0, tabIx);
-						if (placeId.indexOf('\t') != -1) {
-							log("\tINFO\tOverriding stats for visit: "
-									+ docStartDir.getAbsolutePath()
-									+ File.separator + docEndFile.getKey());
-						}
+				String placeId = docEndFile.getValue();
+				int tabIx = placeId.indexOf('\t');
+				if (tabIx != -1) {
+					// This is not the first time the visit is split
+					placeId = placeId.substring(0, tabIx);
+					if (placeId.indexOf('\t') != -1) {
+						log("\tINFO\tOverriding stats for visit: "
+								+ docStartDir.getAbsolutePath()
+								+ File.separator + docEndFile.getKey());
 					}
-
-					StringBuilder doc1 = new StringBuilder();
-					doc1.append(placeId)
-							.append('\t')
-							.append(microlocStartTime)
-							.append('\t')
-							.append(prevTime)
-							.append('\t')
-							.append(Long.toString(Math.round(apsStat.getMean())))
-							.append('\t')
-							.append(Long.toString(Math.round(apsStat
-									.getStandardDeviation())));
-
-					KeyValuePair<String, String> newDoc = new KeyValuePair<String, String>(
-							Long.toString(prevTime) + Config.TIMETRUSTED_WLAN
-									+ ".csv", doc1.toString());
-					visitHierarchy.add(newDocIx, newDoc);
-					// File doc1File = FileUtils.getFile(docStartDir, prevTime
-					// + Config.TIMETRUSTED_WLAN + ".csv");
-					// delta = System.currentTimeMillis();
-					// FileUtils.writeStringToFile(doc1File, doc1.toString(),
-					// Config.OUT_CHARSET);
-					// delta = System.currentTimeMillis() - delta;
-					// PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-
-					StringBuilder doc2 = new StringBuilder();
-					doc2.append(placeId).append('\t').append(currTime)
-							.append('\t').append(visitEndTimeStr);
-
-					docEndFile.setValue(doc2.toString());
-					// delta = System.currentTimeMillis();
-					// FileUtils.writeStringToFile(docEndFile, doc2.toString(),
-					// Config.OUT_CHARSET);
-					// delta = System.currentTimeMillis() - delta;
-					// PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-
-					// We are now tracking a new microlocation
-					apsStat = new SummaryStatistics();
-					pendingEndTims = -1;
-				} else {
-					// force "appending" the statistics to the file
-					// (should be the last one)
-					// This will happen next iteration anyway, when curr becomes
-					// past visitEnd, right?
-					// force = true;
-					pendingEndTims = visitEndTime;
-					pendingVisitDir = docStartDir;
-					pendingStats = apsStat;
-
 				}
 
-				// This steals the readings from current, which it should enjoy
-				// when it becomes prev!
-				// if ((visitEndTime - currTime < Config.WLAN_DELTAT_MIN)
-				// && (apsStat.getN() > 0)) {
-				// // This was the last reading for the current
-				// // visit, so force writing the stats
-				// // only after the reading is added
-				// // like any other reading
-				// force = true;
-				// }
+				StringBuilder doc1 = new StringBuilder();
+				doc1.append(placeId)
+						.append('\t')
+						.append(microlocStartTime)
+						.append('\t')
+						.append(prevTime)
+						.append('\t')
+						.append(Long.toString(Math.round(apsStat.getMean())))
+						.append('\t')
+						.append(Long.toString(Math.round(apsStat
+								.getStandardDeviation())));
 
-				visitNoVisitFreq.addValue(FREQ_VISIT_WLAN_VAR);
+				KeyValuePair<String, String> newDoc = new KeyValuePair<String, String>(
+						Long.toString(prevTime) + Config.TIMETRUSTED_WLAN
+								+ ".csv", doc1.toString());
+				visitHierarchy.add(newDocIx, newDoc);
+
+				StringBuilder doc2 = new StringBuilder();
+				doc2.append(placeId).append('\t').append(currTime).append('\t')
+						.append(visitEndTimeStr);
+
+				docEndFile.setValue(doc2.toString());
+
+				// We are now tracking a new microlocation
+				apsStat = new SummaryStatistics();
+				pendingEndTims = -1;
+			} else {
+				// We have pending statistics that are not written to the
+				// microlocation document. Keep track of them, and next
+				// iteration force will be called if needed.
+				pendingEndTims = visitEndTime;
+				pendingVisitDir = docStartDir;
+				pendingStats = apsStat;
 			}
 
 		}
+
 		apsStat.addValue(currAccessPoints.size());
 
-		// if (force) {
-		// forceStatsWrite(visitHierarchy, docStartDir);
-		// }
 	}
 
-	protected void forceStatsWrite(
-			LinkedList<KeyValuePair<String, String>> visitHierarchy,
-			File docStartDir) throws IOException {
-		if (apsStat.getN() == 0) {
+	protected void forceStatsWrite() throws IOException {
+		if (pendingEndTims == -1) {
+			// in case this call is extra
+			return;
+		}
+		if (pendingStats == null || (/*pendingStats == apsStat &&*/ pendingStats.getN() == 0)) {
 			// log("\tDEBUG\tCalling force for a stat with no datapoints, supposedly pending: "
 			// + visitHierarchy.get(0));
 			pendingEndTims = -1;
 			return;
 		}
-		// FileUtils.writeStringToFile(
-		// docEndFile,
-		// Long.toString(Math.round(apsStat.getMean()))
-		// + "\t"
-		// + Long.toString(Math.round(apsStat
-		// .getStandardDeviation())), true);
+		LinkedList<KeyValuePair<String, String>> visitHierarchy = userHierarchy
+				.get(pendingVisitDir.getName());
+		File docStartDir = pendingVisitDir;
+
 		// Force happens when we have to put the current stats in the last
 		// time slot
 		// last time slot is the first item in the descending list
 		KeyValuePair<String, String> lastTimeSlot = visitHierarchy.get(0);
 
-		if(StringUtils.removeLastNChars(lastTimeSlot.getKey(),
-							4).endsWith("W")){
-			log("\tDEBUG\tThis should end with either U or T: " + docStartDir.getAbsolutePath() + File.separator
-					+ lastTimeSlot.getKey());
-		}
 		// stats
-		String mean = Long.toString(Math.round(apsStat.getMean()));
+		String mean = Long.toString(Math.round(pendingStats.getMean()));
 		String stder = Long
-				.toString(Math.round(apsStat.getStandardDeviation()));
+				.toString(Math.round(pendingStats.getStandardDeviation()));
 
 		StringBuilder doc = new StringBuilder();
 		String[] docFields = tabSplit.split(lastTimeSlot.getValue());
@@ -442,7 +378,6 @@ public class RefineDocumentsFromWlan extends
 
 		// For the next visit
 		apsStat = new SummaryStatistics();
-
 		pendingEndTims = -1;
 	}
 

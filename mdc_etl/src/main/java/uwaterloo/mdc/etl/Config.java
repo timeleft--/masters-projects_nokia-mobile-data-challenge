@@ -22,8 +22,8 @@ public class Config {
 	public static final char TIMETRUSTED_GPS_NO = 'U';
 	public static final char TIMETRUSTED_WLAN = 'W';
 
-	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD = 14;
-	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MIN_THRESHOLD = 3;
+	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD = 11;
+//	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MIN_THRESHOLD = 3;
 	public static final int WLAN_RSSI_MAX = 110;
 	// Sampling period between 60 and 900 seconds
 	public static final long WLAN_DELTAT_MIN = 60;
