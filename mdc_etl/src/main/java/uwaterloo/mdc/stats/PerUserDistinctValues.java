@@ -5,7 +5,6 @@ import java.io.Writer;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.TimeZone;
 
 import org.apache.commons.io.FilenameUtils;
@@ -16,36 +15,11 @@ import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperation;
+import uwaterloo.mdc.etl.util.KeyValuePair;
 
 public class PerUserDistinctValues extends
 		CallableOperation<SummaryStatistics, Frequency> {
-	public static class KeyIntegerValue<K> implements Map.Entry<K, Integer> {
-		protected K key;
-		protected Integer value;
-
-		public KeyIntegerValue(K key, Integer value) {
-			this.key = key;
-			this.value = value;
-		}
-
-		public K getKey() {
-			return key;
-		}
-
-		public void setKey(K key) {
-			this.key = key;
-		}
-
-		public Integer getValue() {
-			return value;
-		}
-
-		public Integer setValue(Integer value) {
-			this.value = value;
-			return value;
-		}
-
-	}
+	
 
 	protected static final String READINGS_AT_SAME_TIME = "TIME_CARDINALITY_";
 	protected static final String HOUR_OF_DAY = "HOUR_OF_DAY_";
@@ -53,7 +27,7 @@ public class PerUserDistinctValues extends
 
 	protected TimeZone timeZoneOfRecord;
 
-	protected HashMap<String, KeyIntegerValue<String>> prevTimeColsReadings = new HashMap<String, KeyIntegerValue<String>>();
+	protected HashMap<String, KeyValuePair<String,Integer>> prevTimeColsReadings = new HashMap<String, KeyValuePair<String,Integer>>();
 
 	protected SummaryStatistics timeDifferenceStatistics = new SummaryStatistics();
 
@@ -94,7 +68,7 @@ public class PerUserDistinctValues extends
 				long deltaTime = Long.parseLong(currValue);
 
 				String upperCaseTimeKey = getTimeColumnName().toUpperCase();
-				KeyIntegerValue<String> prevReading = prevTimeColsReadings
+				KeyValuePair<String,Integer> prevReading = prevTimeColsReadings
 						.get(upperCaseTimeKey);
 				if (prevReading != null) {
 					deltaTime -= Long.parseLong(prevReading.getKey());
@@ -109,11 +83,11 @@ public class PerUserDistinctValues extends
 		}
 
 		if (currKey.contains("time")) {
-			KeyIntegerValue<String> prevReading = prevTimeColsReadings
+			KeyValuePair<String,Integer> prevReading = prevTimeColsReadings
 					.get(currKey);
 			if (prevReading == null) {
 				// initialization
-				prevReading = new KeyIntegerValue<String>(currValue, 0);
+				prevReading = new KeyValuePair<String,Integer>(currValue, 0);
 				prevTimeColsReadings.put(currKey.toUpperCase(), prevReading);
 			}
 
@@ -150,7 +124,7 @@ public class PerUserDistinctValues extends
 			for (String key : colOpResult.keySet()) {
 				if (key.contains("time")) {
 					String upperCaseKey = key.toUpperCase();
-					KeyIntegerValue<String> prevReading = prevTimeColsReadings
+					KeyValuePair<String,Integer> prevReading = prevTimeColsReadings
 							.get(upperCaseKey);
 					long longTime = Long.parseLong(prevReading.getKey()) * 1000;
 					Calendar calendar = Calendar.getInstance(timeZoneOfRecord);
@@ -240,7 +214,7 @@ public class PerUserDistinctValues extends
 	protected void eoFileProcedure() {
 		for (String key : colOpResult.keySet()) {
 			if (key.startsWith(READINGS_AT_SAME_TIME)) {
-				KeyIntegerValue<String> lastReading = prevTimeColsReadings
+				KeyValuePair<String,Integer> lastReading = prevTimeColsReadings
 						.get(key.substring(READINGS_AT_SAME_TIME.length()));
 				if (lastReading == null) {
 					// no previous readings

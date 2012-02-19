@@ -92,7 +92,7 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 	protected final Object master;
 	protected final String outPath;
 	protected final File dataFile;
-	protected CharSequence userid;
+	protected String userid;
 
 	@Deprecated
 	public CallableOperation(Object master, char delimiter,

@@ -2,8 +2,6 @@ package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Writer;
-import java.nio.channels.Channels;
 
 import org.apache.commons.io.FileUtils;
 
@@ -26,13 +24,7 @@ import uwaterloo.mdc.etl.operations.CallableOperation;
  * @author yaboulna
  * 
  */
-public class CreateDocumentsFromVisits extends CallableOperation<Void, Long> {
-	public static final String TIMETRUSTED_FLAG_YES = "T";
-	public static final String TIMETRUSTED_FLAG_NO = "U";
-	public static final String DELIMITER_USER_FEATURE = "_";
-	public static final String DELIMITER_START_ENDTIME = "-";
-	public static final String DELIMITER_FILE_COLNAME = ".";
-	public static final String DELIMITER_COLNAME_VALUE = "=";
+public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 
 	//
 	// protected long recordStartTime = -1;
@@ -70,53 +62,30 @@ public class CreateDocumentsFromVisits extends CallableOperation<Void, Long> {
 	@Override
 	protected void eolProcedure() throws Exception {
 		Long startTime = colOpResult.get("unixtime_start");
-		String trustIndicator = TIMETRUSTED_FLAG_YES;
+		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
 			startTime = addError(startTime);
-			trustIndicator = TIMETRUSTED_FLAG_NO;
+			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String startTimeDirName = startTime.toString() + trustIndicator;
 
 		Long endTime = colOpResult.get("unixtime_end");
-		trustIndicator = TIMETRUSTED_FLAG_YES;
+		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
 			endTime = addError(endTime);
-			trustIndicator = TIMETRUSTED_FLAG_NO;
+			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
-		String endTimeFileName = endTime.toString() + trustIndicator;
+		String endTimeFileName = endTime.toString() + trustIndicator + ".csv";
 
 		// We keep the times in GMT, so no need to use tz
-
-		String instanceName = userid + DELIMITER_USER_FEATURE
-				+ startTimeDirName + DELIMITER_START_ENDTIME + endTimeFileName;
-
-		endTimeFileName += ".csv";
 
 		File visitFile = FileUtils.getFile(outPath, userid.toString(),
 				startTimeDirName, endTimeFileName);
 
 		long delta = System.currentTimeMillis();
-		Writer visitWr = Channels.newWriter(
-				FileUtils.openOutputStream(visitFile).getChannel(),
-				Config.OUT_CHARSET);
-		try {
-			visitWr.append(instanceName).append('\t').append(userid)
-					.append(DELIMITER_USER_FEATURE)
-					.append(colOpResult.get("place_id").toString())
-					.append('\t');
-			// The place id is a per user id, so it is not a useful word. We use
-			// it
-			// as a label (for now)
-			// .append("\tDUMMY\t")
-			// .append("place_id")
-			// .append(DELIMITER_COLNAME_VALUE)
-			// .append(colOpResult.get("place_id").toString())
-			// .append(" ");
-			// NO, one instance per line: .append("\n")
-		} finally {
-			visitWr.flush();
-			visitWr.close();
-		}
+		String userPlaceId = userid + Config.DELIMITER_USER_FEATURE + colOpResult.get("place_id")
+				.toString(); 
+		FileUtils.writeStringToFile(visitFile, userPlaceId, Config.OUT_CHARSET);
 		delta = System.currentTimeMillis() - delta;
 		PerfMon.increment(TimeMetrics.IO_WRITE, delta);
 		super.eolProcedure();
@@ -151,9 +120,9 @@ public class CreateDocumentsFromVisits extends CallableOperation<Void, Long> {
 	}
 
 	@Override
-	protected Void getReturnValue() {
+	protected String getReturnValue() {
 		// Nothing
-		return null;
+		return userid;
 	}
 
 	private long addError(long reading) {
