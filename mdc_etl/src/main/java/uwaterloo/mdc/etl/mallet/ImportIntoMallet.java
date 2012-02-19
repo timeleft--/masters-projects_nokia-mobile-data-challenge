@@ -23,7 +23,7 @@ import uwaterloo.mdc.etl.util.KeyValuePair;
 class ImportIntoMallet {
 
 	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
-	private String outPath = "C:\\Users\\yaboulna\\mdc\\segmented_user-time";
+	private String outPath = "C:\\Users\\yaboulna\\mdc2\\segmented_user-time";
 	private String statsPath = "P:\\mdc-datasets\\stats";
 
 	/**
