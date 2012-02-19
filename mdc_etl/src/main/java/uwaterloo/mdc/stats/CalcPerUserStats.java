@@ -25,10 +25,11 @@ import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
+import uwaterloo.mdc.etl.util.StringUtils;
 
 class CalcPerUserStats {
 
-	private static final String EMPTY_COUNTS_LINE = "\t?\t?\t?";
+	private static final String EMPTY_COUNTS_LINE = "\t"+Config.MISSING_VALUE_PLACEHOLDER+"\t"+Config.MISSING_VALUE_PLACEHOLDER+"\t"+Config.MISSING_VALUE_PLACEHOLDER;
 
 	private String dataRoot = "P:\\mdc-datasets\\stats_counts";
 	private String outPath = "P:\\mdc-datasets\\stats_summary";
@@ -199,7 +200,7 @@ class CalcPerUserStats {
 						|| name.contains("contacts")) {
 					return false; // skip those huge files in the concatenation
 				}
-				return name.contains(numberToId(id));
+				return name.contains(StringUtils.numberToId(id));
 			}
 
 		}
@@ -238,7 +239,7 @@ class CalcPerUserStats {
 		headerBuilder = null;
 
 		for (int i = 1; i < 200; ++i) {
-			String userId = numberToId(i);
+			String userId = StringUtils.numberToId(i);
 			FilenameFilter userFilter = new UserIdFilter(i);
 			File[] userFiles = dataRootFile.listFiles(userFilter);
 
@@ -254,7 +255,7 @@ class CalcPerUserStats {
 									+ userId + ".csv")).getChannel(),
 					Config.OUT_CHARSET);
 			resultWriter.append(header).append('\n');
-			userId = quote(userId);
+			userId = StringUtils.quote(userId);
 			try {
 
 				Arrays.sort(userFiles);
@@ -296,7 +297,7 @@ class CalcPerUserStats {
 						if (featureLine != null) {
 							String[] featureTokens = featureLine.split("\\\t");
 							resultLine.append('\t')
-									.append(quote(featureTokens[1]))
+									.append(StringUtils.quote(featureTokens[1]))
 									// value
 									.append('\t').append(featureTokens[2])
 									.append('\t').append(featureTokens[3]);
@@ -328,7 +329,7 @@ class CalcPerUserStats {
 			String uid;
 
 			InputFilter(int id) {
-				this.uid = numberToId(id) + ".csv";
+				this.uid = StringUtils.numberToId(id) + ".csv";
 			}
 
 			@Override
@@ -394,8 +395,8 @@ class CalcPerUserStats {
 		try {
 
 			for (int i = 1; i < 200; ++i) {
-				String userId = numberToId(i);
-				userId = quote(userId);
+				String userId = StringUtils.numberToId(i);
+				userId = StringUtils.quote(userId);
 
 				FilenameFilter userFilter = new InputFilter(i);
 				File[] userFiles = dataRootFile.listFiles(userFilter);
@@ -444,7 +445,7 @@ class CalcPerUserStats {
 						if (featureLine != null) {
 							String[] featureTokens = featureLine.split("\\\t");
 							resultLine.append('\t')
-									.append(quote(featureTokens[1]))
+									.append(StringUtils.quote(featureTokens[1]))
 									// value
 									.append('\t').append(featureTokens[2])
 									.append('\t').append(featureTokens[3]);
@@ -469,19 +470,5 @@ class CalcPerUserStats {
 
 	}
 
-	private String quote(String orig) {
-		return "\"" + orig + "\"";
-	}
 
-	public String numberToId(int number) {
-		String userId;
-		if (number < 10) {
-			userId = "00" + number;
-		} else if (number < 100) {
-			userId = "0" + number;
-		} else {
-			userId = "" + number;
-		}
-		return userId;
-	}
 }

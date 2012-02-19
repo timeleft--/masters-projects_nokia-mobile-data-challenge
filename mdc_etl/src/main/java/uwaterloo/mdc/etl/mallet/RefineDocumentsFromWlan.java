@@ -18,13 +18,14 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
 import uwaterloo.mdc.etl.PerfMon;
+import uwaterloo.mdc.etl.Discretize.DurationEunm;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.StringUtils;
 
 public class RefineDocumentsFromWlan extends
-		CallableOperation<KeyValuePair<String, Frequency>, String> {
+		CallableOperation<KeyValuePair<String, HashMap<String,Object>>, String> {
 	protected static Writer LOG;
 
 	protected class TimeFilter implements FilenameFilter {
@@ -53,9 +54,10 @@ public class RefineDocumentsFromWlan extends
 	protected static final String COLNAME_AVG_NUM_APS = " avgAps";
 	protected static final String COLNAME_STDDEV_NUM_APS = " sdvAps";
 
-	public static final char FREQ_NOVISIT_WLAN_VAR = 'w';
-	public static final char FREQ_VISIT_WLAN_VAR = 'b';
-	public static final char FREQ_VISIT_NOWLAN_VAR = 'v';
+	protected Frequency visitNoVisitFreq = new Frequency();
+	protected SummaryStatistics durationStats = new SummaryStatistics();
+	protected Frequency durationFreqs = new Frequency();
+
 
 	protected long prevTime = -1;
 	protected long prevprevtime;
@@ -65,9 +67,9 @@ public class RefineDocumentsFromWlan extends
 	protected HashMap<String, Integer> currAccessPoints;
 	protected String currMacAddr = null;
 
+	//This is temporary, not part of the result
 	protected SummaryStatistics apsStat = new SummaryStatistics();
-	protected Frequency visitNoVisitFreq = new Frequency();
-
+	
 	protected HashMap<String, LinkedList<KeyValuePair<String, String>>> userHierarchy = new HashMap<String, LinkedList<KeyValuePair<String, String>>>();
 	protected LinkedList<KeyValuePair<String, String>> noVisitHierarchy = new LinkedList<KeyValuePair<String, String>>();
 
@@ -214,13 +216,15 @@ public class RefineDocumentsFromWlan extends
 
 			if (docEndFile == null) {
 				// The end time of the visit was before the record time
-				visitNoVisitFreq.addValue(FREQ_NOVISIT_WLAN_VAR);
+				visitNoVisitFreq.addValue(Discretize.VisitWlanBothEnum.W);
+						
 
 				// We are now tracking a new microlocation
 				forceStatsWrite();
 				return;
 			} // else {
-			visitNoVisitFreq.addValue(FREQ_VISIT_WLAN_VAR);
+			visitNoVisitFreq.addValue(Discretize.VisitWlanBothEnum.B);
+					
 
 			String visitEndTimeStr = StringUtils.removeLastNChars(
 					docEndFile.getKey(), 5);
@@ -358,7 +362,7 @@ public class RefineDocumentsFromWlan extends
 
 				// Better than having no value at all.. we use the avg of the
 				// two!
-				// stder = "?";
+				// stder = Config.MISSING_VALUE_PLACEHOLDER;
 				double var = (pendingStats.getStandardDeviation() + apsStat
 						.getStandardDeviation()) / 2;
 				stder = Long.toString(Math.round(var));
@@ -396,7 +400,7 @@ public class RefineDocumentsFromWlan extends
 	@Override
 	protected void writeResults() throws Exception {
 		// And then do a check on all the files
-		File malletDir = FileUtils.getFile(outPath, "mallet", userid);
+		File malletDir = FileUtils.getFile(outPath, /*"mallet",*/ userid);
 		String malletInstFormat = userid + Config.DELIMITER_USER_FEATURE + "%s"
 				+ Config.DELIMITER_START_ENDTIME + "%s\t%s\t"
 				+ COLNAME_AVG_NUM_APS + "=%s" + COLNAME_STDDEV_NUM_APS + "=%s";
@@ -432,8 +436,10 @@ public class RefineDocumentsFromWlan extends
 				String endTimeStr = StringUtils.removeLastNChars(
 						microLocFile.getName(), 5);
 				malletInst = String.format(malletInstFormat, startTimeStr,
-						endTimeStr, microLocInst, "?", "?");
-				visitNoVisitFreq.addValue(FREQ_VISIT_NOWLAN_VAR);
+						endTimeStr, microLocInst, ""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
+				visitNoVisitFreq.addValue(Discretize.VisitWlanBothEnum.V);
+						
+						
 				startTime = Long.parseLong(startTimeStr);
 				endTime = Long.parseLong(endTimeStr);
 
@@ -457,7 +463,7 @@ public class RefineDocumentsFromWlan extends
 					} else if (instFields.length == 3) {
 						malletInst = String.format(malletInstFormat,
 								instFields[1], instFields[2], instFields[0],
-								"?", "?");
+								""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
 						startTime = Long.parseLong(instFields[1]);
 						endTime = Long.parseLong(instFields[2]);
 					} else if (instFields.length == 1) {
@@ -469,7 +475,7 @@ public class RefineDocumentsFromWlan extends
 								microLocDoc.getKey(), 5);
 						endTime = Long.parseLong(endTimeStr);
 						malletInst = String.format(malletInstFormat,
-								startTimeStr, endTime, instFields[0], "?", "?");
+								startTimeStr, endTime, instFields[0], ""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
 					} else {
 						log("\tERROR\tDiscarding file with wrong number of columns: "
 								+ visitDir.getAbsolutePath()
@@ -490,11 +496,14 @@ public class RefineDocumentsFromWlan extends
 			File malletFile) throws IOException {
 		// Calculate duration
 		long durationInSec = endTime - startTime;
-
+		
 		// TODONE: do we need to discritize even more or less?
-		char durDiscrete = Discretize.duration(durationInSec);
+		DurationEunm durDiscrete = Discretize.duration(durationInSec);
+		
+		durationStats.addValue(durationInSec);
+		durationFreqs.addValue(durDiscrete);
 
-		malletInst += " dur" + Config.DELIMITER_COLNAME_VALUE + durDiscrete;
+		malletInst += " dur" + Config.DELIMITER_COLNAME_VALUE + durDiscrete.toString();
 
 		long delta = System.currentTimeMillis();
 
@@ -510,10 +519,14 @@ public class RefineDocumentsFromWlan extends
 	}
 
 	@Override
-	protected KeyValuePair<String, Frequency> getReturnValue() throws Exception {
-		return new KeyValuePair<String, Frequency>(userid, visitNoVisitFreq);
+	protected KeyValuePair<String, HashMap<String,Object>> getReturnValue() throws Exception {
+		HashMap<String,Object> result = new HashMap<String,Object>();
+		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoVisitFreq);
+		result.put(Config.RESULT_KEY_DURATION_FREQ, durationFreqs);
+		result.put(Config.RESULT_KEY_DURATION_SUMMARY, durationStats);
+		return new KeyValuePair<String, HashMap<String,Object>>(userid, result);
 	}
-
+	
 	public static Writer getLOG() {
 		return LOG;
 	}
