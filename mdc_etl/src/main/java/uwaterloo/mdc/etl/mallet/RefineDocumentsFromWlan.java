@@ -23,30 +23,11 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.StringUtils;
+import uwaterloo.mdc.etl.util.TimeFilenameFilter;
 
 public class RefineDocumentsFromWlan extends
 		CallableOperation<KeyValuePair<String, HashMap<String,Object>>, String> {
 	protected static Writer LOG;
-
-	protected class TimeFilter implements FilenameFilter {
-
-		// Find files for visits within a day of the wifi ap reading
-		// (actually withing the last 99999 / 3600 = 27.7775 hours)
-		String timePrefix;
-
-		public TimeFilter() {
-			timePrefix = StringUtils.removeLastNChars(Long.toString(prevTime),
-					Config.TIME_SECONDS_IN_DAY_STRLEN);
-			// timePrefix = timePrefix.substring(0, timePrefix.length()
-			// - Config.TIME_SECONDS_IN_DAY_STRLEN);
-		}
-
-		@Override
-		public boolean accept(File dir, String filename) {
-			return filename.startsWith(timePrefix);
-		}
-
-	}
 
 	// protected static final String WLAN_NOVISITS_FILENAME =
 	// "wlan_no-visit.csv";
@@ -136,35 +117,41 @@ public class RefineDocumentsFromWlan extends
 
 	protected void refineDocument() throws IOException {
 		long delta;
-		long macAddressesDistance = 0; // The square difference between the
-										// RSSIs of the same APs
+		double displacementRelAp = 0;
+//		long macAddressesDistance = 0; 
 		for (String mac : currAccessPoints.keySet()) {
 			int currRSSI = currAccessPoints.get(mac);
 			Integer prevRSSI = prevAccessPoints.remove(mac);
 			if (prevRSSI == null) {
 				prevRSSI = Config.WLAN_RSSI_MAX;
 			}
-			macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI ) ^ 2);
+			displacementRelAp += Discretize.estimateApDistanceLinear((Math.abs(prevRSSI-currRSSI)));
+		
+//			macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI ) ^ 2);
 //			macAddressesDistance = macAddressesDistance + Math.abs(prevRSSI-currRSSI);
 		}
 		for (Integer prevRssi : prevAccessPoints.values()) {
 			// This AP is not visible any more, so add its RSSI
-			macAddressesDistance = macAddressesDistance + ((Config.WLAN_RSSI_MAX - prevRssi) ^ 2);
+			displacementRelAp += Discretize.estimateApDistanceLinear(Math.abs((Config.WLAN_RSSI_MAX - prevRssi)));
+			
+//			macAddressesDistance = macAddressesDistance + ((Config.WLAN_RSSI_MAX - prevRssi) ^ 2);
 //			macAddressesDistance = macAddressesDistance + Math.abs(Config.WLAN_RSSI_MAX - prevRssi);
 		}
 
 //		macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
-		macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
+//		macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
 
 		File docStartDir = null;
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
 		int newDocIx = -1;
 
+		//The macAddrDistance is the average of the displacement according to each AP
+		long macAddressesDistance = Math.round(displacementRelAp/currAccessPoints.size());
 		// TODO: Consider using a Sigmoid function instead of simple
 		// TODO: do we need to do anything with recordDelta?
 		if (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
-			FilenameFilter timeFilter = new TimeFilter();
+			FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
 
 			File userDir = FileUtils.getFile(outPath, userid);
 			for (File visitDir : userDir.listFiles(timeFilter)) {
@@ -216,14 +203,14 @@ public class RefineDocumentsFromWlan extends
 
 			if (docEndFile == null) {
 				// The end time of the visit was before the record time
-				visitNoVisitFreq.addValue(Discretize.VisitWlanBothEnum.W);
+				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.R);
 						
 
 				// We are now tracking a new microlocation
 				forceStatsWrite();
 				return;
 			} // else {
-			visitNoVisitFreq.addValue(Discretize.VisitWlanBothEnum.B);
+			visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.B);
 					
 
 			String visitEndTimeStr = StringUtils.removeLastNChars(
@@ -437,7 +424,7 @@ public class RefineDocumentsFromWlan extends
 						microLocFile.getName(), 5);
 				malletInst = String.format(malletInstFormat, startTimeStr,
 						endTimeStr, microLocInst, ""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
-				visitNoVisitFreq.addValue(Discretize.VisitWlanBothEnum.V);
+				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.V);
 						
 						
 				startTime = Long.parseLong(startTimeStr);

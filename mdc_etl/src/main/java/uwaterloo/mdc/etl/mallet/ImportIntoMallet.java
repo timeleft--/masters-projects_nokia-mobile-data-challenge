@@ -14,23 +14,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.math.stat.Frequency;
-import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
-import uwaterloo.mdc.etl.Discretize;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
+import uwaterloo.mdc.etl.operations.PrintStatsCallable;
 import uwaterloo.mdc.etl.util.KeyValuePair;
-import uwaterloo.mdc.etl.util.StringUtils;
 
 class ImportIntoMallet {
 
-	private static final String COUNT_PSTFX = "_count";
-	private static final String PCTG_PSTFX = "_pctg";
-	private static final String PERUSER_FREQ_PREFX = "per-user-freq_";
-	private static final String PERUSER_SUMMART_PREFX = "per-user-summary_";
+
 
 	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
 	private String outPath = "C:\\Users\\yaboulna\\mdc2\\segmented_user-time";
@@ -66,15 +60,18 @@ class ImportIntoMallet {
 
 			CallableOperationFactory<String, Long> fromVisitsFactory = new CallableOperationFactory<String, Long>();
 			ExecutorService fromVisitsExec = Executors
-					.newFixedThreadPool(Config.NUM_THREADS);
+					.newFixedThreadPool(Config.NUM_THREADS/3);
 			CompletionService<String> fromVisitsEcs = new ExecutorCompletionService<String>(
 					fromVisitsExec);
 
 			CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, String> fromWlanFactory = new CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, String>();
 			ExecutorService fromWlanExec = Executors
-					.newFixedThreadPool(Config.NUM_THREADS);
+					.newFixedThreadPool(Config.NUM_THREADS/3);
 			CompletionService<KeyValuePair<String, HashMap<String, Object>>> fromWlanEcs = new ExecutorCompletionService<KeyValuePair<String, HashMap<String, Object>>>(
 					fromWlanExec);
+			
+			ExecutorService printStatsExec = Executors
+					.newFixedThreadPool(Config.NUM_THREADS/3);
 
 			int numberWifiTasks = 0;
 			int fromVisitsNumberTasks = 0;
@@ -130,20 +127,23 @@ class ImportIntoMallet {
 						for (String statKey : statMap.keySet()) {
 
 							Object statObj = statMap.get(statKey);
+							
+							PrintStatsCallable printStatCall = new PrintStatsCallable(statObj, annotStat.getKey(), statKey, statWriters, statsPath);
+							printStatsExec.submit(printStatCall);
 
-							if (statObj instanceof Frequency) {
-								writeStats(annotStat.getKey(), statKey,
-										((Frequency) statObj));
-
-							} else if (statObj instanceof SummaryStatistics) {
-								writeStats(annotStat.getKey(), statKey,
-										(SummaryStatistics) statObj);
-
-							}
 						}
 					}
 				}
 
+				// This will make the executor accept no new threads
+				// and finish all existing threads in the queue
+				printStatsExec.shutdown();
+				// Wait until all threads are finish
+				while (!printStatsExec.isTerminated()) {
+					Thread.sleep(5000);
+					System.out.println(PerfMon.asString());
+				}
+				
 				// This will make the executor accept no new threads
 				// and finish all existing threads in the queue
 				fromWlanExec.shutdown();
@@ -152,6 +152,16 @@ class ImportIntoMallet {
 					Thread.sleep(5000);
 					System.out.println(PerfMon.asString());
 				}
+				
+				// This will make the executor accept no new threads
+				// and finish all existing threads in the queue
+				fromVisitsExec.shutdown();
+				// Wait until all threads are finish
+				while (!fromVisitsExec.isTerminated()) {
+					Thread.sleep(5000);
+					System.out.println(PerfMon.asString());
+				}
+
 			} finally {
 				FromWifiLogWriter.flush();
 				FromWifiLogWriter.close();
@@ -159,7 +169,6 @@ class ImportIntoMallet {
 		} finally {
 			long delta = System.currentTimeMillis();
 			for (Writer wr : statWriters.values()) {
-				// This is just in case the program crashed
 				if (wr != null) {
 					wr.flush();
 					wr.close();
@@ -173,101 +182,5 @@ class ImportIntoMallet {
 		}
 	}
 
-	private void writeStats(String userid, String statKey,
-			SummaryStatistics stat) throws IOException {
-		long delta = System.currentTimeMillis();
-		Writer summaryWriter = statWriters.get(statKey);
-		if (summaryWriter == null) {
-			summaryWriter = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(statsPath, PERUSER_SUMMART_PREFX
-									+ statKey + ".csv")).getChannel(),
-					Config.OUT_CHARSET);
 
-			statWriters.put(statKey, summaryWriter);
-
-			// write header
-			summaryWriter
-					.append(Config.USERID_COLNAME)
-					.append("\tn\tmin\tmax\tmean\tstandard_deviation\tvariance\tgeometric_mean\tsecond_moment\n");
-		}
-
-		summaryWriter.append(userid).append('\t').append("" + stat.getN())
-				.append('\t').append("" + stat.getMin()).append('\t')
-				.append("" + stat.getMax()).append('\t')
-				.append("" + stat.getMean()).append('\t')
-				.append("" + stat.getStandardDeviation()).append('\t')
-				.append("" + stat.getVariance()).append('\t')
-				.append("" + stat.getGeometricMean()).append('\t')
-				.append("" + stat.getSecondMoment()).append('\n');
-
-		delta = System.currentTimeMillis() - delta;
-		PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-	}
-
-	public synchronized void writeStats(String userid, String statKey,
-			Frequency stat) throws IOException {
-		long delta = System.currentTimeMillis();
-
-		Enum<?>[] valsArr = Discretize.enumsMap.get(statKey);
-
-		Writer freqWriter = statWriters.get(statKey);
-		if (freqWriter == null) {
-			freqWriter = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(statsPath, PERUSER_FREQ_PREFX
-									+ statKey + ".csv")).getChannel(),
-					Config.OUT_CHARSET);
-
-			statWriters.put(statKey, freqWriter);
-
-			// Write the header
-			freqWriter.append(Config.USERID_COLNAME);
-
-			for (int i = 0; i < valsArr.length; ++i) {
-				Enum<?> val = valsArr[i];
-				String valLabel = val.toString();
-				freqWriter.append('\t')
-						.append(StringUtils.quote(valLabel + COUNT_PSTFX))
-						.append('\t')
-						.append(StringUtils.quote(valLabel + PCTG_PSTFX));
-			}
-
-			freqWriter
-					.append('\t')
-					.append(StringUtils.quote(Config.MISSING_VALUE_PLACEHOLDER
-							+ COUNT_PSTFX))
-					.append('\t')
-					.append(StringUtils.quote(Config.MISSING_VALUE_PLACEHOLDER
-							+ PCTG_PSTFX));
-
-			freqWriter.append('\n');
-		}
-
-		freqWriter.append(userid);
-
-		for (int i = 0; i < valsArr.length; ++i) {
-			Enum<?> val = valsArr[i];
-
-			long valCnt = stat.getCount(val);
-			double valPct = stat.getPct(val);
-
-			freqWriter.append('\t').append(Long.toString(valCnt)).append('\t')
-					.append(Double.toString(valPct));
-
-		}
-
-		freqWriter
-				.append('\t')
-				.append(Long.toString(stat
-						.getCount(Config.MISSING_VALUE_PLACEHOLDER)))
-				.append('\t')
-				.append(Double.toString(stat
-						.getPct(Config.MISSING_VALUE_PLACEHOLDER)));
-
-		freqWriter.append('\n');
-
-		delta = System.currentTimeMillis() - delta;
-		PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-	}
 }

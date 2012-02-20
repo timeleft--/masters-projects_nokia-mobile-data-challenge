@@ -26,15 +26,15 @@ public class Discretize {
 		E;// epoch
 	};
 
-	public enum VisitWlanBothEnum {
+	public enum VisitReadingBothEnum {
 		V, // FREQ_VISIT_NOWLAN_VAR
-		W, // FREQ_NOVISIT_WLAN_VAR
+		R, // FREQ_NOVISIT_WLAN_VAR
 		B; // FREQ_VISIT_WLAN_VAR
 	};
 
 	static {
 		enumsMap.put(Config.RESULT_KEY_DURATION_FREQ, DurationEunm.values());
-		enumsMap.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, VisitWlanBothEnum.values());
+		enumsMap.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, VisitReadingBothEnum.values());
 	}
 
 	public static DurationEunm duration(long durationInSec) {
@@ -57,5 +57,16 @@ public class Discretize {
 		}
 		return durDiscrete;
 
+	}
+	
+	public static double estimateApDistanceLinear(int rx) {
+		return rx/2.5; //Uses equation from LaMarca et al.
+	}
+	
+	public static double estimateApDistanceLaMarca(int rx) {
+		// I removed the subtraction from 32 because I think that the rx is already
+		// normalized to start from 0.. if not, we might need to subtract from it
+		// the maximum and the 32: 110+32????? FIXME: what exactly is RX????
+		return Math.pow(10, (rx/*-32.0*/)/25.0); //Uses equation from LaMarca et al.
 	}
 }

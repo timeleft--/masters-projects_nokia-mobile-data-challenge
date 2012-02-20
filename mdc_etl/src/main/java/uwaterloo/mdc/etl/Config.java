@@ -13,7 +13,7 @@ public class Config {
 	public static final char MISSING_VALUE_PLACEHOLDER = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 4;
+	public static final int NUM_THREADS = 9;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -42,5 +42,10 @@ public class Config {
 	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-wlan-both_freq";
 	public static final String RESULT_KEY_DURATION_FREQ = "duration-lengths_freq";
 	public static final String RESULT_KEY_DURATION_SUMMARY = "duration-lengths_summary";
+	
+	public static final String RESULT_KEY_READING_NOVISIT_FREQ = "reading-no-visit-freq";
+
+	public static final String COLNAME_HOUR_OF_DAY = "hod";
+	public static final String COLNAME_DAY_OF_WEEK = "dow";
 
 }
