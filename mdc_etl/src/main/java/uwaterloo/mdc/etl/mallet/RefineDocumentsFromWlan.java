@@ -17,16 +17,18 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
-import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.Discretize.DurationEunm;
+import uwaterloo.mdc.etl.Discretize.RelTimeNWeatherElts;
+import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.StringUtils;
 import uwaterloo.mdc.etl.util.TimeFilenameFilter;
 
-public class RefineDocumentsFromWlan extends
-		CallableOperation<KeyValuePair<String, HashMap<String,Object>>, String> {
+public class RefineDocumentsFromWlan
+		extends
+		CallableOperation<KeyValuePair<String, HashMap<String, Object>>, String> {
 	protected static Writer LOG;
 
 	// protected static final String WLAN_NOVISITS_FILENAME =
@@ -35,10 +37,20 @@ public class RefineDocumentsFromWlan extends
 	protected static final String COLNAME_AVG_NUM_APS = " avgAps";
 	protected static final String COLNAME_STDDEV_NUM_APS = " sdvAps";
 
-	protected Frequency visitNoVisitFreq = new Frequency();
-	protected SummaryStatistics durationStats = new SummaryStatistics();
-	protected Frequency durationFreqs = new Frequency();
+	// protected static final String READINGS_AT_SAME_TIME =
+	// "TIME_CARDINALITY_";
+	protected static final String COLNAME_HOUR_OF_DAY = " hod";
+	protected static final String COLNAME_DAY_OF_WEEK = " dow";
 
+	protected static final String COLNAME_TEMPRATURE = " tmp";
+	protected static final String COLNAME_SKY = " sky";
+
+	protected String prevTimeZone;
+
+	private final Frequency[] relTimeWStats;
+	protected final Frequency visitNoVisitFreq = new Frequency();
+	protected final SummaryStatistics durationStats = new SummaryStatistics();
+	protected final Frequency durationFreqs = new Frequency();
 
 	protected long prevTime = -1;
 	protected long prevprevtime;
@@ -48,9 +60,9 @@ public class RefineDocumentsFromWlan extends
 	protected HashMap<String, Integer> currAccessPoints;
 	protected String currMacAddr = null;
 
-	//This is temporary, not part of the result
+	// This is temporary, not part of the result
 	protected SummaryStatistics apsStat = new SummaryStatistics();
-	
+
 	protected HashMap<String, LinkedList<KeyValuePair<String, String>>> userHierarchy = new HashMap<String, LinkedList<KeyValuePair<String, String>>>();
 	protected LinkedList<KeyValuePair<String, String>> noVisitHierarchy = new LinkedList<KeyValuePair<String, String>>();
 
@@ -63,6 +75,10 @@ public class RefineDocumentsFromWlan extends
 	public RefineDocumentsFromWlan(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
+		relTimeWStats = new Frequency[RelTimeNWeatherElts.values().length];
+		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {
+			relTimeWStats[ix.ordinal()] = new Frequency();
+		}
 	}
 
 	@Override
@@ -105,6 +121,8 @@ public class RefineDocumentsFromWlan extends
 			// } catch (NumberFormatException ignored) {
 			// // ok!
 			// }
+		} else if ("tz".equals(currKey)) {
+			prevTimeZone = currValue;
 		} else if ("mac_address".equals(currKey)) {
 			currMacAddr = currValue;
 
@@ -118,36 +136,44 @@ public class RefineDocumentsFromWlan extends
 	protected void refineDocument() throws IOException {
 		long delta;
 		double displacementRelAp = 0;
-//		long macAddressesDistance = 0; 
+		// long macAddressesDistance = 0;
 		for (String mac : currAccessPoints.keySet()) {
 			int currRSSI = currAccessPoints.get(mac);
 			Integer prevRSSI = prevAccessPoints.remove(mac);
 			if (prevRSSI == null) {
 				prevRSSI = Config.WLAN_RSSI_MAX;
 			}
-			displacementRelAp += Discretize.estimateApDistanceLinear((Math.abs(prevRSSI-currRSSI)));
-		
-//			macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI ) ^ 2);
-//			macAddressesDistance = macAddressesDistance + Math.abs(prevRSSI-currRSSI);
+			displacementRelAp += Discretize.estimateApDistanceLinear((Math
+					.abs(prevRSSI - currRSSI)));
+
+			// macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI
+			// ) ^ 2);
+			// macAddressesDistance = macAddressesDistance +
+			// Math.abs(prevRSSI-currRSSI);
 		}
 		for (Integer prevRssi : prevAccessPoints.values()) {
 			// This AP is not visible any more, so add its RSSI
-			displacementRelAp += Discretize.estimateApDistanceLinear(Math.abs((Config.WLAN_RSSI_MAX - prevRssi)));
-			
-//			macAddressesDistance = macAddressesDistance + ((Config.WLAN_RSSI_MAX - prevRssi) ^ 2);
-//			macAddressesDistance = macAddressesDistance + Math.abs(Config.WLAN_RSSI_MAX - prevRssi);
+			displacementRelAp += Discretize.estimateApDistanceLinear(Math
+					.abs((Config.WLAN_RSSI_MAX - prevRssi)));
+
+			// macAddressesDistance = macAddressesDistance +
+			// ((Config.WLAN_RSSI_MAX - prevRssi) ^ 2);
+			// macAddressesDistance = macAddressesDistance +
+			// Math.abs(Config.WLAN_RSSI_MAX - prevRssi);
 		}
 
-//		macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
-//		macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
+		// macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
+		// macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
 
 		File docStartDir = null;
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
 		int newDocIx = -1;
 
-		//The macAddrDistance is the average of the displacement according to each AP
-		long macAddressesDistance = Math.round(displacementRelAp/currAccessPoints.size());
+		// The macAddrDistance is the average of the displacement according to
+		// each AP
+		long macAddressesDistance = Math.round(displacementRelAp
+				/ currAccessPoints.size());
 		// TODO: Consider using a Sigmoid function instead of simple
 		// TODO: do we need to do anything with recordDelta?
 		if (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
@@ -204,14 +230,12 @@ public class RefineDocumentsFromWlan extends
 			if (docEndFile == null) {
 				// The end time of the visit was before the record time
 				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.R);
-						
 
 				// We are now tracking a new microlocation
 				forceStatsWrite();
 				return;
 			} // else {
 			visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.B);
-					
 
 			String visitEndTimeStr = StringUtils.removeLastNChars(
 					docEndFile.getKey(), 5);
@@ -251,6 +275,9 @@ public class RefineDocumentsFromWlan extends
 					}
 				}
 
+				String[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
+						prevTimeZone);
+
 				StringBuilder doc1 = new StringBuilder();
 				doc1.append(placeId)
 						.append('\t')
@@ -261,7 +288,19 @@ public class RefineDocumentsFromWlan extends
 						.append(Long.toString(Math.round(apsStat.getMean())))
 						.append('\t')
 						.append(Long.toString(Math.round(apsStat
-								.getStandardDeviation())));
+								.getStandardDeviation())))
+						.append('\t')
+						.append(relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+								.ordinal()])
+						.append('\t')
+						.append(relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+								.ordinal()])
+						.append('\t')
+						.append(relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+								.ordinal()])
+						.append('\t')
+						.append(relTimeAndWeather[RelTimeNWeatherElts.SKY
+								.ordinal()]);
 
 				KeyValuePair<String, String> newDoc = new KeyValuePair<String, String>(
 						Long.toString(prevTime) + Config.TIMETRUSTED_WLAN
@@ -297,7 +336,8 @@ public class RefineDocumentsFromWlan extends
 			// in case this call is extra
 			return;
 		}
-		if (pendingStats == null || (/*pendingStats == apsStat &&*/ pendingStats.getN() == 0)) {
+		if (pendingStats == null
+				|| (/* pendingStats == apsStat && */pendingStats.getN() == 0)) {
 			// log("\tDEBUG\tCalling force for a stat with no datapoints, supposedly pending: "
 			// + visitHierarchy.get(0));
 			pendingEndTims = -1;
@@ -314,8 +354,8 @@ public class RefineDocumentsFromWlan extends
 
 		// stats
 		String mean = Long.toString(Math.round(pendingStats.getMean()));
-		String stder = Long
-				.toString(Math.round(pendingStats.getStandardDeviation()));
+		String stder = Long.toString(Math.round(pendingStats
+				.getStandardDeviation()));
 
 		StringBuilder doc = new StringBuilder();
 		String[] docFields = tabSplit.split(lastTimeSlot.getValue());
@@ -365,6 +405,20 @@ public class RefineDocumentsFromWlan extends
 			return;
 		}
 
+		String[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
+				prevTimeZone);
+
+		doc.append('\t')
+				.append(relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+						.ordinal()])
+				.append('\t')
+				.append(relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+						.ordinal()])
+				.append('\t')
+				.append(relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+						.ordinal()]).append('\t')
+				.append(relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
+
 		lastTimeSlot.setValue(doc.toString());
 
 		// For the next visit
@@ -387,10 +441,15 @@ public class RefineDocumentsFromWlan extends
 	@Override
 	protected void writeResults() throws Exception {
 		// And then do a check on all the files
-		File malletDir = FileUtils.getFile(outPath, /*"mallet",*/ userid);
+		File malletDir = FileUtils.getFile(outPath, /* "mallet", */userid);
 		String malletInstFormat = userid + Config.DELIMITER_USER_FEATURE + "%s"
 				+ Config.DELIMITER_START_ENDTIME + "%s\t%s\t"
-				+ COLNAME_AVG_NUM_APS + "=%s" + COLNAME_STDDEV_NUM_APS + "=%s";
+				+ COLNAME_AVG_NUM_APS + Config.DELIMITER_COLNAME_VALUE + "%s"
+				+ COLNAME_STDDEV_NUM_APS + Config.DELIMITER_COLNAME_VALUE
+				+ "%s" + COLNAME_DAY_OF_WEEK + Config.DELIMITER_COLNAME_VALUE
+				+ "%s" + COLNAME_HOUR_OF_DAY + Config.DELIMITER_COLNAME_VALUE
+				+ "%s" + COLNAME_TEMPRATURE + Config.DELIMITER_COLNAME_VALUE
+				+ "%s" + COLNAME_SKY + Config.DELIMITER_COLNAME_VALUE + "%s";
 
 		File userDir = FileUtils.getFile(outPath, userid);
 		long delta;
@@ -422,11 +481,24 @@ public class RefineDocumentsFromWlan extends
 						visitDir.getName(), 1);
 				String endTimeStr = StringUtils.removeLastNChars(
 						microLocFile.getName(), 5);
+
+				// Assume default timezone
+				String[] relTimeAndWeather = getRelTimeAndWeather(startTimeStr,
+						Config.DEFAULT_TIME_ZONE);
+
 				malletInst = String.format(malletInstFormat, startTimeStr,
-						endTimeStr, microLocInst, ""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
+						endTimeStr, microLocInst,
+						Config.MISSING_VALUE_PLACEHOLDER,
+						Config.MISSING_VALUE_PLACEHOLDER,
+						relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+								.ordinal()],
+						relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+								.ordinal()],
+						relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+								.ordinal()],
+						relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
 				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.V);
-						
-						
+
 				startTime = Long.parseLong(startTimeStr);
 				endTime = Long.parseLong(endTimeStr);
 
@@ -437,10 +509,11 @@ public class RefineDocumentsFromWlan extends
 				for (KeyValuePair<String, String> microLocDoc : microLocList) {
 					String[] instFields = tabSplit
 							.split(microLocDoc.getValue());
-					if (instFields.length == 5) {
+					if (instFields.length == 9) {
 						malletInst = String.format(malletInstFormat,
 								instFields[1], instFields[2], instFields[0],
-								instFields[3], instFields[4]);
+								instFields[3], instFields[4], instFields[5],
+								instFields[6], instFields[7], instFields[8]);
 						startTime = Long.parseLong(instFields[1]);
 						// Long.parseLong(instFields[1].substring(0,
 						// instFields[1].length() - 1));
@@ -448,11 +521,29 @@ public class RefineDocumentsFromWlan extends
 						// Long.parseLong(instFields[2].substring(0,
 						// instFields[2].length() - 1));
 					} else if (instFields.length == 3) {
-						malletInst = String.format(malletInstFormat,
-								instFields[1], instFields[2], instFields[0],
-								""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
+
 						startTime = Long.parseLong(instFields[1]);
 						endTime = Long.parseLong(instFields[2]);
+						// Assume default timezone
+						String[] relTimeAndWeather = getRelTimeAndWeather(
+								startTime, Config.DEFAULT_TIME_ZONE);
+
+						malletInst = String
+								.format(malletInstFormat,
+										instFields[1],
+										instFields[2],
+										instFields[0],
+										"" + Config.MISSING_VALUE_PLACEHOLDER,
+										"" + Config.MISSING_VALUE_PLACEHOLDER,
+										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.SKY
+												.ordinal()]);
+
 					} else if (instFields.length == 1) {
 						// FIXME: This shouldn't happen.. but DUH!!!! it does!
 						String startTimeStr = StringUtils.removeLastNChars(
@@ -461,8 +552,27 @@ public class RefineDocumentsFromWlan extends
 						String endTimeStr = StringUtils.removeLastNChars(
 								microLocDoc.getKey(), 5);
 						endTime = Long.parseLong(endTimeStr);
-						malletInst = String.format(malletInstFormat,
-								startTimeStr, endTime, instFields[0], ""+Config.MISSING_VALUE_PLACEHOLDER, ""+Config.MISSING_VALUE_PLACEHOLDER);
+
+						// Assume default timezone
+						String[] relTimeAndWeather = getRelTimeAndWeather(
+								startTime, Config.DEFAULT_TIME_ZONE);
+
+						malletInst = String
+								.format(malletInstFormat,
+										startTimeStr,
+										endTime,
+										instFields[0],
+										"" + Config.MISSING_VALUE_PLACEHOLDER,
+										"" + Config.MISSING_VALUE_PLACEHOLDER,
+										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.SKY
+												.ordinal()]);
+
 					} else {
 						log("\tERROR\tDiscarding file with wrong number of columns: "
 								+ visitDir.getAbsolutePath()
@@ -479,18 +589,35 @@ public class RefineDocumentsFromWlan extends
 		}
 	}
 
+	protected String[] getRelTimeAndWeather(String startTimeStr,
+			String timeZoneStr) {
+		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
+	}
+
+	protected String[] getRelTimeAndWeather(long startTime, String timeZoneStr) {
+		String[] result = Discretize.relTimeNWeather(startTime,
+				Config.DEFAULT_TIME_ZONE);
+
+		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {
+			relTimeWStats[ix.ordinal()].addValue(result[ix.ordinal()]);
+		}
+
+		return result;
+	}
+
 	protected void writeMallet(long startTime, long endTime, String malletInst,
 			File malletFile) throws IOException {
 		// Calculate duration
 		long durationInSec = endTime - startTime;
-		
+
 		// TODONE: do we need to discritize even more or less?
 		DurationEunm durDiscrete = Discretize.duration(durationInSec);
-		
+
 		durationStats.addValue(durationInSec);
 		durationFreqs.addValue(durDiscrete);
 
-		malletInst += " dur" + Config.DELIMITER_COLNAME_VALUE + durDiscrete.toString();
+		malletInst += " dur" + Config.DELIMITER_COLNAME_VALUE
+				+ durDiscrete.toString();
 
 		long delta = System.currentTimeMillis();
 
@@ -506,14 +633,19 @@ public class RefineDocumentsFromWlan extends
 	}
 
 	@Override
-	protected KeyValuePair<String, HashMap<String,Object>> getReturnValue() throws Exception {
-		HashMap<String,Object> result = new HashMap<String,Object>();
+	protected KeyValuePair<String, HashMap<String, Object>> getReturnValue()
+			throws Exception {
+		HashMap<String, Object> result = new HashMap<String, Object>();
 		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoVisitFreq);
 		result.put(Config.RESULT_KEY_DURATION_FREQ, durationFreqs);
 		result.put(Config.RESULT_KEY_DURATION_SUMMARY, durationStats);
-		return new KeyValuePair<String, HashMap<String,Object>>(userid, result);
+		result.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ, relTimeWStats[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()]);
+		result.put(Config.RESULT_KEY_HOUR_OF_DAY_FREQ, relTimeWStats[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()]);
+		result.put(Config.RESULT_KEY_TEMPRATURE_FREQ, relTimeWStats[RelTimeNWeatherElts.TEMPRATURE.ordinal()]);
+		result.put(Config.RESULT_KEY_SKY_FREQ, relTimeWStats[RelTimeNWeatherElts.SKY.ordinal()]);
+		return new KeyValuePair<String, HashMap<String, Object>>(userid, result);
 	}
-	
+
 	public static Writer getLOG() {
 		return LOG;
 	}

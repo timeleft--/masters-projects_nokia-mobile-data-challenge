@@ -25,7 +25,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 	}
 	@Override
 	protected String getValueToWrite() {
-		String result;
+		String result = "";
 		if("status".equals(currKey)){
 			
 		}

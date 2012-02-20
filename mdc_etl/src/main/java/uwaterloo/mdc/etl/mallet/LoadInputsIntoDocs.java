@@ -1,11 +1,9 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
-import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.TimeZone;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -23,13 +21,6 @@ import uwaterloo.mdc.etl.util.StringUtils;
 public abstract class LoadInputsIntoDocs
 		extends
 		CallableOperation<KeyValuePair<String, HashMap<String, Frequency>>, StringBuilder> {
-
-	// protected static final String READINGS_AT_SAME_TIME =
-	// "TIME_CARDINALITY_";
-	protected static final String HOUR_OF_DAY = "HOUR_OF_DAY_";
-	protected static final String DAY_OF_WEEK = "DAY_OF_WEEK_";
-
-	protected TimeZone timeZoneOfRecord;
 
 	protected Long prevTimeColReading = null;;
 
@@ -63,19 +54,6 @@ public abstract class LoadInputsIntoDocs
 		return FilenameUtils.removeExtension(dataFile.getName()) + "_" + orig;
 	}
 
-	@Override
-	protected void headerEolProcedure() throws Exception {
-		// Add two exta columns
-		colOpResult.put(HOUR_OF_DAY + getTimeColumnName(), new StringBuilder());
-		colOpResult.put(DAY_OF_WEEK + getTimeColumnName(), new StringBuilder());
-		statsMap.put(prependFileName(HOUR_OF_DAY + getTimeColumnName()),
-				new Frequency());
-		statsMap.put(prependFileName(DAY_OF_WEEK + getTimeColumnName()),
-				new Frequency());
-
-		super.headerEolProcedure();
-	}
-
 	protected void headerDelimiterProcedure() {
 		// The value now is the key for later
 		colOpResult.put(currValue, new StringBuilder());
@@ -103,19 +81,7 @@ public abstract class LoadInputsIntoDocs
 			}
 			prevTimeColReading = Long.parseLong(currValue);
 		} else if ("tz".equals(currKey)) {
-			char timeZonePlusMinus = '+';
-			if (currValue.charAt(0) == '-') {
-				timeZonePlusMinus = '-';
-			}
-			// Offset in hours (from seconds)
-			int timeZoneOffset = 0;
-			try {
-				timeZoneOffset = Integer.parseInt(currValue.substring(1)) / 3600;
-			} catch (NumberFormatException ex) {
-				// Ok calm down!
-			}
-			timeZoneOfRecord = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
-					+ timeZoneOffset);
+			
 		} else {
 			colOpResult.get(currKey).append(" ").append(shortKey())
 					.append(Config.DELIMITER_COLNAME_VALUE)
@@ -261,30 +227,6 @@ public abstract class LoadInputsIntoDocs
 
 		} else {
 			readingNoVisitStat.addValue(Discretize.VisitReadingBothEnum.B);
-
-			StringBuilder strTime = colOpResult.get(getTimeColumnName());
-			if (strTime != null && strTime.length() != 0) {
-				Long longTime = Long.parseLong(strTime.toString()) * 1000;
-				Calendar calendar = Calendar.getInstance(timeZoneOfRecord);
-				calendar.setTimeInMillis(longTime);
-
-				int hOfDay = calendar.get(Calendar.HOUR_OF_DAY);
-				int dOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
-
-				// TODO: should we write only when the hour or day change?
-				colOpResult.get(HOUR_OF_DAY + getTimeColumnName()).append(" ")
-						.append(Config.COLNAME_HOUR_OF_DAY)
-						.append(Config.DELIMITER_COLNAME_VALUE).append(hOfDay);
-				// FIXME: (IMPORTANT) append weather
-				colOpResult.get(DAY_OF_WEEK + getTimeColumnName()).append(" ")
-						.append(Config.COLNAME_DAY_OF_WEEK)
-						.append(Config.DELIMITER_COLNAME_VALUE).append(dOfWeek);
-
-				statsMap.get(prependFileName(HOUR_OF_DAY + getTimeColumnName()))
-						.addValue(hOfDay);
-				statsMap.get(prependFileName(DAY_OF_WEEK + getTimeColumnName()))
-						.addValue(dOfWeek);
-			}
 
 			for (StringBuilder colBuilder : colOpResult.values()) {
 				docBuilder.append(" ").append(colBuilder.toString());

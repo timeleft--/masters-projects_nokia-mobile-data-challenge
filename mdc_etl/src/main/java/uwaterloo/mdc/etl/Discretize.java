@@ -1,6 +1,8 @@
 package uwaterloo.mdc.etl;
 
+import java.util.Calendar;
 import java.util.HashMap;
+import java.util.TimeZone;
 
 public class Discretize {
 	private Discretize() {
@@ -32,9 +34,49 @@ public class Discretize {
 		B; // FREQ_VISIT_WLAN_VAR
 	};
 
+	public enum RelTimeNWeatherElts {
+		DAY_OF_WEEK, HOUR_OF_DAY, TEMPRATURE, SKY
+	};
+
+	public enum DaysOfWeek {
+		// Locale specific
+		M, TU, W, TH, F, SA, SU;
+	};
+
+	public enum HourOfDay {
+		H0, H1, H2, H3, H4, H5, H6, H7, H8, H9, H10, H11, H12, H13, H14, H15, H16, H17, H18, H19, H20, H21, H22, H23;
+	};
+
+	public enum Temprature {
+		// TODO?
+		F, // Freezing
+		C, // Cold
+		W, // Warm
+		H; // Hot
+	};
+
+	public enum Sky {
+		// TODO
+		S, // Sunny
+		C, // Cloudy
+		O, // Overcast
+		D, // Drizzle
+		R, // Raininng
+		F, // Flurry
+		X, // TODO Snow what??
+		T; // Thunderstorm
+	};
+
 	static {
 		enumsMap.put(Config.RESULT_KEY_DURATION_FREQ, DurationEunm.values());
-		enumsMap.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, VisitReadingBothEnum.values());
+		enumsMap.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ,
+				VisitReadingBothEnum.values());
+
+		enumsMap.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ, DaysOfWeek.values());
+		enumsMap.put(Config.RESULT_KEY_HOUR_OF_DAY_FREQ, HourOfDay.values());
+
+		enumsMap.put(Config.RESULT_KEY_TEMPRATURE_FREQ, Temprature.values());
+		enumsMap.put(Config.RESULT_KEY_SKY_FREQ, Sky.values());
 	}
 
 	public static DurationEunm duration(long durationInSec) {
@@ -58,15 +100,51 @@ public class Discretize {
 		return durDiscrete;
 
 	}
-	
+
 	public static double estimateApDistanceLinear(int rx) {
-		return rx/2.5; //Uses equation from LaMarca et al.
+		return rx / 2.5; // Uses equation from LaMarca et al.
 	}
-	
+
 	public static double estimateApDistanceLaMarca(int rx) {
-		// I removed the subtraction from 32 because I think that the rx is already
-		// normalized to start from 0.. if not, we might need to subtract from it
+		// I removed the subtraction from 32 because I think that the rx is
+		// already
+		// normalized to start from 0.. if not, we might need to subtract from
+		// it
 		// the maximum and the 32: 110+32????? FIXME: what exactly is RX????
-		return Math.pow(10, (rx/*-32.0*/)/25.0); //Uses equation from LaMarca et al.
+		return Math.pow(10, (rx/*-32.0*/) / 25.0); // Uses equation from
+														// LaMarca et al.
+	}
+
+	public static String[] relTimeNWeather(long startTime, String timeZoneStr) {
+		String[] result = new String[RelTimeNWeatherElts.values().length];
+
+		char timeZonePlusMinus = '+';
+		if (timeZoneStr.charAt(0) == '-') {
+			timeZonePlusMinus = '-';
+		}
+		// Offset in hours (from seconds)
+		int timeZoneOffset = 0;
+		// try {
+		timeZoneOffset = Integer.parseInt(timeZoneStr.substring(1)) / 3600;
+		// } catch (NumberFormatException ex) {
+		// // Ok calm down!
+		// }
+		TimeZone timeZone = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
+				+ timeZoneOffset);
+
+		startTime = startTime * 1000;
+		Calendar calendar = Calendar.getInstance(timeZone);
+		calendar.setTimeInMillis(startTime);
+
+		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
+				.get(Calendar.HOUR_OF_DAY)].toString();
+		result[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()] = DaysOfWeek.values()[calendar
+				.get(Calendar.DAY_OF_WEEK)-1].toString().substring(1);
+
+		// TODO get weather
+		result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Config.MISSING_VALUE_PLACEHOLDER;
+		result[RelTimeNWeatherElts.SKY.ordinal()] = Config.MISSING_VALUE_PLACEHOLDER;
+
+		return result;
 	}
 }

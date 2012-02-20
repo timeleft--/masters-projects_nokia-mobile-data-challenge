@@ -60,8 +60,9 @@ public class ConcurrUtil {
 				Boolean isWriterInUse = Boolean.TRUE;
 				synchronized (locksMap) {
 					isWriterInUse = locksMap.get(fileName);
-					if (!isWriterInUse) {
-						locksMap.put(fileName, Boolean.TRUE);
+					if (isWriterInUse == null || !isWriterInUse) {
+						isWriterInUse =  Boolean.TRUE;
+						locksMap.put(fileName,isWriterInUse);
 					}
 				}
 				if (!isWriterInUse) {

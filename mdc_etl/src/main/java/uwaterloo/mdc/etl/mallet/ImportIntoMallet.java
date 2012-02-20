@@ -93,7 +93,9 @@ class ImportIntoMallet {
 
 					fromVisitsEcs.submit(fromVisits);
 					++fromVisitsNumberTasks;
-
+					if(fromVisitsNumberTasks >= Config.NUM_USERS_TO_PROCESS){
+						break;
+					}
 				}
 
 				for (int i = 0; i < fromVisitsNumberTasks; ++i) {
