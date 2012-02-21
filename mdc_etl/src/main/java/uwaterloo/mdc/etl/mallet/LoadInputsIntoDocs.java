@@ -113,9 +113,13 @@ public abstract class LoadInputsIntoDocs
 
 	protected void addCurrValToStats() {
 		Object statsObj = statsMap.get(prependFileName(currKey));
-		((Frequency) statsObj).addValue(getValueToWrite());
+		
+		Enum<?> discreteVal = getValueToWrite();
+		((Frequency) statsObj).addValue(discreteVal);
 
-		if (keepContinuousStatsForColumn(currKey)) {
+		if (keepContinuousStatsForColumn(currKey) 
+				// Don't put place holder values (like 0) in the continuous stat
+				&& !Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
 			statsObj = statsMap.get(prependFileName(currKey
 					+ CONTINUOUS_POSTFIX));
 			try {

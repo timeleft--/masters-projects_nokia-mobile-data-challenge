@@ -105,7 +105,7 @@ public class PrintStatsCallable implements Callable<Void> {
 					.append(StringUtils.quote(valLabel + PCTG_PSTFX));
 		}
 		
-		headerBuilder.append('\t').append("count_total");
+		headerBuilder.append('\t').append(StringUtils.quote("total" + COUNT_PSTFX));
 
 		headerBuilder.append('\n');
 
@@ -129,7 +129,7 @@ public class PrintStatsCallable implements Callable<Void> {
 
 			}
 
-			freqWriter.append('\t').append(Long.toString(stat.getUniqueCount()));
+			freqWriter.append('\t').append(Long.toString(stat.getSumFreq()));
 			
 			freqWriter.append('\n');
 

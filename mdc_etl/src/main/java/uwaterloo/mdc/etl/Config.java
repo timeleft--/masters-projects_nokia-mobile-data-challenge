@@ -14,7 +14,7 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 16;
-	public static final int NUM_USERS_TO_PROCESS = 16;
+	public static final int NUM_USERS_TO_PROCESS = 1;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
