@@ -45,6 +45,11 @@ public class Discretize {
 
 	public enum HourOfDay {
 		H0, H1, H2, H3, H4, H5, H6, H7, H8, H9, H10, H11, H12, H13, H14, H15, H16, H17, H18, H19, H20, H21, H22, H23;
+		public String toString() {
+			return super.toString().substring(1);
+			
+		};
+		
 	};
 
 	public enum Temprature {
@@ -66,6 +71,13 @@ public class Discretize {
 		X, // TODO Snow what??
 		T; // Thunderstorm
 	};
+	
+	public enum Missing{
+		 placeHolder;
+		 public String toString() {
+			 return Config.MISSING_VALUE_PLACEHOLDER;
+		 };
+	 }
 
 	static {
 		enumsMap.put(Config.RESULT_KEY_DURATION_FREQ, DurationEunm.values());
@@ -115,8 +127,8 @@ public class Discretize {
 														// LaMarca et al.
 	}
 
-	public static String[] relTimeNWeather(long startTime, String timeZoneStr) {
-		String[] result = new String[RelTimeNWeatherElts.values().length];
+	public static Enum<?>[] relTimeNWeather(long startTime, String timeZoneStr) {
+		Enum<?>[] result = new Enum[RelTimeNWeatherElts.values().length];
 
 		char timeZonePlusMinus = '+';
 		if (timeZoneStr.charAt(0) == '-') {
@@ -137,13 +149,13 @@ public class Discretize {
 		calendar.setTimeInMillis(startTime);
 
 		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
-				.get(Calendar.HOUR_OF_DAY)].toString();
+				.get(Calendar.HOUR_OF_DAY)];
 		result[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()] = DaysOfWeek.values()[calendar
-				.get(Calendar.DAY_OF_WEEK)-1].toString().substring(1);
+				.get(Calendar.DAY_OF_WEEK)-1];
 
 		// TODO get weather
-		result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Config.MISSING_VALUE_PLACEHOLDER;
-		result[RelTimeNWeatherElts.SKY.ordinal()] = Config.MISSING_VALUE_PLACEHOLDER;
+		result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Missing.placeHolder;
+		result[RelTimeNWeatherElts.SKY.ordinal()] = Missing.placeHolder;
 
 		return result;
 	}

@@ -275,7 +275,7 @@ public class RefineDocumentsFromWlan
 					}
 				}
 
-				String[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
+				Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
 						prevTimeZone);
 
 				StringBuilder doc1 = new StringBuilder();
@@ -405,7 +405,7 @@ public class RefineDocumentsFromWlan
 			return;
 		}
 
-		String[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
+		Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
 				prevTimeZone);
 
 		doc.append('\t')
@@ -483,7 +483,7 @@ public class RefineDocumentsFromWlan
 						microLocFile.getName(), 5);
 
 				// Assume default timezone
-				String[] relTimeAndWeather = getRelTimeAndWeather(startTimeStr,
+				Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(startTimeStr,
 						Config.DEFAULT_TIME_ZONE);
 
 				malletInst = String.format(malletInstFormat, startTimeStr,
@@ -525,7 +525,7 @@ public class RefineDocumentsFromWlan
 						startTime = Long.parseLong(instFields[1]);
 						endTime = Long.parseLong(instFields[2]);
 						// Assume default timezone
-						String[] relTimeAndWeather = getRelTimeAndWeather(
+						Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
 								startTime, Config.DEFAULT_TIME_ZONE);
 
 						malletInst = String
@@ -533,8 +533,8 @@ public class RefineDocumentsFromWlan
 										instFields[1],
 										instFields[2],
 										instFields[0],
-										"" + Config.MISSING_VALUE_PLACEHOLDER,
-										"" + Config.MISSING_VALUE_PLACEHOLDER,
+										Config.MISSING_VALUE_PLACEHOLDER,
+										Config.MISSING_VALUE_PLACEHOLDER,
 										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
 												.ordinal()],
 										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
@@ -554,7 +554,7 @@ public class RefineDocumentsFromWlan
 						endTime = Long.parseLong(endTimeStr);
 
 						// Assume default timezone
-						String[] relTimeAndWeather = getRelTimeAndWeather(
+						Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
 								startTime, Config.DEFAULT_TIME_ZONE);
 
 						malletInst = String
@@ -562,8 +562,8 @@ public class RefineDocumentsFromWlan
 										startTimeStr,
 										endTime,
 										instFields[0],
-										"" + Config.MISSING_VALUE_PLACEHOLDER,
-										"" + Config.MISSING_VALUE_PLACEHOLDER,
+										Config.MISSING_VALUE_PLACEHOLDER,
+										Config.MISSING_VALUE_PLACEHOLDER,
 										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
 												.ordinal()],
 										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
@@ -589,13 +589,13 @@ public class RefineDocumentsFromWlan
 		}
 	}
 
-	protected String[] getRelTimeAndWeather(String startTimeStr,
+	protected Enum<?>[] getRelTimeAndWeather(String startTimeStr,
 			String timeZoneStr) {
 		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
 	}
 
-	protected String[] getRelTimeAndWeather(long startTime, String timeZoneStr) {
-		String[] result = Discretize.relTimeNWeather(startTime,
+	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr) {
+		Enum<?>[] result = Discretize.relTimeNWeather(startTime,
 				Config.DEFAULT_TIME_ZONE);
 
 		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {

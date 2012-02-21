@@ -128,10 +128,10 @@ public class PrintStatsCallable implements Callable<Void> {
 			freqWriter
 					.append('\t')
 					.append(Long.toString(stat
-							.getCount(Config.MISSING_VALUE_PLACEHOLDER)))
+							.getCount(Discretize.Missing.placeHolder)))
 					.append('\t')
 					.append(Double.toString(stat
-							.getPct(Config.MISSING_VALUE_PLACEHOLDER)));
+							.getPct(Discretize.Missing.placeHolder)));
 
 			freqWriter.append('\n');
 
