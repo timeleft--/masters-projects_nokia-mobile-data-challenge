@@ -28,7 +28,7 @@ public class Discretize {
 		L, // long
 		H, // half working day
 		W, // working day
-		E,// eternal
+		E, // eternal
 		Missing;
 		public String toString() {
 			if (this == Missing) {
@@ -40,7 +40,7 @@ public class Discretize {
 	};
 
 	public enum VisitReadingBothEnum {
-		
+
 		V, // FREQ_VISIT_NOWLAN_VAR
 		R, // FREQ_NOVISIT_WLAN_VAR
 		B, // FREQ_VISIT_WLAN_VAR
@@ -89,7 +89,7 @@ public class Discretize {
 	};
 
 	public enum Sky {
-		
+
 		// TODO
 		S, // Sunny
 		C, // Cloudy
@@ -157,13 +157,8 @@ public class Discretize {
 	}
 
 	public static double estimateApDistanceLaMarca(int rx) {
-		// I removed the subtraction from 32 because I think that the rx is
-		// already
-		// normalized to start from 0.. if not, we might need to subtract from
-		// it
-		// the maximum and the 32: 110+32????? FIXME: what exactly is RX????
-		return Math.pow(10, (rx/*-32.0*/) / 25.0); // Uses equation from
-														// LaMarca et al.
+		return Math.pow(10, (rx - 32.0) / 25.0); // Uses equation from
+													// LaMarca et al.
 	}
 
 	public static Enum<?>[] relTimeNWeather(long startTime, String timeZoneStr) {
@@ -197,5 +192,47 @@ public class Discretize {
 		result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Missing;
 
 		return result;
+	}
+
+	public static long getRxDistance(HashMap<String, Integer> currAccessPoints,
+			HashMap<String, Integer> prevAccessPoints) {
+		double displacementRelAp = 0;
+		// long macAddressesDistance = 0;
+		for (String mac : currAccessPoints.keySet()) {
+			int currRSSI = currAccessPoints.get(mac);
+			if(currRSSI > Config.WLAN_RSSI_MIN){
+				currRSSI= Config.WLAN_RSSI_MIN;;
+			}
+			Integer prevRSSI = prevAccessPoints.remove(mac);
+			if (prevRSSI == null) {
+				prevRSSI = Config.WLAN_RSSI_MIN;
+			}
+			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
+					.abs(prevRSSI - currRSSI));
+
+			// macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI
+			// ) ^ 2);
+			// macAddressesDistance = macAddressesDistance +
+			// Math.abs(prevRSSI-currRSSI);
+		}
+		for (Integer prevRssi : prevAccessPoints.values()) {
+			// This AP is not visible any more, so add its RSSI
+			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
+					.abs((Config.WLAN_RSSI_MIN - prevRssi)));
+
+			// macAddressesDistance = macAddressesDistance +
+			// ((Config.WLAN_RSSI_MIN - prevRssi) ^ 2);
+			// macAddressesDistance = macAddressesDistance +
+			// Math.abs(Config.WLAN_RSSI_MIN - prevRssi);
+		}
+
+		// macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
+		// macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
+		
+		// The macAddrDistance is the average of the displacement according to
+		// each AP
+		long macAddressesDistance = Math.round(displacementRelAp
+				/ (currAccessPoints.size() + prevAccessPoints.size()));
+		return macAddressesDistance;
 	}
 }

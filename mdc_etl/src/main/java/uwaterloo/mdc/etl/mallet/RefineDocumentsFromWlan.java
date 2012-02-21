@@ -135,48 +135,18 @@ public class RefineDocumentsFromWlan
 
 	protected void refineDocument() throws IOException {
 		long delta;
-		double displacementRelAp = 0;
-		// long macAddressesDistance = 0;
-		for (String mac : currAccessPoints.keySet()) {
-			int currRSSI = currAccessPoints.get(mac);
-			Integer prevRSSI = prevAccessPoints.remove(mac);
-			if (prevRSSI == null) {
-				prevRSSI = Config.WLAN_RSSI_MAX;
-			}
-			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
-					.abs(prevRSSI - currRSSI));
-
-			// macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI
-			// ) ^ 2);
-			// macAddressesDistance = macAddressesDistance +
-			// Math.abs(prevRSSI-currRSSI);
-		}
-		for (Integer prevRssi : prevAccessPoints.values()) {
-			// This AP is not visible any more, so add its RSSI
-			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
-					.abs((Config.WLAN_RSSI_MAX - prevRssi)));
-
-			// macAddressesDistance = macAddressesDistance +
-			// ((Config.WLAN_RSSI_MAX - prevRssi) ^ 2);
-			// macAddressesDistance = macAddressesDistance +
-			// Math.abs(Config.WLAN_RSSI_MAX - prevRssi);
-		}
-
-		// macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
-		// macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
+	
 
 		File docStartDir = null;
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
 		int newDocIx = -1;
 
-		// The macAddrDistance is the average of the displacement according to
-		// each AP
-		long macAddressesDistance = Math.round(displacementRelAp
-				/ (currAccessPoints.size() + prevAccessPoints.size()));
+
+		long macAddressesDistance = Discretize.getRxDistance(currAccessPoints, prevAccessPoints);
 		// TODO: Consider using a Sigmoid function instead of simple
 		// TODO: do we need to do anything with recordDelta?
-		if (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
+		if (macAddressesDistance  >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
 			FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
 
 			File userDir = FileUtils.getFile(outPath, userid);

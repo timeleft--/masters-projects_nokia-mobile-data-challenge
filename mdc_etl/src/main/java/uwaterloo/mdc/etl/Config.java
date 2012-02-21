@@ -14,6 +14,7 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 16;
+	public static final int NUM_USERS_TO_PROCESS = 16;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -26,7 +27,7 @@ public class Config {
 
 	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD = 15;
 	// public static final long WLAN_MICROLOCATION_RSSI_DIFF_MIN_THRESHOLD = 3;
-	public static final int WLAN_RSSI_MAX = 110;
+	public static final int WLAN_RSSI_MIN = 96; // according to an e-mail the max is 96 not 110;
 	// Sampling period between 60 and 900 seconds
 	public static final long WLAN_DELTAT_MIN = 60;
 	public static final int WLAN_DELTAT_MAX = 900;
@@ -45,8 +46,6 @@ public class Config {
 	public static final String COLNAME_DAY_OF_WEEK = "dow";
 
 	public static final String DEFAULT_TIME_ZONE = "-7200";
-
-	public static final int NUM_USERS_TO_PROCESS = 2;
 
 	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-wlan-both_freq";
 	public static final String RESULT_KEY_DURATION_FREQ = "duration-lengths_freq";
