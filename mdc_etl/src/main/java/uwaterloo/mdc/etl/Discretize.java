@@ -34,7 +34,7 @@ public class Discretize {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	};
@@ -49,7 +49,7 @@ public class Discretize {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	};
@@ -83,7 +83,7 @@ public class Discretize {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	};
@@ -104,7 +104,7 @@ public class Discretize {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	};
@@ -170,11 +170,7 @@ public class Discretize {
 		}
 		// Offset in hours (from seconds)
 		int timeZoneOffset = 0;
-		// try {
 		timeZoneOffset = Integer.parseInt(timeZoneStr.substring(1)) / 3600;
-		// } catch (NumberFormatException ex) {
-		// // Ok calm down!
-		// }
 		TimeZone timeZone = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
 				+ timeZoneOffset);
 

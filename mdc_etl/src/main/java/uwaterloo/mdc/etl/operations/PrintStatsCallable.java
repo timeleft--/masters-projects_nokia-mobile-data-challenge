@@ -57,8 +57,8 @@ public class PrintStatsCallable implements Callable<Void> {
 						statsPath,
 						filename,
 						statWriters,
-						Config.USERID_COLNAME
-								+ "\tn\tmin\tmax\tmean\tstandard_deviation\tvariance\tgeometric_mean\tsecond_moment\n");
+						StringUtils.quote(Config.USERID_COLNAME)
+								+ "\t\"n\"\t\"min\"\t\"max\"\t\"mean\"\t\"standard_deviation\"\t\"variance\"\t\"geometric_mean\"\t\"second_moment\"\n");
 		try {
 			long delta = System.currentTimeMillis();
 			summaryWriter.append(userid).append('\t').append("" + stat.getN())
@@ -94,7 +94,7 @@ public class PrintStatsCallable implements Callable<Void> {
 		}
 
 		StringBuilder headerBuilder = new StringBuilder();
-		headerBuilder.append(Config.USERID_COLNAME);
+		headerBuilder.append(StringUtils.quote(Config.USERID_COLNAME));
 
 		for (int i = 0; i < valsArr.length; ++i) {
 			Enum<?> val = valsArr[i];

@@ -163,9 +163,9 @@ public abstract class LoadInputsIntoDocs
 							"Check the spelling of the filename in the above list");
 				}
 
-				int underscoreIx = 0;
+				int underscoreIx = -1;
 				do {
-					result += currKey.charAt(underscoreIx);
+					result += currKey.charAt(underscoreIx + 1);
 					underscoreIx = currKey.indexOf("_", underscoreIx + 1);
 				} while (underscoreIx != -1);
 
@@ -221,12 +221,10 @@ public abstract class LoadInputsIntoDocs
 					continue;
 				}
 
-				File malletFile = FileUtils.getFile(visitDir, "mallet_"
-						+ microLocFile.getName());
 				// IMPORTANT.. no synchronization here.. I depend on having
 				// one thread per user!
 				long delta = System.currentTimeMillis();
-				FileUtils.writeStringToFile(malletFile, doc.toString(), true);
+				FileUtils.writeStringToFile(microLocFile, doc.toString(), true);
 				delta = System.currentTimeMillis() - delta;
 				PerfMon.increment(TimeMetrics.IO_WRITE, delta);
 			}
@@ -265,8 +263,12 @@ public abstract class LoadInputsIntoDocs
 			readingNoVisitStat.addValue(Discretize.VisitReadingBothEnum.B);
 
 			for (StringBuilder colBuilder : colOpResult.values()) {
+				if (colBuilder.length() == 0) {
+					continue; // nothing in this column.. don't append spaces!
+				}
 				docBuilder.append(" ").append(colBuilder.toString());
 				colBuilder.setLength(0);
+
 			}
 		}
 

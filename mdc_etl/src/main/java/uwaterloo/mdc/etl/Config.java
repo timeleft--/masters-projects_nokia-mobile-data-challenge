@@ -25,7 +25,7 @@ public class Config {
 	public static final char TIMETRUSTED_GPS_NO = 'U';
 	public static final char TIMETRUSTED_WLAN = 'W';
 
-	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD = 15;
+	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD = 10;
 	// public static final long WLAN_MICROLOCATION_RSSI_DIFF_MIN_THRESHOLD = 3;
 	public static final int WLAN_RSSI_MIN = 96; // according to an e-mail the max is 96 not 110;
 	// Sampling period between 60 and 900 seconds
@@ -47,9 +47,9 @@ public class Config {
 
 	public static final String DEFAULT_TIME_ZONE = "-7200";
 
-	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-wlan-both_freq";
-	public static final String RESULT_KEY_DURATION_FREQ = "duration-lengths_freq";
-	public static final String RESULT_KEY_DURATION_SUMMARY = "duration-lengths_summary";
+	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-reading-both_freq";
+	public static final String RESULT_KEY_DURATION_FREQ = "microloc-duration_freq";
+	public static final String RESULT_KEY_DURATION_SUMMARY = "microloc-duration_summary";
 	public static final String RESULT_KEY_DAY_OF_WEEK_FREQ = "day-of-week_freq";
 	public static final String RESULT_KEY_HOUR_OF_DAY_FREQ = "hour-of-day_freq";
 	public static final String RESULT_KEY_TEMPRATURE_FREQ = "temprature_freq";

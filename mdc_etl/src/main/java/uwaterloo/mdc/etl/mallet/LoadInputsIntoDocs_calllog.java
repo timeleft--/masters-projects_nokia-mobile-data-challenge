@@ -17,7 +17,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	}
@@ -31,7 +31,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	}
@@ -45,7 +45,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	}
@@ -63,7 +63,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
 			} else {
-				return super.toString().substring(1);
+				return super.toString();
 			}
 		};
 	}
