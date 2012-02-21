@@ -1,7 +1,9 @@
 package uwaterloo.mdc.etl;
 
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.TimeZone;
 
 public class Discretize {
@@ -9,7 +11,8 @@ public class Discretize {
 		// prevents init
 	}
 
-	public static HashMap<String, Enum<?>[]> enumsMap = new HashMap<String, Enum<?>[]>();
+	public static Map<String, Enum<?>[]> enumsMap = Collections
+			.synchronizedMap(new HashMap<String, Enum<?>[]>());
 
 	/**
 	 * Keep enum values as one chars because they are written out to files and
@@ -25,13 +28,30 @@ public class Discretize {
 		L, // long
 		H, // half working day
 		W, // working day
-		E;// epoch
+		E,// eternal
+		Missing;
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString().substring(1);
+			}
+		};
 	};
 
 	public enum VisitReadingBothEnum {
+		
 		V, // FREQ_VISIT_NOWLAN_VAR
 		R, // FREQ_NOVISIT_WLAN_VAR
-		B; // FREQ_VISIT_WLAN_VAR
+		B, // FREQ_VISIT_WLAN_VAR
+		Missing;
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString().substring(1);
+			}
+		};
 	};
 
 	public enum RelTimeNWeatherElts {
@@ -47,9 +67,9 @@ public class Discretize {
 		H0, H1, H2, H3, H4, H5, H6, H7, H8, H9, H10, H11, H12, H13, H14, H15, H16, H17, H18, H19, H20, H21, H22, H23;
 		public String toString() {
 			return super.toString().substring(1);
-			
+
 		};
-		
+
 	};
 
 	public enum Temprature {
@@ -57,10 +77,19 @@ public class Discretize {
 		F, // Freezing
 		C, // Cold
 		W, // Warm
-		H; // Hot
+		H, // Hot
+		Missing;
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString().substring(1);
+			}
+		};
 	};
 
 	public enum Sky {
+		
 		// TODO
 		S, // Sunny
 		C, // Cloudy
@@ -69,15 +98,24 @@ public class Discretize {
 		R, // Raininng
 		F, // Flurry
 		X, // TODO Snow what??
-		T; // Thunderstorm
+		T, // Thunderstorm
+		Missing;
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString().substring(1);
+			}
+		};
 	};
-	
-	public enum Missing{
-		 placeHolder;
-		 public String toString() {
-			 return Config.MISSING_VALUE_PLACEHOLDER;
-		 };
-	 }
+
+	// Not comparable with other enums
+	// public enum Missing{
+	// placeHolder;
+	// public String toString() {
+	// return Config.MISSING_VALUE_PLACEHOLDER;
+	// };
+	// }
 
 	static {
 		enumsMap.put(Config.RESULT_KEY_DURATION_FREQ, DurationEunm.values());
@@ -89,6 +127,7 @@ public class Discretize {
 
 		enumsMap.put(Config.RESULT_KEY_TEMPRATURE_FREQ, Temprature.values());
 		enumsMap.put(Config.RESULT_KEY_SKY_FREQ, Sky.values());
+
 	}
 
 	public static DurationEunm duration(long durationInSec) {
@@ -151,11 +190,11 @@ public class Discretize {
 		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
 				.get(Calendar.HOUR_OF_DAY)];
 		result[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()] = DaysOfWeek.values()[calendar
-				.get(Calendar.DAY_OF_WEEK)-1];
+				.get(Calendar.DAY_OF_WEEK) - 1];
 
 		// TODO get weather
-		result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Missing.placeHolder;
-		result[RelTimeNWeatherElts.SKY.ordinal()] = Missing.placeHolder;
+		result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Temprature.Missing;
+		result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Missing;
 
 		return result;
 	}

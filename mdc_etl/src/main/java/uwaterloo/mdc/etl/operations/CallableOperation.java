@@ -98,7 +98,7 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 	public CallableOperation(Object master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
 			throws Exception {
-		try {
+		
 			this.master = master;
 			this.outPath = outPath;
 			this.dataFile = dataFile;
@@ -122,7 +122,11 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 			keyList = new LinkedList<String>();
 
 			colOpResult = new HashMap<String, V>();
-
+		}
+		
+	protected void initHeader() throws Exception {
+			
+			try {
 			char[] buff = new char[1];
 			long len = 0;
 			char eolchi = eol0;
@@ -147,7 +151,7 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 				}
 
 			}
-		} catch (Exception ex) {
+		} catch (IOException ex) {
 			if (inStream != null) {
 				inStream.close();
 			}

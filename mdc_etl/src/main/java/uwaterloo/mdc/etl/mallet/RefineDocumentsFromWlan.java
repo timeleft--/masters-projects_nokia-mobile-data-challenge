@@ -143,8 +143,8 @@ public class RefineDocumentsFromWlan
 			if (prevRSSI == null) {
 				prevRSSI = Config.WLAN_RSSI_MAX;
 			}
-			displacementRelAp += Discretize.estimateApDistanceLinear((Math
-					.abs(prevRSSI - currRSSI)));
+			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
+					.abs(prevRSSI - currRSSI));
 
 			// macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI
 			// ) ^ 2);
@@ -153,7 +153,7 @@ public class RefineDocumentsFromWlan
 		}
 		for (Integer prevRssi : prevAccessPoints.values()) {
 			// This AP is not visible any more, so add its RSSI
-			displacementRelAp += Discretize.estimateApDistanceLinear(Math
+			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
 					.abs((Config.WLAN_RSSI_MAX - prevRssi)));
 
 			// macAddressesDistance = macAddressesDistance +
@@ -173,7 +173,7 @@ public class RefineDocumentsFromWlan
 		// The macAddrDistance is the average of the displacement according to
 		// each AP
 		long macAddressesDistance = Math.round(displacementRelAp
-				/ currAccessPoints.size());
+				/ (currAccessPoints.size() + prevAccessPoints.size()));
 		// TODO: Consider using a Sigmoid function instead of simple
 		// TODO: do we need to do anything with recordDelta?
 		if (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {

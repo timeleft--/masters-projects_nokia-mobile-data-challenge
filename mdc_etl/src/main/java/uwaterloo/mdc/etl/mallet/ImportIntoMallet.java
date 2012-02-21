@@ -1,13 +1,11 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
-import java.io.IOException;
+import java.io.FileFilter;
 import java.io.Writer;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
 import java.util.HashMap;
 import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,55 +22,48 @@ import uwaterloo.mdc.etl.util.KeyValuePair;
 
 class ImportIntoMallet {
 
-
-
 	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
-	private String outPath = "C:\\Users\\yaboulna\\mdc2\\segmented_user-time";
-	private String statsPath = "C:\\Users\\yaboulna\\mdc2\\stats";
+	private String outPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
+	private String statsPath = "C:\\mdc-datasets\\mallet\\stats";
 
 	private HashMap<String, Writer> statWriters = new HashMap<String, Writer>();
 
 	/**
 	 * @param args
-	 * @throws InterruptedException
-	 * @throws IOException
-	 * @throws InvocationTargetException
-	 * @throws IllegalArgumentException
-	 * @throws IllegalAccessException
-	 * @throws InstantiationException
-	 * @throws ExecutionException
+	 * @throws Exception 
 	 */
-	public static void main(String[] args) throws InstantiationException,
-			IllegalAccessException, IllegalArgumentException,
-			InvocationTargetException, IOException, InterruptedException,
-			ExecutionException {
+	public static void main(String[] args) throws Exception {
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
 	}
 
-	private void createDocuments() throws InstantiationException,
-			IllegalAccessException, IllegalArgumentException,
-			InvocationTargetException, IOException, InterruptedException,
-			ExecutionException {
+	private void createDocuments() throws Exception {
 		try {
 			// To make sure the class is loaded
 			System.out.println(PerfMon.asString());
 
 			CallableOperationFactory<String, Long> fromVisitsFactory = new CallableOperationFactory<String, Long>();
 			ExecutorService fromVisitsExec = Executors
-					.newFixedThreadPool(Config.NUM_THREADS/3);
+					.newFixedThreadPool(Config.NUM_THREADS / 4);
 			CompletionService<String> fromVisitsEcs = new ExecutorCompletionService<String>(
 					fromVisitsExec);
 
 			CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, String> fromWlanFactory = new CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, String>();
 			ExecutorService fromWlanExec = Executors
-					.newFixedThreadPool(Config.NUM_THREADS/3);
+					.newFixedThreadPool(Config.NUM_THREADS / 4);
 			CompletionService<KeyValuePair<String, HashMap<String, Object>>> fromWlanEcs = new ExecutorCompletionService<KeyValuePair<String, HashMap<String, Object>>>(
 					fromWlanExec);
-			
-			ExecutorService printStatsExec = Executors
-					.newFixedThreadPool(Config.NUM_THREADS/3);
 
+			CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, StringBuilder> loadDataFactory = new CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, StringBuilder>();
+			ExecutorService loadDataExec = Executors
+					.newFixedThreadPool(Config.NUM_THREADS / 4);
+			CompletionService<KeyValuePair<String, HashMap<String, Object>>> loadDataEcs = new ExecutorCompletionService<KeyValuePair<String, HashMap<String, Object>>>(
+					loadDataExec);
+
+			ExecutorService printStatsExec = Executors
+					.newFixedThreadPool(Config.NUM_THREADS / 4);
+
+			int numLoadDataTasks = 0;
 			int numberWifiTasks = 0;
 			int fromVisitsNumberTasks = 0;
 
@@ -93,7 +84,7 @@ class ImportIntoMallet {
 
 					fromVisitsEcs.submit(fromVisits);
 					++fromVisitsNumberTasks;
-					if(fromVisitsNumberTasks >= Config.NUM_USERS_TO_PROCESS){
+					if (fromVisitsNumberTasks >= Config.NUM_USERS_TO_PROCESS) {
 						break;
 					}
 				}
@@ -120,19 +111,76 @@ class ImportIntoMallet {
 
 					System.out.println(PerfMon.asString());
 
-					Future<KeyValuePair<String, HashMap<String, Object>>> finished = fromWlanEcs
+					Future<KeyValuePair<String, HashMap<String, Object>>> finishedWlan = fromWlanEcs
 							.take();
-					KeyValuePair<String, HashMap<String, Object>> annotStat = finished
+					KeyValuePair<String, HashMap<String, Object>> wlanStat = finishedWlan
 							.get();
-					if (annotStat != null) {
-						HashMap<String, Object> statMap = annotStat.getValue();
-						for (String statKey : statMap.keySet()) {
+					if (wlanStat != null) {
+						HashMap<String, Object> wlanStatMap = wlanStat
+								.getValue();
+						for (String wlanStatKey : wlanStatMap.keySet()) {
 
-							Object statObj = statMap.get(statKey);
-							
-							PrintStatsCallable printStatCall = new PrintStatsCallable(statObj, annotStat.getKey(), statKey, statWriters, statsPath);
+							Object wlanStatObj = wlanStatMap.get(wlanStatKey);
+
+							PrintStatsCallable printStatCall = new PrintStatsCallable(
+									wlanStatObj, wlanStat.getKey(),
+									wlanStatKey, statWriters, statsPath);
 							printStatsExec.submit(printStatCall);
 
+						}
+
+						// /////////////////////////////////////////////////////
+						// start filling the user documents with data
+						String userid = wlanStat.getKey();
+						File userDir = FileUtils.getFile(dataRootFile, userid);
+
+						FileFilter dataFileFilter = new FileFilter() {
+
+							@Override
+							public boolean accept(File file) {
+								String fName = file.getName();
+								boolean result = !("distance_matrix.csv"
+										.equals(fName))
+										&& !("wlan.csv".equals(fName))
+										&& !(fName
+												.startsWith("visit_sequence_"));
+								// Testing
+								result = "calllog.csv".equals(fName);
+								return result;
+							}
+						};
+
+						for (File dataFile : userDir.listFiles(dataFileFilter)) {
+							LoadInputsIntoDocs loadDataOp = (LoadInputsIntoDocs) loadDataFactory
+									.createOperation(LoadInputsIntoDocs.class,
+											this, dataFile, outPath);
+							loadDataEcs.submit(loadDataOp);
+							++numLoadDataTasks;
+						}
+					}
+				}
+
+				// ////////// Print load stats
+				for (int j = 0; j < numLoadDataTasks; ++j) {
+
+					System.out.println(PerfMon.asString());
+
+					Future<KeyValuePair<String, HashMap<String, Object>>> finishedLoading = loadDataEcs
+							.take();
+					KeyValuePair<String, HashMap<String, Object>> loadDataStat = finishedLoading
+							.get();
+					if (loadDataStat != null) {
+						HashMap<String, Object> loadDataStatMap = loadDataStat
+								.getValue();
+						for (String loadDataStatKey : loadDataStatMap.keySet()) {
+
+							Object loadDataStatObj = loadDataStatMap
+									.get(loadDataStatKey);
+
+							PrintStatsCallable printStatCall = new PrintStatsCallable(
+									loadDataStatObj, loadDataStat.getKey(),
+									loadDataStatKey, statWriters, statsPath);
+							printStatsExec.submit(printStatCall);
 						}
 					}
 				}
@@ -145,7 +193,16 @@ class ImportIntoMallet {
 					Thread.sleep(5000);
 					System.out.println(PerfMon.asString());
 				}
-				
+
+				// This will make the executor accept no new threads
+				// and finish all existing threads in the queue
+				loadDataExec.shutdown();
+				// Wait until all threads are finish
+				while (!loadDataExec.isTerminated()) {
+					Thread.sleep(5000);
+					System.out.println(PerfMon.asString());
+				}
+
 				// This will make the executor accept no new threads
 				// and finish all existing threads in the queue
 				fromWlanExec.shutdown();
@@ -154,7 +211,7 @@ class ImportIntoMallet {
 					Thread.sleep(5000);
 					System.out.println(PerfMon.asString());
 				}
-				
+
 				// This will make the executor accept no new threads
 				// and finish all existing threads in the queue
 				fromVisitsExec.shutdown();
@@ -183,6 +240,5 @@ class ImportIntoMallet {
 			System.out.println("Done!");
 		}
 	}
-
 
 }

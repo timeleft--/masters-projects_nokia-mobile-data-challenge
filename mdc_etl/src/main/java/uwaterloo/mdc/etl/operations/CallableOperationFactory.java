@@ -1,9 +1,7 @@
 package uwaterloo.mdc.etl.operations;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 
 import org.apache.commons.io.FilenameUtils;
@@ -27,7 +25,7 @@ public class CallableOperationFactory<R, V> {
 	private HashMap<String, Class<? extends CallableOperation<R,V>>> resultClazzes = new HashMap<String, Class<? extends CallableOperation<R,V>>>();
 	
 	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, Object master,
-			File dataFile, String outPath) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+			File dataFile, String outPath) throws Exception {
 		return createOperation(prototype, master, CallableOperation.DEFAULT_DELIMITER,
 				CallableOperation.DEFAULT_EOL,
 				CallableOperation.DEFAULT_BUFF_SIZE, dataFile, outPath);
@@ -36,7 +34,7 @@ public class CallableOperationFactory<R, V> {
 	@SuppressWarnings("unchecked")
 	public CallableOperation<R,V> createOperation(Class<? extends CallableOperation<R,V>> prototype, Object master,
 			char delimiter, String eol, int bufferSize, File dataFile,
-			String outPath) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+			String outPath) throws Exception {
 		long delta = System.currentTimeMillis();
 		String resultClassName = prototype.getCanonicalName() + "_" + FilenameUtils.removeExtension(dataFile.getName());
 		Class<? extends CallableOperation<R,V>> resultClazz = resultClazzes.get(resultClassName);
@@ -53,6 +51,8 @@ public class CallableOperationFactory<R, V> {
 		CallableOperation<R,V> result = constructor.newInstance(master,
 			delimiter, eol, bufferSize, dataFile,
 			outPath);
+		
+		result.initHeader();
 		
 		delta = System.currentTimeMillis() - delta;
 		PerfMon.increment(TimeMetrics.REFLECTION, delta);

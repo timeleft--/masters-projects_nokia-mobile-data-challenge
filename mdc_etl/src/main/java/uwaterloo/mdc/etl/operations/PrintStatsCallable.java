@@ -48,7 +48,7 @@ public class PrintStatsCallable implements Callable<Void> {
 		return null;
 	}
 
-	private synchronized void writeStats(String userid, String statKey,
+	private void writeStats(String userid, String statKey,
 			SummaryStatistics stat) throws Exception {
 
 		String filename = PERUSER_SUMMART_PREFX + statKey + ".csv";
@@ -78,10 +78,20 @@ public class PrintStatsCallable implements Callable<Void> {
 		}
 	}
 
-	public synchronized void writeStats(String userid, String statKey,
-			Frequency stat) throws Exception {
+	private void writeStats(String userid, String statKey, Frequency stat)
+			throws Exception {
 
-		Enum<?>[] valsArr = Discretize.enumsMap.get(statKey);
+		Enum<?>[] valsArr;
+		synchronized (Discretize.enumsMap) {
+			valsArr = Discretize.enumsMap.get(statKey);
+		}
+		if (valsArr == null) {
+			if (statKey.endsWith(Config.RESULT_KEY_READING_NOVISIT_FREQ)) {
+				valsArr = Discretize.VisitReadingBothEnum.values();
+			} else {
+				// leave it to cause a null pointer exception!
+			}
+		}
 
 		StringBuilder headerBuilder = new StringBuilder();
 		headerBuilder.append(Config.USERID_COLNAME);
@@ -94,14 +104,6 @@ public class PrintStatsCallable implements Callable<Void> {
 					.append('\t')
 					.append(StringUtils.quote(valLabel + PCTG_PSTFX));
 		}
-
-		headerBuilder
-				.append('\t')
-				.append(StringUtils.quote(Config.MISSING_VALUE_PLACEHOLDER
-						+ COUNT_PSTFX))
-				.append('\t')
-				.append(StringUtils.quote(Config.MISSING_VALUE_PLACEHOLDER
-						+ PCTG_PSTFX));
 
 		headerBuilder.append('\n');
 
@@ -124,14 +126,6 @@ public class PrintStatsCallable implements Callable<Void> {
 						.append('\t').append(Double.toString(valPct));
 
 			}
-
-			freqWriter
-					.append('\t')
-					.append(Long.toString(stat
-							.getCount(Discretize.Missing.placeHolder)))
-					.append('\t')
-					.append(Double.toString(stat
-							.getPct(Discretize.Missing.placeHolder)));
 
 			freqWriter.append('\n');
 

@@ -8,6 +8,7 @@ import java.util.Map;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
@@ -20,14 +21,16 @@ import uwaterloo.mdc.etl.util.StringUtils;
 
 public abstract class LoadInputsIntoDocs
 		extends
-		CallableOperation<KeyValuePair<String, HashMap<String, Frequency>>, StringBuilder> {
+		CallableOperation<KeyValuePair<String, HashMap<String, Object>>, StringBuilder> {
+
+	private static final String CONTINUOUS_POSTFIX = "C";
 
 	protected Long prevTimeColReading = null;;
 
 	protected final UserVisitsDocsHierarchy userHierarchy;
 
-	protected final Frequency readingNoVisitStat;
-	protected final HashMap<String, Frequency> statsMap;
+	protected final Frequency readingNoVisitStat = new Frequency();
+	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();;
 
 	// Trading memory for performance: removed and (incomplete) synchronization
 	// But we need a global place for storing all labels, to avoid duplocates
@@ -41,13 +44,17 @@ public abstract class LoadInputsIntoDocs
 	public LoadInputsIntoDocs(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
+
 		userHierarchy = new UserVisitsDocsHierarchy(FileUtils.getFile(outPath,
-				userid));
-		readingNoVisitStat = new Frequency();
-		statsMap = new HashMap<String, Frequency>();
+				dataFile.getParentFile().getName()));
 
 		statsMap.put(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
 				readingNoVisitStat);
+		// This a special stats.. we's better handle it when getting the values
+		// from the map by recognizing this special frequency stats
+		// Discretize.enumsMap.add(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
+		// Discretize.VisitReadingBothEnum.values());
+
 	}
 
 	protected String prependFileName(String orig) {
@@ -57,7 +64,16 @@ public abstract class LoadInputsIntoDocs
 	protected void headerDelimiterProcedure() {
 		// The value now is the key for later
 		colOpResult.put(currValue, new StringBuilder());
-		statsMap.put(prependFileName(currValue), new Frequency());
+
+		// The static sections in subclasses will fill the enumMap
+		if (Discretize.enumsMap.containsKey(prependFileName(currValue))) {
+			statsMap.put(prependFileName(currValue), new Frequency());
+
+			if (keepContinuousStatsForColumn(currValue)) {
+				statsMap.put(prependFileName(currValue + CONTINUOUS_POSTFIX),
+						new SummaryStatistics());
+			}
+		}
 	}
 
 	protected void delimiterProcedure() {
@@ -81,16 +97,37 @@ public abstract class LoadInputsIntoDocs
 			}
 			prevTimeColReading = Long.parseLong(currValue);
 		} else if ("tz".equals(currKey)) {
-			
+			// We keep times in GMT.. nothing to do!
 		} else {
-			colOpResult.get(currKey).append(" ").append(shortKey())
-					.append(Config.DELIMITER_COLNAME_VALUE)
-					.append(getValueToWrite());
-			statsMap.get(prependFileName(currKey)).addValue(getValueToWrite());
+			appendCurrValToCol();
+
+			addCurrValToStats();
 		}
 	}
 
-	private String shortKey() {
+	protected void appendCurrValToCol() {
+		colOpResult.get(currKey).append(" ").append(shortKey())
+				.append(Config.DELIMITER_COLNAME_VALUE)
+				.append(getValueToWrite());
+	}
+
+	protected void addCurrValToStats() {
+		Object statsObj = statsMap.get(prependFileName(currKey));
+		((Frequency) statsObj).addValue(getValueToWrite());
+
+		if (keepContinuousStatsForColumn(currKey)) {
+			statsObj = statsMap.get(prependFileName(currKey
+					+ CONTINUOUS_POSTFIX));
+			try {
+				((SummaryStatistics) statsObj).addValue(Double
+						.parseDouble(currValue));
+			} catch (NumberFormatException ignored) {
+				// might be a NaN or a ?.. ignore
+			}
+		}
+	}
+
+	protected String shortKey() {
 		String result;
 
 		String key = dataFile.getName() + currKey;
@@ -126,12 +163,11 @@ public abstract class LoadInputsIntoDocs
 							"Check the spelling of the filename in the above list");
 				}
 
-				result += currKey.charAt(0);
-
 				int underscoreIx = 0;
-				while ((underscoreIx = currKey.indexOf("_", underscoreIx)) != -1) {
+				do {
 					result += currKey.charAt(underscoreIx);
-				}
+					underscoreIx = currKey.indexOf("_", underscoreIx + 1);
+				} while (underscoreIx != -1);
 
 				if (shortColLabelsMap.containsValue(result)) {
 					int i = 2;
@@ -249,14 +285,16 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	@Override
-	protected KeyValuePair<String, HashMap<String, Frequency>> getReturnValue()
+	protected KeyValuePair<String, HashMap<String, Object>> getReturnValue()
 			throws Exception {
 
-		KeyValuePair<String, HashMap<String, Frequency>> result = new KeyValuePair<String, HashMap<String, Frequency>>(
+		KeyValuePair<String, HashMap<String, Object>> result = new KeyValuePair<String, HashMap<String, Object>>(
 				userid, statsMap);
 
 		return result;
 	}
 
-	protected abstract String getValueToWrite();
+	protected abstract Enum<?> getValueToWrite();
+
+	protected abstract boolean keepContinuousStatsForColumn(String colName);
 }
