@@ -104,6 +104,8 @@ public class PrintStatsCallable implements Callable<Void> {
 					.append('\t')
 					.append(StringUtils.quote(valLabel + PCTG_PSTFX));
 		}
+		
+		headerBuilder.append('\t').append("count_total");
 
 		headerBuilder.append('\n');
 
@@ -127,6 +129,8 @@ public class PrintStatsCallable implements Callable<Void> {
 
 			}
 
+			freqWriter.append('\t').append(Long.toString(stat.getUniqueCount()));
+			
 			freqWriter.append('\n');
 
 			delta = System.currentTimeMillis() - delta;
