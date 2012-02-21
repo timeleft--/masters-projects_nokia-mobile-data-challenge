@@ -196,8 +196,9 @@ public class Discretize {
 		// long macAddressesDistance = 0;
 		for (String mac : currAccessPoints.keySet()) {
 			int currRSSI = currAccessPoints.get(mac);
-			if(currRSSI > Config.WLAN_RSSI_MIN){
-				currRSSI= Config.WLAN_RSSI_MIN;;
+			if (currRSSI > Config.WLAN_RSSI_MIN) {
+				currRSSI = Config.WLAN_RSSI_MIN;
+				;
 			}
 			Integer prevRSSI = prevAccessPoints.remove(mac);
 			if (prevRSSI == null) {
@@ -224,11 +225,24 @@ public class Discretize {
 
 		// macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
 		// macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
-		
+
 		// The macAddrDistance is the average of the displacement according to
 		// each AP
 		long macAddressesDistance = Math.round(displacementRelAp
 				/ (currAccessPoints.size() + prevAccessPoints.size()));
 		return macAddressesDistance;
+	}
+
+	public static Long getStartEndTimeError(char trust) {
+		switch (trust) {
+		case 'W':
+			return 0L;
+		case 'T':
+			return Config.ERROR_START_END_TIMES;
+		case 'U':
+			return Config.TIME_SECONDS_IN_10MINS;
+		default:
+			return null;
+		}
 	}
 }

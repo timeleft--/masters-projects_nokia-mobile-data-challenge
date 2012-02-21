@@ -1,14 +1,14 @@
 package uwaterloo.mdc.etl.util;
 
 public class StringUtils {
-	private StringUtils(){
-		//no init
+	private StringUtils() {
+		// no init
 	}
-	
-	public static String removeLastNChars(String str, int n){
-		return str.substring(0, str.length()-n);
+
+	public static String removeLastNChars(String str, int n) {
+		return str.substring(0, str.length() - n);
 	}
-	
+
 	public static String quote(String orig) {
 		return "\"" + orig + "\"";
 	}
@@ -23,5 +23,9 @@ public class StringUtils {
 			userId = "" + number;
 		}
 		return userId;
+	}
+
+	public static char charAtFromEnd(String str, int i) {
+		return str.charAt(str.length() - i);
 	}
 }

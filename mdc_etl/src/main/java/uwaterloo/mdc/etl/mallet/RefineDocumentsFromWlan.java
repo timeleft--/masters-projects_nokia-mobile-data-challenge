@@ -1,7 +1,6 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.Writer;
 import java.text.SimpleDateFormat;
@@ -21,10 +20,10 @@ import uwaterloo.mdc.etl.Discretize.DurationEunm;
 import uwaterloo.mdc.etl.Discretize.RelTimeNWeatherElts;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
+import uwaterloo.mdc.etl.model.UserVisitHierarchy;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.StringUtils;
-import uwaterloo.mdc.etl.util.TimeFilenameFilter;
 
 public class RefineDocumentsFromWlan
 		extends
@@ -71,6 +70,8 @@ public class RefineDocumentsFromWlan
 	protected File pendingVisitDir;
 	protected SummaryStatistics pendingStats;
 
+	protected final UserVisitHierarchy userVisits;
+
 	@SuppressWarnings("deprecation")
 	public RefineDocumentsFromWlan(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
@@ -79,6 +80,8 @@ public class RefineDocumentsFromWlan
 		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {
 			relTimeWStats[ix.ordinal()] = new Frequency();
 		}
+		userVisits = new UserVisitHierarchy(FileUtils.getFile(outPath, dataFile
+				.getParentFile().getName()));
 	}
 
 	@Override
@@ -135,38 +138,55 @@ public class RefineDocumentsFromWlan
 
 	protected void refineDocument() throws IOException {
 		long delta;
-	
 
-		File docStartDir = null;
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
 		int newDocIx = -1;
 
+		File currStartDir = userVisits.getVisitDirForEndTime(currTime);
+		File prevStartDir = userVisits.getVisitDirForEndTime(prevTime);
 
-		long macAddressesDistance = Discretize.getRxDistance(currAccessPoints, prevAccessPoints);
-		// TODO: Consider using a Sigmoid function instead of simple
-		// TODO: do we need to do anything with recordDelta?
-		if (macAddressesDistance  >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
-			FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
+		boolean significantChangeInLoc;
+		// Determine significant changes from Visits
+		if (currStartDir == null && prevStartDir == null) {
+			significantChangeInLoc = false;
+		} else if (currStartDir != null && prevStartDir != null) {
+			significantChangeInLoc = !(currStartDir.getName()
+					.equals(prevStartDir.getName()));
+		} else {
+			// one is null the other is not
+			significantChangeInLoc = true;
+		}
+		// Try to refine from WiFi
+		if (!significantChangeInLoc) {
+			long macAddressesDistance = Discretize.getRxDistance(
+					currAccessPoints, prevAccessPoints);
+			// TODO: Consider using a Sigmoid function instead of simple
+			// TODO: do we need to do anything with recordDelta?
+			significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
+		}
 
-			File userDir = FileUtils.getFile(outPath, userid);
-			for (File visitDir : userDir.listFiles(timeFilter)) {
-				int visitStartTime = Integer.parseInt(StringUtils
-						.removeLastNChars(visitDir.getName(), 1));
-				if (visitStartTime > prevTime) {
-					break;
-				} else {
-					docStartDir = visitDir;
-				}
-			}
-
-			if (docStartDir != null) {
-				visitHierarchy = userHierarchy.get(docStartDir.getName());
+		if (significantChangeInLoc) {
+			// FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
+			// File userDir = FileUtils.getFile(outPath, userid);
+			// for (File visitDir : userDir.listFiles(timeFilter)) {
+			// int visitStartTime = Integer.parseInt(StringUtils
+			// .removeLastNChars(visitDir.getName(), 1));
+			// if (visitStartTime > prevTime) {
+			// break;
+			// } else {
+			// docStartDir = visitDir;
+			// }
+			// }
+			//
+			if (prevStartDir != null) {
+				visitHierarchy = userHierarchy.get(prevStartDir.getName());
 				if (visitHierarchy == null) {
+					// Lazy init
 					visitHierarchy = new LinkedList<KeyValuePair<String, String>>();
-					userHierarchy.put(docStartDir.getName(), visitHierarchy);
+					userHierarchy.put(prevStartDir.getName(), visitHierarchy);
 
-					File[] microLocFiles = docStartDir.listFiles();
+					File[] microLocFiles = prevStartDir.listFiles();
 					Arrays.sort(microLocFiles);
 					for (int i = microLocFiles.length - 1; i >= 0; --i) {
 						// Descending traversal
@@ -185,6 +205,8 @@ public class RefineDocumentsFromWlan
 				for (KeyValuePair<String, String> visit : visitHierarchy) {
 					int locEndTime = Integer.parseInt(StringUtils
 							.removeLastNChars(visit.getKey(), 5));
+					locEndTime += Discretize.getStartEndTimeError(StringUtils
+							.charAtFromEnd(visit.getKey(), 5));
 					if (locEndTime < prevTime) {
 						break;
 					} else {
@@ -228,7 +250,7 @@ public class RefineDocumentsFromWlan
 
 				long microlocStartTime = prevprevtime;
 				if (microlocStartTime == -1) {
-					String visitStartDirName = docStartDir.getName();
+					String visitStartDirName = prevStartDir.getName();
 					microlocStartTime = Long.parseLong(StringUtils
 							.removeLastNChars(visitStartDirName, 1));
 				}
@@ -240,7 +262,7 @@ public class RefineDocumentsFromWlan
 					placeId = placeId.substring(0, tabIx);
 					if (placeId.indexOf('\t') != -1) {
 						log("\tINFO\tOverriding stats for visit: "
-								+ docStartDir.getAbsolutePath()
+								+ prevStartDir.getAbsolutePath()
 								+ File.separator + docEndFile.getKey());
 					}
 				}
@@ -285,15 +307,23 @@ public class RefineDocumentsFromWlan
 
 				// We are now tracking a new microlocation
 				apsStat = new SummaryStatistics();
-				pendingEndTims = -1;
-			} else {
-				// We have pending statistics that are not written to the
-				// microlocation document. Keep track of them, and next
-				// iteration force will be called if needed.
-				pendingEndTims = visitEndTime;
-				pendingVisitDir = docStartDir;
-				pendingStats = apsStat;
+
+				// There is always something pending.. that's right!
 			}
+			// And in case this is the last microlocation
+			// in the visit, but the time stayed there
+			// is longer than WiFi sensing time, we have
+			// to force the addition of the stats, in case
+			// it doesn't get naturally added.
+			// pendingEndTims = visitEndTime;
+			// } else {
+			// We have pending statistics that are not written to the
+			// microlocation document. Keep track of them, and next
+			// iteration force will be called if needed.
+			pendingEndTims = visitEndTime;
+			pendingVisitDir = prevStartDir;
+			pendingStats = apsStat;
+			// Always something pending }
 
 		}
 
@@ -413,13 +443,16 @@ public class RefineDocumentsFromWlan
 		// And then do a check on all the files
 		File malletDir = FileUtils.getFile(outPath, /* "mallet", */userid);
 		String malletInstFormat = userid + Config.DELIMITER_USER_FEATURE + "%s"
-				+ Config.DELIMITER_START_ENDTIME + "%s\t%s\t"
-				+ COLNAME_AVG_NUM_APS + Config.DELIMITER_COLNAME_VALUE + "%s"
+				+ Config.DELIMITER_START_ENDTIME + "%s\t%s\t%s %s";
+		String wifiReadingFormat = COLNAME_AVG_NUM_APS
+				+ Config.DELIMITER_COLNAME_VALUE + "%s"
 				+ COLNAME_STDDEV_NUM_APS + Config.DELIMITER_COLNAME_VALUE
-				+ "%s" + COLNAME_DAY_OF_WEEK + Config.DELIMITER_COLNAME_VALUE
-				+ "%s" + COLNAME_HOUR_OF_DAY + Config.DELIMITER_COLNAME_VALUE
-				+ "%s" + COLNAME_TEMPRATURE + Config.DELIMITER_COLNAME_VALUE
-				+ "%s" + COLNAME_SKY + Config.DELIMITER_COLNAME_VALUE + "%s";
+				+ "%s";
+		String relTimeWeatherFormat = COLNAME_DAY_OF_WEEK
+				+ Config.DELIMITER_COLNAME_VALUE + "%s" + COLNAME_HOUR_OF_DAY
+				+ Config.DELIMITER_COLNAME_VALUE + "%s" + COLNAME_TEMPRATURE
+				+ Config.DELIMITER_COLNAME_VALUE + "%s" + COLNAME_SKY
+				+ Config.DELIMITER_COLNAME_VALUE + "%s";
 
 		File userDir = FileUtils.getFile(outPath, userid);
 		long delta;
@@ -453,13 +486,10 @@ public class RefineDocumentsFromWlan
 						microLocFile.getName(), 5);
 
 				// Assume default timezone
-				Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(startTimeStr,
-						Config.DEFAULT_TIME_ZONE);
+				Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
+						startTimeStr, Config.DEFAULT_TIME_ZONE);
 
-				malletInst = String.format(malletInstFormat, startTimeStr,
-						endTimeStr, microLocInst,
-						Config.MISSING_VALUE_PLACEHOLDER,
-						Config.MISSING_VALUE_PLACEHOLDER,
+				String relTimeWeather = String.format(relTimeWeatherFormat,
 						relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
 								.ordinal()],
 						relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
@@ -467,6 +497,12 @@ public class RefineDocumentsFromWlan
 						relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
 								.ordinal()],
 						relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
+				malletInst = String.format(malletInstFormat, startTimeStr,
+						endTimeStr, microLocInst, "", relTimeWeather);
+				// No clutter:
+				// Config.MISSING_VALUE_PLACEHOLDER,
+				// Config.MISSING_VALUE_PLACEHOLDER,
+
 				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.V);
 
 				startTime = Long.parseLong(startTimeStr);
@@ -480,42 +516,56 @@ public class RefineDocumentsFromWlan
 					String[] instFields = tabSplit
 							.split(microLocDoc.getValue());
 					if (instFields.length == 9) {
+
+						String wifi = String.format(wifiReadingFormat,
+								instFields[3], instFields[4]);
+						String relTimeWeather = String.format(
+								relTimeWeatherFormat, instFields[5],
+								instFields[6], instFields[7], instFields[8]);
+
 						malletInst = String.format(malletInstFormat,
 								instFields[1], instFields[2], instFields[0],
-								instFields[3], instFields[4], instFields[5],
-								instFields[6], instFields[7], instFields[8]);
+								wifi, relTimeWeather);
+
 						startTime = Long.parseLong(instFields[1]);
 						// Long.parseLong(instFields[1].substring(0,
 						// instFields[1].length() - 1));
 						endTime = Long.parseLong(instFields[2]);
 						// Long.parseLong(instFields[2].substring(0,
 						// instFields[2].length() - 1));
-					} else if (instFields.length == 3) {
 
-						startTime = Long.parseLong(instFields[1]);
-						endTime = Long.parseLong(instFields[2]);
-						// Assume default timezone
-						Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
-								startTime, Config.DEFAULT_TIME_ZONE);
-
-						malletInst = String
-								.format(malletInstFormat,
-										instFields[1],
-										instFields[2],
-										instFields[0],
-										Config.MISSING_VALUE_PLACEHOLDER,
-										Config.MISSING_VALUE_PLACEHOLDER,
-										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
-												.ordinal()],
-										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
-												.ordinal()],
-										relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
-												.ordinal()],
-										relTimeAndWeather[RelTimeNWeatherElts.SKY
-												.ordinal()]);
+						// FIXMED: Comment out! This case shouldn't happen any
+						// more.. it was a bug
+						// } else if (instFields.length == 3) {
+						//
+						// startTime = Long.parseLong(instFields[1]);
+						// endTime = Long.parseLong(instFields[2]);
+						// // Assume default timezone
+						// Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
+						// startTime, Config.DEFAULT_TIME_ZONE);
+						//
+						// malletInst = String
+						// .format(malletInstFormat,
+						// instFields[1],
+						// instFields[2],
+						// instFields[0],
+						// Config.MISSING_VALUE_PLACEHOLDER,
+						// Config.MISSING_VALUE_PLACEHOLDER,
+						// relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+						// .ordinal()],
+						// relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+						// .ordinal()],
+						// relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+						// .ordinal()],
+						// relTimeAndWeather[RelTimeNWeatherElts.SKY
+						// .ordinal()]);
 
 					} else if (instFields.length == 1) {
-						// FIXME: This shouldn't happen.. but DUH!!!! it does!
+						// This is the case of a file that was loaded into the
+						// user hierarchy because there is a reading, but it
+						// wasn't filled with data because the reading is
+						// outside all
+						// visits. So discard the reading.. no clutter!
 						String startTimeStr = StringUtils.removeLastNChars(
 								visitDir.getName(), 1);
 						startTime = Long.parseLong(startTimeStr);
@@ -527,13 +577,8 @@ public class RefineDocumentsFromWlan
 						Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
 								startTime, Config.DEFAULT_TIME_ZONE);
 
-						malletInst = String
-								.format(malletInstFormat,
-										startTimeStr,
-										endTime,
-										instFields[0],
-										Config.MISSING_VALUE_PLACEHOLDER,
-										Config.MISSING_VALUE_PLACEHOLDER,
+						String relTimeWeather = String
+								.format(relTimeWeatherFormat,
 										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
 												.ordinal()],
 										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
@@ -542,6 +587,12 @@ public class RefineDocumentsFromWlan
 												.ordinal()],
 										relTimeAndWeather[RelTimeNWeatherElts.SKY
 												.ordinal()]);
+						malletInst = String.format(malletInstFormat,
+								startTimeStr, endTimeStr, instFields[0], "",
+								relTimeWeather);
+						// No clutter:
+						// Config.MISSING_VALUE_PLACEHOLDER,
+						// Config.MISSING_VALUE_PLACEHOLDER,
 
 					} else {
 						log("\tERROR\tDiscarding file with wrong number of columns: "
@@ -609,10 +660,14 @@ public class RefineDocumentsFromWlan
 		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoVisitFreq);
 		result.put(Config.RESULT_KEY_DURATION_FREQ, durationFreqs);
 		result.put(Config.RESULT_KEY_DURATION_SUMMARY, durationStats);
-		result.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ, relTimeWStats[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()]);
-		result.put(Config.RESULT_KEY_HOUR_OF_DAY_FREQ, relTimeWStats[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()]);
-		result.put(Config.RESULT_KEY_TEMPRATURE_FREQ, relTimeWStats[RelTimeNWeatherElts.TEMPRATURE.ordinal()]);
-		result.put(Config.RESULT_KEY_SKY_FREQ, relTimeWStats[RelTimeNWeatherElts.SKY.ordinal()]);
+		result.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ,
+				relTimeWStats[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()]);
+		result.put(Config.RESULT_KEY_HOUR_OF_DAY_FREQ,
+				relTimeWStats[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()]);
+		result.put(Config.RESULT_KEY_TEMPRATURE_FREQ,
+				relTimeWStats[RelTimeNWeatherElts.TEMPRATURE.ordinal()]);
+		result.put(Config.RESULT_KEY_SKY_FREQ,
+				relTimeWStats[RelTimeNWeatherElts.SKY.ordinal()]);
 		return new KeyValuePair<String, HashMap<String, Object>>(userid, result);
 	}
 

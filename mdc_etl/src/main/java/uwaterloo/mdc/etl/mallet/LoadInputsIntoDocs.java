@@ -99,22 +99,26 @@ public abstract class LoadInputsIntoDocs
 		} else if ("tz".equals(currKey)) {
 			// We keep times in GMT.. nothing to do!
 		} else {
-			appendCurrValToCol();
-
-			addCurrValToStats();
+			Enum<?> discreteVal = getValueToWrite();
+			appendCurrValToCol(discreteVal);
+			addCurrValToStats(discreteVal);
 		}
 	}
 
-	protected void appendCurrValToCol() {
+	protected void appendCurrValToCol(Enum<?> discreteVal) {
+		// Don't put place holder values (like 0) in the continuous stat
+		if(Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
+			return;
+		}
+		
 		colOpResult.get(currKey).append(" ").append(shortKey())
 				.append(Config.DELIMITER_COLNAME_VALUE)
 				.append(getValueToWrite());
 	}
 
-	protected void addCurrValToStats() {
+	protected void addCurrValToStats(Enum<?> discreteVal) {
 		Object statsObj = statsMap.get(prependFileName(currKey));
 		
-		Enum<?> discreteVal = getValueToWrite();
 		((Frequency) statsObj).addValue(discreteVal);
 
 		if (keepContinuousStatsForColumn(currKey) 

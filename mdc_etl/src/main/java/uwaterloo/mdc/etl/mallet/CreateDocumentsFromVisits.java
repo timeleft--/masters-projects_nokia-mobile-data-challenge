@@ -64,7 +64,7 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		Long startTime = colOpResult.get("unixtime_start");
 		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
-			startTime = addError(startTime);
+//			startTime = addError(startTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String startTimeDirName = startTime.toString() + trustIndicator;
@@ -72,7 +72,7 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		Long endTime = colOpResult.get("unixtime_end");
 		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
-			endTime = addError(endTime);
+//			endTime = addError(endTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String endTimeFileName = endTime.toString() + trustIndicator + ".csv";
@@ -124,13 +124,13 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		// Nothing
 		return userid;
 	}
-
-	private long addError(long reading) {
-		// TODO:Add a Gaussian Error of standard deviation of 10 minutes
-		// since this time is not trusted; the start time is trusted if there
-		// are location data points in the period of 10 minutes before the
-		// arrival time (0=false, 1=true).
-
-		return reading;
-	}
+// After a second thought.. no! Let's not change the names of the folders	
+//	private long addError(long reading) {
+//		// TODONOT:Add a Gaussian Error of standard deviation of 10 minutes
+//		// since this time is not trusted; the start time is trusted if there
+//		// are location data points in the period of 10 minutes before the
+//		// arrival time (0=false, 1=true).
+//
+//		return reading;
+//	}
 }
