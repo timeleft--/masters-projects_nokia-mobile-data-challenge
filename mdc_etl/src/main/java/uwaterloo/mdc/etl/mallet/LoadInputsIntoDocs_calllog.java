@@ -26,6 +26,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 		
 		V, // VOICE,
 		S, // SMS;
+		D, // Data
 		Missing;
 		public String toString() {
 			if (this == Missing) {
@@ -120,6 +121,8 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 				result = CommType.V;
 			} else if ("Short message".equals(currValue)) {
 				result = CommType.S;
+			} else if ("Data call".equals(currValue)) {
+				result = CommType.D;
 			}
 		} else if ("in_phonebook".equals(currKey)) {
 			if ("1".equals(currValue)) {

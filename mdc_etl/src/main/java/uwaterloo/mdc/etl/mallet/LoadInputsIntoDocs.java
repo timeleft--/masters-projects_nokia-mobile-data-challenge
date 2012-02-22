@@ -220,7 +220,7 @@ public abstract class LoadInputsIntoDocs
 
 				Long endTimeInSecs = Long.parseLong(StringUtils
 						.removeLastNChars(microLocFile.getName(), 5));
-				StringBuilder doc = userHierarchy.getDocDirect(visitStartTime,
+				StringBuilder doc = userHierarchy.getDocExact(visitStartTime,
 						endTimeInSecs);
 
 				if (doc == null) {

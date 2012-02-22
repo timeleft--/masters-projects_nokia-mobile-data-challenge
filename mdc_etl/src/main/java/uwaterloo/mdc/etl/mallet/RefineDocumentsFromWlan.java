@@ -7,6 +7,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.regex.Pattern;
 
@@ -54,6 +55,10 @@ public class RefineDocumentsFromWlan
 	protected long prevTime = -1;
 	protected long prevprevtime;
 	protected long currTime;
+	protected File currStartDir;
+	protected File prevStartDir;
+
+	
 	// It seems unuseful: protected long recordDeltaT;
 	protected HashMap<String, Integer> prevAccessPoints = null;
 	protected HashMap<String, Integer> currAccessPoints;
@@ -61,6 +66,7 @@ public class RefineDocumentsFromWlan
 
 	// This is temporary, not part of the result
 	protected SummaryStatistics apsStat = new SummaryStatistics();
+	protected Frequency frequentlySeenAps = new Frequency();
 
 	protected HashMap<String, LinkedList<KeyValuePair<String, String>>> userHierarchy = new HashMap<String, LinkedList<KeyValuePair<String, String>>>();
 	protected LinkedList<KeyValuePair<String, String>> noVisitHierarchy = new LinkedList<KeyValuePair<String, String>>();
@@ -117,6 +123,8 @@ public class RefineDocumentsFromWlan
 				// Make the current ones be the prev.s
 				prevprevtime = prevTime;
 				prevTime = currTime;
+				prevStartDir = currStartDir;
+				currStartDir = userVisits.getVisitDirForEndTime(currTime);
 				prevAccessPoints = currAccessPoints;
 				currAccessPoints = new HashMap<String, Integer>();
 
@@ -137,14 +145,14 @@ public class RefineDocumentsFromWlan
 	}
 
 	protected void refineDocument() throws IOException {
+		
+		assert prevTime!= -1;
+		
 		long delta;
 
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
 		int newDocIx = -1;
-
-		File currStartDir = userVisits.getVisitDirForEndTime(currTime);
-		File prevStartDir = userVisits.getVisitDirForEndTime(prevTime);
 
 		boolean significantChangeInLoc;
 		// Determine significant changes from Visits
@@ -157,15 +165,22 @@ public class RefineDocumentsFromWlan
 			// one is null the other is not
 			significantChangeInLoc = true;
 		}
-		// Try to refine from WiFi
-		if (!significantChangeInLoc) {
+
+		if (significantChangeInLoc) {
+			// Change on the Visit level
+			forceStatsWrite();
+			// Already happens inside force
+			// //We are now tracking a new microlocation
+			// apsStat = new SummaryStatistics();
+		} else {
+			// Try to refine from WiFi
 			long macAddressesDistance = Discretize.getRxDistance(
 					currAccessPoints, prevAccessPoints);
 			// TODO: Consider using a Sigmoid function instead of simple
 			// TODO: do we need to do anything with recordDelta?
 			significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
 		}
-
+		
 		if (significantChangeInLoc) {
 			// FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
 			// File userDir = FileUtils.getFile(outPath, userid);
@@ -211,7 +226,8 @@ public class RefineDocumentsFromWlan
 						break;
 					} else {
 						docEndFile = visit;
-						// The new doc will be for a time slot that is before
+						// The new doc will be for a time slot that is
+						// before
 						// the end of the visit, so it should be
 						// placed after in the descending list
 						++newDocIx;
@@ -225,6 +241,8 @@ public class RefineDocumentsFromWlan
 
 				// We are now tracking a new microlocation
 				forceStatsWrite();
+
+				// Don't even add this reading to stats
 				return;
 			} // else {
 			visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.B);
@@ -242,11 +260,13 @@ public class RefineDocumentsFromWlan
 			// Do not split if the reading is towards the end of the
 			// visit, because this will result in a fragmented
 			// document whose WLAN readings are not specified
-			// We also provision for this happening when curr is
-			// processed, thus the check for end-curr
-			// Sooner or later, in both cases, force will be used
-			if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)
-					&& (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)) {
+
+			// But this will cause a BLAH.. I dunno!
+			// // We also provision for this happening when curr is
+			// // processed, thus the check for end-curr
+			// // Sooner or later, in both cases, force will be used
+			// && (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)
+			if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)) {
 
 				long microlocStartTime = prevprevtime;
 				if (microlocStartTime == -1) {
@@ -280,8 +300,11 @@ public class RefineDocumentsFromWlan
 						.append(Long.toString(Math.round(apsStat.getMean())))
 						.append('\t')
 						.append(Long.toString(Math.round(apsStat
-								.getStandardDeviation())))
-						.append('\t')
+								.getStandardDeviation())));
+
+				doc1.append('\t').append(consumeFrequentlySeenMacAddrs());
+
+				doc1.append('\t')
 						.append(relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
 								.ordinal()])
 						.append('\t')
@@ -307,6 +330,7 @@ public class RefineDocumentsFromWlan
 
 				// We are now tracking a new microlocation
 				apsStat = new SummaryStatistics();
+				// frequentlySeenAps = new Frequency();
 
 				// There is always something pending.. that's right!
 			}
@@ -323,12 +347,15 @@ public class RefineDocumentsFromWlan
 			pendingEndTims = visitEndTime;
 			pendingVisitDir = prevStartDir;
 			pendingStats = apsStat;
+
 			// Always something pending }
 
 		}
 
 		apsStat.addValue(currAccessPoints.size());
-
+		for (String macAddr : currAccessPoints.keySet()) {
+			frequentlySeenAps.addValue(macAddr);
+		}
 	}
 
 	protected void forceStatsWrite() throws IOException {
@@ -374,36 +401,48 @@ public class RefineDocumentsFromWlan
 			doc.append(docFields[0]).append('\t').append(docFields[1])
 					.append('\t').append(docFields[2]).append('\t')
 					.append(mean).append('\t').append(stder);
-		} else if (docFields.length > 3) {
-			// FIXME: I can't find out why this happens.. I'll just leave it :'(
-			// LOG that... it shouldn't happen
-			log("\tINFO\tForced to override stats for visit: "
-					+ docStartDir.getAbsolutePath() + File.separator
-					+ lastTimeSlot.getKey());
-			if (apsStat != pendingStats) {
-				double avg = apsStat.getMean() * apsStat.getN()
-						+ pendingStats.getMean() * pendingStats.getN();
-				avg /= (apsStat.getN() + pendingStats.getN());
 
-				mean = Long.toString(Math.round(avg));
-
-				// Better than having no value at all.. we use the avg of the
-				// two!
-				// stder = Config.MISSING_VALUE_PLACEHOLDER;
-				double var = (pendingStats.getStandardDeviation() + apsStat
-						.getStandardDeviation()) / 2;
-				stder = Long.toString(Math.round(var));
-			}
-			doc.append(docFields[0]).append('\t').append(docFields[1])
-					.append('\t').append(docFields[2]).append('\t')
-					.append(mean).append('\t').append(stder);
+			// Now it doesn't happen
+			// }else if (docFields.length > 3) {
+			//
+			// // FIXMED: I can't find out why this happens.. I'll just leave it
+			// :'(
+			// // LOG that... it shouldn't happen
+			// log("\tINFO\tForced to override stats for visit: "
+			// + docStartDir.getAbsolutePath() + File.separator
+			// + lastTimeSlot.getKey());
+			// if (apsStat != pendingStats) {
+			// double avg = apsStat.getMean() * apsStat.getN()
+			// + pendingStats.getMean() * pendingStats.getN();
+			// avg /= (apsStat.getN() + pendingStats.getN());
+			//
+			// mean = Long.toString(Math.round(avg));
+			//
+			// // Better than having no value at all.. we use the avg of the
+			// // two!
+			// // stder = Config.MISSING_VALUE_PLACEHOLDER;
+			// double var = (pendingStats.getStandardDeviation() + apsStat
+			// .getStandardDeviation()) / 2;
+			// stder = Long.toString(Math.round(var));
+			// }
+			// doc.append(docFields[0]).append('\t').append(docFields[1])
+			// .append('\t').append(docFields[2]).append('\t')
+			// .append(mean).append('\t').append(stder);
 		} else {
 			log("\tERROR\tRemoving a file with " + docFields.length
 					+ " columns: " + docStartDir.getAbsolutePath()
 					+ File.separator + lastTimeSlot.getKey());
 			visitHierarchy.remove(0);
+
+			// For the next visit
+			frequentlySeenAps = new Frequency();
+			apsStat = new SummaryStatistics();
+			pendingEndTims = -1;
+
 			return;
 		}
+
+		doc.append('\t').append(consumeFrequentlySeenMacAddrs());
 
 		Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
 				prevTimeZone);
@@ -422,8 +461,24 @@ public class RefineDocumentsFromWlan
 		lastTimeSlot.setValue(doc.toString());
 
 		// For the next visit
+		// frequentlySeenAps = new Frequency();
 		apsStat = new SummaryStatistics();
 		pendingEndTims = -1;
+	}
+
+	private String consumeFrequentlySeenMacAddrs() {
+		StringBuilder result = new StringBuilder();
+
+		Iterator<Comparable<?>> macIter = frequentlySeenAps.valuesIterator();
+		int m = 0;
+		while (macIter.hasNext() && m < Config.NUM_FREQ_MAC_ADDRS_TO_KEEP) {
+			++m;
+			result.append(" M").append(macIter.next().toString());
+		}
+
+		frequentlySeenAps = new Frequency();
+
+		return result.toString();
 	}
 
 	@Override
@@ -515,13 +570,17 @@ public class RefineDocumentsFromWlan
 				for (KeyValuePair<String, String> microLocDoc : microLocList) {
 					String[] instFields = tabSplit
 							.split(microLocDoc.getValue());
-					if (instFields.length == 9) {
+					if (instFields.length == 10) {
 
 						String wifi = String.format(wifiReadingFormat,
 								instFields[3], instFields[4]);
+
+						// frequenty seen macs
+						wifi += instFields[5];
+
 						String relTimeWeather = String.format(
-								relTimeWeatherFormat, instFields[5],
-								instFields[6], instFields[7], instFields[8]);
+								relTimeWeatherFormat, instFields[6],
+								instFields[7], instFields[8], instFields[9]);
 
 						malletInst = String.format(malletInstFormat,
 								instFields[1], instFields[2], instFields[0],
