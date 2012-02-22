@@ -58,7 +58,6 @@ public class RefineDocumentsFromWlan
 	protected File currStartDir;
 	protected File prevStartDir;
 
-	
 	// It seems unuseful: protected long recordDeltaT;
 	protected HashMap<String, Integer> prevAccessPoints = null;
 	protected HashMap<String, Integer> currAccessPoints;
@@ -145,9 +144,9 @@ public class RefineDocumentsFromWlan
 	}
 
 	protected void refineDocument() throws IOException {
-		
-		assert prevTime!= -1;
-		
+
+		assert prevTime != -1;
+
 		long delta;
 
 		KeyValuePair<String, String> docEndFile = null;
@@ -180,7 +179,7 @@ public class RefineDocumentsFromWlan
 			// TODO: do we need to do anything with recordDelta?
 			significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
 		}
-		
+
 		if (significantChangeInLoc) {
 			// FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
 			// File userDir = FileUtils.getFile(outPath, userid);
@@ -378,6 +377,8 @@ public class RefineDocumentsFromWlan
 		// time slot
 		// last time slot is the first item in the descending list
 		KeyValuePair<String, String> lastTimeSlot = visitHierarchy.get(0);
+		long lastEndTime = Long.parseLong(StringUtils.removeLastNChars(
+				lastTimeSlot.getKey(), 5));
 
 		// stats
 		String mean = Long.toString(Math.round(pendingStats.getMean()));
@@ -391,43 +392,38 @@ public class RefineDocumentsFromWlan
 			doc.append(docFields[0])
 					.append('\t')
 					.append(StringUtils.removeLastNChars(docStartDir.getName(),
-							1))
-					.append('\t')
-					.append(StringUtils.removeLastNChars(lastTimeSlot.getKey(),
-							5)).append('\t').append(mean).append('\t')
-					.append(stder);
+							1)).append('\t').append(lastEndTime).append('\t')
+					.append(mean).append('\t').append(stder);
 		} else if (docFields.length == 3) {
 			// has already updated the time.. leave time itact
 			doc.append(docFields[0]).append('\t').append(docFields[1])
 					.append('\t').append(docFields[2]).append('\t')
 					.append(mean).append('\t').append(stder);
+		} else if (docFields.length == 10 && pendingEndTims == lastEndTime) {
+			// This is the case when the document was already updated
+			// because of an earlier change of mac address, but then
+			// the last few readings needs some place to go. (Why?)
 
-			// Now it doesn't happen
-			// }else if (docFields.length > 3) {
-			//
-			// // FIXMED: I can't find out why this happens.. I'll just leave it
-			// :'(
-			// // LOG that... it shouldn't happen
-			// log("\tINFO\tForced to override stats for visit: "
-			// + docStartDir.getAbsolutePath() + File.separator
-			// + lastTimeSlot.getKey());
-			// if (apsStat != pendingStats) {
-			// double avg = apsStat.getMean() * apsStat.getN()
-			// + pendingStats.getMean() * pendingStats.getN();
-			// avg /= (apsStat.getN() + pendingStats.getN());
-			//
-			// mean = Long.toString(Math.round(avg));
-			//
-			// // Better than having no value at all.. we use the avg of the
-			// // two!
-			// // stder = Config.MISSING_VALUE_PLACEHOLDER;
-			// double var = (pendingStats.getStandardDeviation() + apsStat
-			// .getStandardDeviation()) / 2;
-			// stder = Long.toString(Math.round(var));
-			// }
-			// doc.append(docFields[0]).append('\t').append(docFields[1])
-			// .append('\t').append(docFields[2]).append('\t')
-			// .append(mean).append('\t').append(stder);
+			log("\tINFO\tForced to override stats for visit: "
+					+ docStartDir.getAbsolutePath() + File.separator
+					+ lastTimeSlot.getKey());
+			if (apsStat != pendingStats) {
+				double avg = apsStat.getMean() * apsStat.getN()
+						+ pendingStats.getMean() * pendingStats.getN();
+				avg /= (apsStat.getN() + pendingStats.getN());
+
+				mean = Long.toString(Math.round(avg));
+
+				// Better than having no value at all.. we use the avg of the
+				// two!
+				// stder = Config.MISSING_VALUE_PLACEHOLDER;
+				double var = (pendingStats.getStandardDeviation() + apsStat
+						.getStandardDeviation()) / 2;
+				stder = Long.toString(Math.round(var));
+			}
+			doc.append(docFields[0]).append('\t').append(docFields[1])
+					.append('\t').append(docFields[2]).append('\t')
+					.append(mean).append('\t').append(stder);
 		} else {
 			log("\tERROR\tRemoving a file with " + docFields.length
 					+ " columns: " + docStartDir.getAbsolutePath()
