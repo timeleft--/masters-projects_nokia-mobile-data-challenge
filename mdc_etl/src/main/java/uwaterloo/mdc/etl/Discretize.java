@@ -39,6 +39,27 @@ public class Discretize {
 		};
 	};
 
+	public enum PlaceLabelsEnum {
+		Missing, // 0: Unknown
+		H, // 1 : Home
+		F, // 2 : Home of a friend, relative or colleague
+		W, // 3 : My workplace/school
+		T, // 4 : Location related to transportation (bus stop,  metro stop,  train station,  parking lot,  airport)
+		Q, // 5 : The workplace/school of a friend, relative or colleague
+		O,  // 6 : Place for outdoor sports (e.g. walking,  hiking,  skiing)
+		I, // 7 : Place for indoor sports (e.g. gym)
+		R, // 8 : Restaurant or bar
+		S, // 9 : Shop or shopping center
+		V; //10 : Holiday resort or vacation spot		
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString();
+			}
+		};
+	};
+
 	public enum ReadingWithinVisitEnum {
 
 //		V, // Should be counted alone

@@ -1,5 +1,7 @@
 package uwaterloo.mdc.etl;
 
+import java.util.Properties;
+
 public class Config {
 	private Config() {
 		// Avoid creation
@@ -60,5 +62,11 @@ public class Config {
 	public static final long ERROR_START_END_TIMES = 60 * 3;
 
 	public static final int NUM_FREQ_MAC_ADDRS_TO_KEEP = 3;
+
+	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
+
+	// This class is thread-safe: multiple threads can share a single Properties
+	// object without the need for external synchronization.
+	public static Properties placeLabels;
 	
 }

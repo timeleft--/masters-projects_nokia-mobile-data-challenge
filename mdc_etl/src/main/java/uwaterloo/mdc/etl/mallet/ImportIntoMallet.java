@@ -5,6 +5,7 @@ import java.io.FileFilter;
 import java.io.Writer;
 import java.nio.channels.Channels;
 import java.util.HashMap;
+import java.util.Properties;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +34,12 @@ class ImportIntoMallet {
 	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
+		
+		
+		Config.placeLabels = new Properties();
+		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
+					.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
+		
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
 	}

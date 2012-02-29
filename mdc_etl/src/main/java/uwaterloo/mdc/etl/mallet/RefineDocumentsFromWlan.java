@@ -18,6 +18,7 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
 import uwaterloo.mdc.etl.Discretize.DurationEunm;
+import uwaterloo.mdc.etl.Discretize.PlaceLabelsEnum;
 import uwaterloo.mdc.etl.Discretize.ReadingWithinVisitEnum;
 import uwaterloo.mdc.etl.Discretize.RelTimeNWeatherElts;
 import uwaterloo.mdc.etl.Discretize.VisitWithReadingEnum;
@@ -33,6 +34,7 @@ public class RefineDocumentsFromWlan
 		CallableOperation<KeyValuePair<String, HashMap<String, Object>>, String> {
 	protected static Writer LOG;
 
+
 	// protected static final String WLAN_NOVISITS_FILENAME =
 	// "wlan_no-visit.csv";
 
@@ -46,6 +48,8 @@ public class RefineDocumentsFromWlan
 
 	protected static final String COLNAME_TEMPRATURE = " tmp";
 	protected static final String COLNAME_SKY = " sky";
+	
+	protected static final String COLNAME_PLACE_MEANING = " place";
 
 	protected String prevTimeZone;
 
@@ -54,9 +58,8 @@ public class RefineDocumentsFromWlan
 	protected final Frequency WLANNoVisitFreq = new Frequency();
 	protected final SummaryStatistics durationStats = new SummaryStatistics();
 	protected final Frequency durationFreqs = new Frequency();
-//	protected final Frequency locationsPerUser = new Frequency();
-//	protected final Frequency meaningsPerUser = new Frequency();
-	
+	protected final Frequency locationsPerUser = new Frequency();
+	protected final Frequency meaningsPerUser = new Frequency();
 
 	protected long prevTime = -1;
 	protected long prevprevtime;
@@ -93,6 +96,7 @@ public class RefineDocumentsFromWlan
 		}
 		userVisits = new UserVisitHierarchy(FileUtils.getFile(outPath, dataFile
 				.getParentFile().getName()));
+
 	}
 
 	@Override
@@ -527,7 +531,7 @@ public class RefineDocumentsFromWlan
 					.get(visitDir.getName());
 			if (microLocList == null) {
 				visitNoWLANFreq.addValue(VisitWithReadingEnum.V);
-				
+
 				File[] visitFiles = visitDir.listFiles();
 				assert visitFiles.length == 1 : "Processing a directory with stale files";
 				File microLocFile = visitFiles[0];
@@ -568,8 +572,13 @@ public class RefineDocumentsFromWlan
 				writeMallet(startTime, endTime, malletInst, FileUtils.getFile(
 						malletDir, visitDir.getName(), microLocFile.getName()));
 
+				locationsPerUser.addValue(microLocInst);
+				String label = Config.placeLabels.getProperty(microLocInst, "0");
+				meaningsPerUser.addValue(PlaceLabelsEnum.values()[Integer.parseInt(label)]);
+
 			} else {
 				visitNoWLANFreq.addValue(VisitWithReadingEnum.B);
+				String locationId = null;
 				for (KeyValuePair<String, String> microLocDoc : microLocList) {
 					String[] instFields = tabSplit
 							.split(microLocDoc.getValue());
@@ -664,10 +673,24 @@ public class RefineDocumentsFromWlan
 						continue;
 					}
 
+					locationId = instFields[0];
+				
 					writeMallet(startTime, endTime, malletInst,
 							FileUtils.getFile(malletDir, visitDir.getName(),
 									microLocDoc.getKey()));
+
 				}
+
+				locationsPerUser.addValue(locationId);
+				
+				String labelStr = Config.placeLabels.getProperty(locationId, "0");
+				PlaceLabelsEnum meaning = PlaceLabelsEnum.values()[Integer.parseInt(labelStr)];
+				meaningsPerUser.addValue(meaning);
+//I don't think the class should be part of the 					
+//				if(!PlaceLabelsEnum.Missing.equals(meaning)){
+//					malletInst += COLNAME_PLACE_MEANING + meaning;
+//				}
+				
 			}
 		}
 	}
