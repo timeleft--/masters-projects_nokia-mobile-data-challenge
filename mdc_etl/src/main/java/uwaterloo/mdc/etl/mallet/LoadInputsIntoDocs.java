@@ -33,7 +33,9 @@ public abstract class LoadInputsIntoDocs
 
 	protected final Frequency readingNoVisitStat = new Frequency();
 	protected final Frequency visitNoReadingStat = new Frequency();
-	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();;
+	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();
+
+	protected long currTime;
 
 	// Trading memory for performance: removed and (incomplete) synchronization
 	// But we need a global place for storing all labels, to avoid duplocates
@@ -86,10 +88,14 @@ public abstract class LoadInputsIntoDocs
 		if (currKey.equals(getTimeColumnName())) {
 			// calculateDeltaTime
 
-			long deltaTime = Long.parseLong(currValue);
-
+			currTime = Long.parseLong(currValue);
+			
+		} else if ("tz".equals(currKey)) {
+			// We keep times in GMT.. 
+			currTime += Long.parseLong(currValue);
+			
 			if (prevTimeColReading != null) {
-				deltaTime -= prevTimeColReading;
+				long deltaTime = currTime - prevTimeColReading;
 				if (deltaTime != 0) {
 					// We have finished readings for one time slot.. write
 					// them
@@ -100,9 +106,9 @@ public abstract class LoadInputsIntoDocs
 				// meaningless, because it is the first record
 				// System.out.println("blah.. just making sure of something!");
 			}
-			prevTimeColReading = Long.parseLong(currValue);
-		} else if ("tz".equals(currKey)) {
-			// We keep times in GMT.. nothing to do!
+			prevTimeColReading = currTime;
+//		} else if ("tz".equals(currKey)) {
+//			// We keep times in GMT.. nothing to do!
 		} else {
 			Enum<?> discreteVal = getValueToWrite();
 			appendCurrValToCol(discreteVal);
@@ -263,7 +269,7 @@ public abstract class LoadInputsIntoDocs
 		}
 	}
 
-	private void onTimeChanged() {
+	protected final void onTimeChanged() {
 		StringBuilder docBuilder = userHierarchy
 				.getDocForEndTime(prevTimeColReading);
 		if (docBuilder == null) {

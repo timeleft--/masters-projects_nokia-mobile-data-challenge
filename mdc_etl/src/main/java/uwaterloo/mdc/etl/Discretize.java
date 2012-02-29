@@ -160,6 +160,7 @@ public class Discretize {
 				VisitWithReadingEnum.values());
 		enumsMap.put(Config.RESULT_KEY_WLAN_VISIT_BOTH_FREQ,
 				ReadingWithinVisitEnum.values());
+		enumsMap.put(Config.RESULT_KEY_MEANINGS_PER_USER,PlaceLabelsEnum.values());
 
 		enumsMap.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ, DaysOfWeek.values());
 		enumsMap.put(Config.RESULT_KEY_HOUR_OF_DAY_FREQ, HourOfDay.values());
@@ -200,7 +201,7 @@ public class Discretize {
 													// LaMarca et al.
 	}
 
-	public static Enum<?>[] relTimeNWeather(long startTime, String timeZoneStr) throws IOException {
+	public static Enum<?>[] relTimeNWeather(long startTimeGMT, String timeZoneStr) throws IOException {
 		Enum<?>[] result = new Enum[RelTimeNWeatherElts.values().length];
 
 //		char timeZonePlusMinus = '+';
@@ -218,7 +219,8 @@ public class Discretize {
 		int timeZoneOffset =Integer.parseInt(timeZoneStr);
 		
 		Calendar calendar = new GregorianCalendar();
-		calendar.setTimeInMillis((startTime + timeZoneOffset) * 1000);
+		// Minus because the offset is BLAH 
+		calendar.setTimeInMillis((startTimeGMT - timeZoneOffset) * 1000);
 
 		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
 				.get(Calendar.HOUR_OF_DAY)];
@@ -227,7 +229,7 @@ public class Discretize {
 
 		if(timeZoneOffset == -Config.TIME_SECONDS_IN_HOUR
 				|| timeZoneOffset == -2 * Config.TIME_SECONDS_IN_HOUR){
-			Weather weather = WeatherUnderGroundDiscretize.getWeather(startTime, timeZoneOffset);
+			Weather weather = WeatherUnderGroundDiscretize.getWeather(startTimeGMT, timeZoneOffset);
 			result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = weather.temprature;
 			result[RelTimeNWeatherElts.SKY.ordinal()] = weather.sky;
 		} else {

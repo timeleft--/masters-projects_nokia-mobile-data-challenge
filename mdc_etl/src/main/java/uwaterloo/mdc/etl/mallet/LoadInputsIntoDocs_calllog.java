@@ -8,7 +8,7 @@ import uwaterloo.mdc.etl.Discretize;
 public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 
 	public enum CommDir {
-		
+
 		I, // INCOMING,
 		M, // MISSED
 		O, // OUTGOING
@@ -23,7 +23,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 	}
 
 	public enum CommType {
-		
+
 		V, // VOICE,
 		S, // SMS;
 		D, // Data
@@ -38,7 +38,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 	}
 
 	public enum CommContact {
-		
+
 		K, // IN_PHONEBOOK,
 		U, // UNKNOWN};
 		Missing;
@@ -52,7 +52,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 	}
 
 	public enum CallDur {
-		
+
 		T, // Tiny <20 sec
 		S, // Short <120 sec
 		M, // Medium <10*60 sec
@@ -101,7 +101,35 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 			// We also don't bother about tracking repeated numbers (TODO:
 			// yet??)
 		} else {
-			super.delimiterProcedure();
+
+			// Timezone preceeds time only in this stupid case!
+
+			if ("tz".equals(currKey)) {
+				// We keep times in GMT..
+				currTime = Long.parseLong(currValue);
+			} else if (currKey.equals(getTimeColumnName())) {
+				// calculateDeltaTime
+
+				currTime += Long.parseLong(currValue);
+
+				if (prevTimeColReading != null) {
+					long deltaTime = currTime - prevTimeColReading;
+					if (deltaTime != 0) {
+						// We have finished readings for one time slot.. write
+						// them
+						onTimeChanged();
+					}
+
+				} else {
+					// meaningless, because it is the first record
+					// System.out.println("blah.. just making sure of something!");
+				}
+				prevTimeColReading = currTime;
+				// } else if ("tz".equals(currKey)) {
+				// // We keep times in GMT.. nothing to do!
+			} else {
+				super.delimiterProcedure();
+			}
 		}
 	}
 

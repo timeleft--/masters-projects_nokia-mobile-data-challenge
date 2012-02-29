@@ -62,6 +62,8 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 	@Override
 	protected void eolProcedure() throws Exception {
 		Long startTime = colOpResult.get("unixtime_start");
+		// Keep times in GMT
+		startTime += colOpResult.get("tz_start");
 		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
 //			startTime = addError(startTime);
@@ -70,14 +72,14 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		String startTimeDirName = startTime.toString() + trustIndicator;
 
 		Long endTime = colOpResult.get("unixtime_end");
+		// Keep times in GMT
+		endTime += colOpResult.get("tz_end");
 		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
 //			endTime = addError(endTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String endTimeFileName = endTime.toString() + trustIndicator + ".csv";
-
-		// We keep the times in GMT, so no need to use tz
 
 		File visitFile = FileUtils.getFile(outPath, userid.toString(),
 				startTimeDirName, endTimeFileName);

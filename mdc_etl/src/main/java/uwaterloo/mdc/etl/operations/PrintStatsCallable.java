@@ -2,6 +2,7 @@ package uwaterloo.mdc.etl.operations;
 
 import java.io.Writer;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.concurrent.Callable;
 
 import org.apache.commons.math.stat.Frequency;
@@ -83,7 +84,7 @@ public class PrintStatsCallable implements Callable<Void> {
 	private void writeStats(String userid, String statKey, Frequency stat)
 			throws Exception {
 
-		Enum<?>[] valsArr;
+		Comparable<?>[] valsArr;
 		synchronized (Discretize.enumsMap) {
 			valsArr = Discretize.enumsMap.get(statKey);
 		}
@@ -92,8 +93,19 @@ public class PrintStatsCallable implements Callable<Void> {
 				valsArr = ReadingWithinVisitEnum.values();
 			} else if (statKey.endsWith(Config.RESULT_KEY_VISIT_NOREADING_FREQ)) {
 				valsArr = VisitWithReadingEnum.values();
+			} else if (statKey.equals(Config.RESULT_KEY_LOCATIONS_PER_USER)) {
+				// The user location has no preset value enumeration
+				// So use the values in the frequency
+				valsArr = new String[stat.getUniqueCount()];
+				Iterator<Comparable<?>> valsIter = stat.valuesIterator();
+				int i=0;
+				while(valsIter.hasNext()){
+					valsArr[i] = valsIter.next();
+					++i;
+				}
 			} else {
-				// leave it to cause a null pointer exception!
+				// For now, leave it to cause a null pointer exception! But could fall back to 
+				// using the values in the frequency only as above
 			}
 		}
 
@@ -101,7 +113,7 @@ public class PrintStatsCallable implements Callable<Void> {
 		headerBuilder.append(StringUtils.quote(Config.USERID_COLNAME));
 
 		for (int i = 0; i < valsArr.length; ++i) {
-			Enum<?> val = valsArr[i];
+			Comparable<?> val = valsArr[i];
 			String valLabel = val.toString();
 			headerBuilder.append('\t')
 					.append(StringUtils.quote(valLabel + COUNT_PSTFX))
@@ -123,7 +135,7 @@ public class PrintStatsCallable implements Callable<Void> {
 			freqWriter.append(userid);
 
 			for (int i = 0; i < valsArr.length; ++i) {
-				Enum<?> val = valsArr[i];
+				Comparable<?> val = valsArr[i];
 
 				long valCnt = stat.getCount(val);
 				double valPct = stat.getPct(val);

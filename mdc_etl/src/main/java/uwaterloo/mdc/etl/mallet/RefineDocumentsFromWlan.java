@@ -51,8 +51,6 @@ public class RefineDocumentsFromWlan
 	
 //	protected static final String COLNAME_PLACE_MEANING = " place";
 
-	protected String prevTimeZone;
-
 	private final Frequency[] relTimeWStats;
 	protected final Frequency visitNoWLANFreq = new Frequency();
 	protected final Frequency WLANNoVisitFreq = new Frequency();
@@ -66,6 +64,8 @@ public class RefineDocumentsFromWlan
 	protected long currTime;
 	protected File currStartDir;
 	protected File prevStartDir;
+	
+	protected String prevTimeZone;
 
 	// It seems unuseful: protected long recordDeltaT;
 	protected HashMap<String, Integer> prevAccessPoints = null;
@@ -85,6 +85,7 @@ public class RefineDocumentsFromWlan
 	protected SummaryStatistics pendingStats;
 
 	protected final UserVisitHierarchy userVisits;
+
 
 	@SuppressWarnings("deprecation")
 	public RefineDocumentsFromWlan(Object master, char delimiter, String eol,
@@ -118,6 +119,9 @@ public class RefineDocumentsFromWlan
 		if ("time".equals(currKey)) {
 			// We'd better let the errors propagate: try {
 			currTime = Long.parseLong(currValue);
+		} else if ("tz".equals(currKey)) {
+			// Act on time in GMT
+			currTime += Long.parseLong(currValue);
 			if (currTime != prevTime) {
 				// A new set of AP sightings (record)
 				if (prevTime != -1 && prevAccessPoints != null) {
@@ -132,6 +136,7 @@ public class RefineDocumentsFromWlan
 				// Make the current ones be the prev.s
 				prevprevtime = prevTime;
 				prevTime = currTime;
+				prevTimeZone = currValue;
 				prevStartDir = currStartDir;
 				currStartDir = userVisits.getVisitDirForEndTime(currTime);
 				prevAccessPoints = currAccessPoints;
@@ -141,8 +146,7 @@ public class RefineDocumentsFromWlan
 			// } catch (NumberFormatException ignored) {
 			// // ok!
 			// }
-		} else if ("tz".equals(currKey)) {
-			prevTimeZone = currValue;
+
 		} else if ("mac_address".equals(currKey)) {
 			currMacAddr = currValue;
 
