@@ -18,7 +18,9 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
 import uwaterloo.mdc.etl.Discretize.DurationEunm;
+import uwaterloo.mdc.etl.Discretize.ReadingWithinVisitEnum;
 import uwaterloo.mdc.etl.Discretize.RelTimeNWeatherElts;
+import uwaterloo.mdc.etl.Discretize.VisitWithReadingEnum;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.model.UserVisitHierarchy;
@@ -48,9 +50,13 @@ public class RefineDocumentsFromWlan
 	protected String prevTimeZone;
 
 	private final Frequency[] relTimeWStats;
-	protected final Frequency visitNoVisitFreq = new Frequency();
+	protected final Frequency visitNoWLANFreq = new Frequency();
+	protected final Frequency WLANNoVisitFreq = new Frequency();
 	protected final SummaryStatistics durationStats = new SummaryStatistics();
 	protected final Frequency durationFreqs = new Frequency();
+//	protected final Frequency locationsPerUser = new Frequency();
+//	protected final Frequency meaningsPerUser = new Frequency();
+	
 
 	protected long prevTime = -1;
 	protected long prevprevtime;
@@ -236,7 +242,7 @@ public class RefineDocumentsFromWlan
 
 			if (docEndFile == null) {
 				// The end time of the visit was before the record time
-				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.R);
+				WLANNoVisitFreq.addValue(ReadingWithinVisitEnum.R);
 
 				// We are now tracking a new microlocation
 				forceStatsWrite();
@@ -244,7 +250,7 @@ public class RefineDocumentsFromWlan
 				// Don't even add this reading to stats
 				return;
 			} // else {
-			visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.B);
+			WLANNoVisitFreq.addValue(ReadingWithinVisitEnum.B);
 
 			String visitEndTimeStr = StringUtils.removeLastNChars(
 					docEndFile.getKey(), 5);
@@ -520,6 +526,8 @@ public class RefineDocumentsFromWlan
 			LinkedList<KeyValuePair<String, String>> microLocList = userHierarchy
 					.get(visitDir.getName());
 			if (microLocList == null) {
+				visitNoWLANFreq.addValue(VisitWithReadingEnum.V);
+				
 				File[] visitFiles = visitDir.listFiles();
 				assert visitFiles.length == 1 : "Processing a directory with stale files";
 				File microLocFile = visitFiles[0];
@@ -554,8 +562,6 @@ public class RefineDocumentsFromWlan
 				// Config.MISSING_VALUE_PLACEHOLDER,
 				// Config.MISSING_VALUE_PLACEHOLDER,
 
-				visitNoVisitFreq.addValue(Discretize.VisitReadingBothEnum.V);
-
 				startTime = Long.parseLong(startTimeStr);
 				endTime = Long.parseLong(endTimeStr);
 
@@ -563,6 +569,7 @@ public class RefineDocumentsFromWlan
 						malletDir, visitDir.getName(), microLocFile.getName()));
 
 			} else {
+				visitNoWLANFreq.addValue(VisitWithReadingEnum.B);
 				for (KeyValuePair<String, String> microLocDoc : microLocList) {
 					String[] instFields = tabSplit
 							.split(microLocDoc.getValue());
@@ -712,7 +719,8 @@ public class RefineDocumentsFromWlan
 	protected KeyValuePair<String, HashMap<String, Object>> getReturnValue()
 			throws Exception {
 		HashMap<String, Object> result = new HashMap<String, Object>();
-		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoVisitFreq);
+		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoWLANFreq);
+		result.put(Config.RESULT_KEY_WLAN_VISIT_BOTH_FREQ, WLANNoVisitFreq);
 		result.put(Config.RESULT_KEY_DURATION_FREQ, durationFreqs);
 		result.put(Config.RESULT_KEY_DURATION_SUMMARY, durationStats);
 		result.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ,

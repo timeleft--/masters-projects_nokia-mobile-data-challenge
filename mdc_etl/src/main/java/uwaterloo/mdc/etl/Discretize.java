@@ -39,11 +39,24 @@ public class Discretize {
 		};
 	};
 
-	public enum VisitReadingBothEnum {
+	public enum ReadingWithinVisitEnum {
 
-		V, // FREQ_VISIT_NOWLAN_VAR
-		R, // FREQ_NOVISIT_WLAN_VAR
-		B, // FREQ_VISIT_WLAN_VAR
+//		V, // Should be counted alone
+		R, // Reading with no Visit associated
+		B, // Both
+		Missing;
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString();
+			}
+		};
+	};
+	
+	public enum VisitWithReadingEnum {
+		V, // Visit with no Reading associated
+		B, // Both
 		Missing;
 		public String toString() {
 			if (this == Missing) {
@@ -120,7 +133,9 @@ public class Discretize {
 	static {
 		enumsMap.put(Config.RESULT_KEY_DURATION_FREQ, DurationEunm.values());
 		enumsMap.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ,
-				VisitReadingBothEnum.values());
+				VisitWithReadingEnum.values());
+		enumsMap.put(Config.RESULT_KEY_WLAN_VISIT_BOTH_FREQ,
+				ReadingWithinVisitEnum.values());
 
 		enumsMap.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ, DaysOfWeek.values());
 		enumsMap.put(Config.RESULT_KEY_HOUR_OF_DAY_FREQ, HourOfDay.values());

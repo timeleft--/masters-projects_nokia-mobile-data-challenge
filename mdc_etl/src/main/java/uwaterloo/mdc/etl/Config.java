@@ -41,13 +41,15 @@ public class Config {
 	public static final long TIME_SECONDS_IN_10MINS = 600;
 
 	public static final String RESULT_KEY_READING_NOVISIT_FREQ = "reading-no-visit-freq";
+	public static final String RESULT_KEY_VISIT_NOREADING_FREQ = "visit-no-reading-freq";
 
 	public static final String COLNAME_HOUR_OF_DAY = "hod";
 	public static final String COLNAME_DAY_OF_WEEK = "dow";
 
 	public static final String DEFAULT_TIME_ZONE = "-7200";
 
-	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-reading-both_freq";
+	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-with-wlan_freq";
+	public static final String RESULT_KEY_WLAN_VISIT_BOTH_FREQ = "wlan-with-visit_freq";
 	public static final String RESULT_KEY_DURATION_FREQ = "microloc-duration_freq";
 	public static final String RESULT_KEY_DURATION_SUMMARY = "microloc-duration_summary";
 	public static final String RESULT_KEY_DAY_OF_WEEK_FREQ = "day-of-week_freq";

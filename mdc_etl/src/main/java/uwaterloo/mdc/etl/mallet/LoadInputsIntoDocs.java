@@ -12,6 +12,8 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
+import uwaterloo.mdc.etl.Discretize.ReadingWithinVisitEnum;
+import uwaterloo.mdc.etl.Discretize.VisitWithReadingEnum;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.model.UserVisitsDocsHierarchy;
@@ -30,6 +32,7 @@ public abstract class LoadInputsIntoDocs
 	protected final UserVisitsDocsHierarchy userHierarchy;
 
 	protected final Frequency readingNoVisitStat = new Frequency();
+	protected final Frequency visitNoReadingStat = new Frequency();
 	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();;
 
 	// Trading memory for performance: removed and (incomplete) synchronization
@@ -50,6 +53,8 @@ public abstract class LoadInputsIntoDocs
 
 		statsMap.put(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
 				readingNoVisitStat);
+		statsMap.put(prependFileName(Config.RESULT_KEY_VISIT_NOREADING_FREQ),
+				visitNoReadingStat);
 		// This a special stats.. we's better handle it when getting the values
 		// from the map by recognizing this special frequency stats
 		// Discretize.enumsMap.add(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
@@ -224,10 +229,12 @@ public abstract class LoadInputsIntoDocs
 						endTimeInSecs);
 
 				if (doc == null) {
-					readingNoVisitStat
-							.addValue(Discretize.VisitReadingBothEnum.V);
+					visitNoReadingStat.addValue(VisitWithReadingEnum.V);
+//					readingNoVisitStat
+//							.addValue(Discretize.VisitReadingBothEnum.V);
 					continue;
-				}
+				} // else
+				visitNoReadingStat.addValue(VisitWithReadingEnum.B);
 
 				// IMPORTANT.. no synchronization here.. I depend on having
 				// one thread per user!
@@ -261,14 +268,14 @@ public abstract class LoadInputsIntoDocs
 				.getDocForEndTime(prevTimeColReading);
 		if (docBuilder == null) {
 			// This reading doesn't have an associated visit
-			readingNoVisitStat.addValue(Discretize.VisitReadingBothEnum.R);
+			readingNoVisitStat.addValue(ReadingWithinVisitEnum.R);
 			for (StringBuilder colBuilder : colOpResult.values()) {
 				// Discard the readings
 				colBuilder.setLength(0);
 			}
 
 		} else {
-			readingNoVisitStat.addValue(Discretize.VisitReadingBothEnum.B);
+			readingNoVisitStat.addValue(ReadingWithinVisitEnum.B);
 
 			for (StringBuilder colBuilder : colOpResult.values()) {
 				if (colBuilder.length() == 0) {

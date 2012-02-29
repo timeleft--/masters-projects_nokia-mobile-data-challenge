@@ -9,6 +9,8 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
+import uwaterloo.mdc.etl.Discretize.ReadingWithinVisitEnum;
+import uwaterloo.mdc.etl.Discretize.VisitWithReadingEnum;
 import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.util.ConcurrUtil;
@@ -87,7 +89,9 @@ public class PrintStatsCallable implements Callable<Void> {
 		}
 		if (valsArr == null) {
 			if (statKey.endsWith(Config.RESULT_KEY_READING_NOVISIT_FREQ)) {
-				valsArr = Discretize.VisitReadingBothEnum.values();
+				valsArr = ReadingWithinVisitEnum.values();
+			} else if (statKey.endsWith(Config.RESULT_KEY_VISIT_NOREADING_FREQ)) {
+				valsArr = VisitWithReadingEnum.values();
 			} else {
 				// leave it to cause a null pointer exception!
 			}
