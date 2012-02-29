@@ -1,4 +1,4 @@
-package uwaterloo.mdc.etl;
+package uwaterloo.mdc.etl.weather;
 
 import java.io.File;
 import java.io.IOException;

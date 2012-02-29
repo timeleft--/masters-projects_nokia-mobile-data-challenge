@@ -51,12 +51,12 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 
 	@Override
 	protected void delimiterProcedure() {
-		try {
+//		try {
 			Long longVal = new Long(currValue);
 			colOpResult.put(currKey, longVal);
-		} catch (NumberFormatException e) {
-			colOpResult.put(currKey, -1L);
-		}
+//		} catch (NumberFormatException e) {
+//			colOpResult.put(currKey, -1L);
+//		}
 	}
 
 	@Override

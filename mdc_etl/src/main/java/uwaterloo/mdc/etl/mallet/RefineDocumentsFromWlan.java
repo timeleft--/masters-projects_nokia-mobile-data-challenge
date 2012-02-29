@@ -49,7 +49,7 @@ public class RefineDocumentsFromWlan
 	protected static final String COLNAME_TEMPRATURE = " tmp";
 	protected static final String COLNAME_SKY = " sky";
 	
-	protected static final String COLNAME_PLACE_MEANING = " place";
+//	protected static final String COLNAME_PLACE_MEANING = " place";
 
 	protected String prevTimeZone;
 
@@ -696,11 +696,11 @@ public class RefineDocumentsFromWlan
 	}
 
 	protected Enum<?>[] getRelTimeAndWeather(String startTimeStr,
-			String timeZoneStr) {
+			String timeZoneStr) throws NumberFormatException, IOException {
 		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
 	}
 
-	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr) {
+	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr) throws IOException {
 		Enum<?>[] result = Discretize.relTimeNWeather(startTime,
 				Config.DEFAULT_TIME_ZONE);
 
@@ -754,6 +754,8 @@ public class RefineDocumentsFromWlan
 				relTimeWStats[RelTimeNWeatherElts.TEMPRATURE.ordinal()]);
 		result.put(Config.RESULT_KEY_SKY_FREQ,
 				relTimeWStats[RelTimeNWeatherElts.SKY.ordinal()]);
+		result.put(Config.RESULT_KEY_LOCATIONS_PER_USER, locationsPerUser);
+		result.put(Config.RESULT_KEY_MEANINGS_PER_USER, meaningsPerUser);
 		return new KeyValuePair<String, HashMap<String, Object>>(userid, result);
 	}
 

@@ -58,6 +58,8 @@ public class Config {
 	public static final String RESULT_KEY_HOUR_OF_DAY_FREQ = "hour-of-day_freq";
 	public static final String RESULT_KEY_TEMPRATURE_FREQ = "temprature_freq";
 	public static final String RESULT_KEY_SKY_FREQ = "sky_freq";
+	public static final String RESULT_KEY_LOCATIONS_PER_USER = "location-ids_freq";
+	public static final String RESULT_KEY_MEANINGS_PER_USER = "location-meanings_freq";
 
 	public static final long ERROR_START_END_TIMES = 60 * 3;
 
@@ -65,8 +67,12 @@ public class Config {
 
 	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
 
+
+
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
 	public static Properties placeLabels;
+	
+	public static String PATH_WEATHER= "D:\\datasets\\weather-underground";
 	
 }

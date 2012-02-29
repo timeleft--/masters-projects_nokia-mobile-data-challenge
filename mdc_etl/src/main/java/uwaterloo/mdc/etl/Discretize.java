@@ -1,10 +1,14 @@
 package uwaterloo.mdc.etl;
 
+import java.io.IOException;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.TimeZone;
+
+import uwaterloo.mdc.etl.weather.WeatherUnderGroundDiscretize;
+import uwaterloo.mdc.etl.weather.WeatherUnderGroundDiscretize.Weather;
 
 public class Discretize {
 	private Discretize() {
@@ -110,6 +114,7 @@ public class Discretize {
 		// TODO?
 		F, // Freezing
 		C, // Cold
+		M, // Mild
 		W, // Warm
 		H, // Hot
 		Missing;
@@ -123,16 +128,14 @@ public class Discretize {
 	};
 
 	public enum Sky {
-
-		// TODO
 		S, // Sunny
 		C, // Cloudy
 		O, // Overcast
-		D, // Drizzle
-		R, // Raininng
-		F, // Flurry
-		X, // TODO Snow what??
-		T, // Thunderstorm
+		F, // Fog or Haze (low visibilty)
+		L, // Light Event
+		N, // Normal Event
+		H, // Heavy Event
+		T, // sTorm
 		Missing;
 		public String toString() {
 			if (this == Missing) {
@@ -197,31 +200,42 @@ public class Discretize {
 													// LaMarca et al.
 	}
 
-	public static Enum<?>[] relTimeNWeather(long startTime, String timeZoneStr) {
+	public static Enum<?>[] relTimeNWeather(long startTime, String timeZoneStr) throws IOException {
 		Enum<?>[] result = new Enum[RelTimeNWeatherElts.values().length];
 
-		char timeZonePlusMinus = '+';
-		if (timeZoneStr.charAt(0) == '-') {
-			timeZonePlusMinus = '-';
-		}
-		// Offset in hours (from seconds)
-		int timeZoneOffset = 0;
-		timeZoneOffset = Integer.parseInt(timeZoneStr.substring(1)) / 3600;
-		TimeZone timeZone = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
-				+ timeZoneOffset);
-
-		startTime = startTime * 1000;
-		Calendar calendar = Calendar.getInstance(timeZone);
-		calendar.setTimeInMillis(startTime);
+//		char timeZonePlusMinus = '+';
+//		if (timeZoneStr.charAt(0) == '-') {
+//			timeZonePlusMinus = '-';
+//		}
+//		// Offset in hours (from seconds)
+//		int timeZoneOffset = 0;
+//		timeZoneOffset = Integer.parseInt(timeZoneStr.substring(1)) / 3600;
+//		TimeZone timeZone = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
+//				+ timeZoneOffset);
+//
+//		Calendar calendar = Calendar.getInstance(timeZone);
+		
+		int timeZoneOffset =Integer.parseInt(timeZoneStr);
+		
+		Calendar calendar = new GregorianCalendar();
+		calendar.setTimeInMillis((startTime + timeZoneOffset) * 1000);
 
 		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
 				.get(Calendar.HOUR_OF_DAY)];
 		result[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()] = DaysOfWeek.values()[calendar
 				.get(Calendar.DAY_OF_WEEK) - 1];
 
-		// TODO get weather
-		result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Temprature.Missing;
-		result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Missing;
+		if(timeZoneOffset == -Config.TIME_SECONDS_IN_HOUR
+				|| timeZoneOffset == -2 * Config.TIME_SECONDS_IN_HOUR){
+			Weather weather = WeatherUnderGroundDiscretize.getWeather(startTime, timeZoneOffset);
+			result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = weather.temprature;
+			result[RelTimeNWeatherElts.SKY.ordinal()] = weather.sky;
+		} else {
+			//TODO: get the weather from elsewhere!
+			result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Temprature.Missing;
+			result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Missing;
+		}
+		
 
 		return result;
 	}
