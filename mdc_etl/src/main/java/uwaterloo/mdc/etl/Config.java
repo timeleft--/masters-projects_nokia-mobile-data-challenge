@@ -42,8 +42,8 @@ public class Config {
 			Config.TIME_SECONDS_IN_DAY).length();
 	public static final long TIME_SECONDS_IN_10MINS = 600;
 
-	public static final String RESULT_KEY_READING_NOVISIT_FREQ = "reading-no-visit-freq";
-	public static final String RESULT_KEY_VISIT_NOREADING_FREQ = "visit-no-reading-freq";
+	public static final String RESULT_KEY_READING_NOVISIT_FREQ = "reading-within-visit-freq";
+	public static final String RESULT_KEY_VISIT_NOREADING_FREQ = "visit-with-reading-freq";
 
 	public static final String COLNAME_HOUR_OF_DAY = "hod";
 	public static final String COLNAME_DAY_OF_WEEK = "dow";
