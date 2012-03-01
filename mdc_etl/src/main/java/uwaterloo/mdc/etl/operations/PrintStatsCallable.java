@@ -2,7 +2,6 @@ package uwaterloo.mdc.etl.operations;
 
 import java.io.Writer;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.concurrent.Callable;
 
 import org.apache.commons.math.stat.Frequency;
@@ -95,17 +94,22 @@ public class PrintStatsCallable implements Callable<Void> {
 				valsArr = VisitWithReadingEnum.values();
 			} else if (statKey.equals(Config.RESULT_KEY_LOCATIONS_PER_USER)) {
 				// The user location has no preset value enumeration
-				// So use the values in the frequency
-				valsArr = new String[stat.getUniqueCount()];
-				Iterator<Comparable<?>> valsIter = stat.valuesIterator();
-				int i=0;
-				while(valsIter.hasNext()){
-					valsArr[i] = valsIter.next();
-					++i;
+				// So use the values of user 14 who has 54 distinct ids
+				valsArr = new String[55];
+				for(int i = 0; i<valsArr.length; ++i){
+					valsArr[i] = userid + "_" + (i+1);
 				}
+				
 			} else {
 				// For now, leave it to cause a null pointer exception! But could fall back to 
-				// using the values in the frequency only as above
+				// using the values in the frequency only as below
+//				valsArr = new String[stat.getUniqueCount()];
+//				Iterator<Comparable<?>> valsIter = stat.valuesIterator();
+//				int i=0;
+//				while(valsIter.hasNext()){
+//					valsArr[i] = valsIter.next();
+//					++i;
+//				}
 			}
 		}
 

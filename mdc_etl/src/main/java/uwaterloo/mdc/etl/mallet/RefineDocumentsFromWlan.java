@@ -34,7 +34,6 @@ public class RefineDocumentsFromWlan
 		CallableOperation<KeyValuePair<String, HashMap<String, Object>>, String> {
 	protected static Writer LOG;
 
-
 	// protected static final String WLAN_NOVISITS_FILENAME =
 	// "wlan_no-visit.csv";
 
@@ -48,8 +47,8 @@ public class RefineDocumentsFromWlan
 
 	protected static final String COLNAME_TEMPRATURE = " tmp";
 	protected static final String COLNAME_SKY = " sky";
-	
-//	protected static final String COLNAME_PLACE_MEANING = " place";
+
+	// protected static final String COLNAME_PLACE_MEANING = " place";
 
 	private final Frequency[] relTimeWStats;
 	protected final Frequency visitNoWLANFreq = new Frequency();
@@ -64,7 +63,7 @@ public class RefineDocumentsFromWlan
 	protected long currTime;
 	protected File currStartDir;
 	protected File prevStartDir;
-	
+
 	protected String prevTimeZone;
 
 	// It seems unuseful: protected long recordDeltaT;
@@ -85,7 +84,6 @@ public class RefineDocumentsFromWlan
 	protected SummaryStatistics pendingStats;
 
 	protected final UserVisitHierarchy userVisits;
-
 
 	@SuppressWarnings("deprecation")
 	public RefineDocumentsFromWlan(Object master, char delimiter, String eol,
@@ -413,14 +411,19 @@ public class RefineDocumentsFromWlan
 			doc.append(docFields[0]).append('\t').append(docFields[1])
 					.append('\t').append(docFields[2]).append('\t')
 					.append(mean).append('\t').append(stder);
-		} else if (docFields.length == 10 && pendingEndTims == lastEndTime) {
+		} else if (docFields.length == 10) {
 			// This is the case when the document was already updated
 			// because of an earlier change of mac address, but then
 			// the last few readings needs some place to go. (Why?)
-
 			log("\tINFO\tForced to override stats for visit: "
 					+ docStartDir.getAbsolutePath() + File.separator
 					+ lastTimeSlot.getKey());
+			if (pendingEndTims != lastEndTime) {
+				log("\tERROR\tAlso overriding with data from a different end time. Expected "
+						+ lastEndTime
+						+ " but the values belong to "
+						+ pendingEndTims);
+			}
 			if (apsStat != pendingStats) {
 				double avg = apsStat.getMean() * apsStat.getN()
 						+ pendingStats.getMean() * pendingStats.getN();
@@ -439,11 +442,16 @@ public class RefineDocumentsFromWlan
 					.append('\t').append(docFields[2]).append('\t')
 					.append(mean).append('\t').append(stder);
 		} else {
+			String badFileName = visitHierarchy.remove(0).getKey();
+			assert badFileName == lastTimeSlot.getKey();
+			
 			log("\tERROR\tRemoving a file with " + docFields.length
 					+ " columns: " + docStartDir.getAbsolutePath()
-					+ File.separator + lastTimeSlot.getKey());
-			visitHierarchy.remove(0);
-
+					+ File.separator + badFileName);
+			
+			File microLocFile = FileUtils.getFile(docStartDir.getAbsolutePath(), badFileName);
+			deleteMicroLocFile(microLocFile);  
+			
 			// For the next visit
 			frequentlySeenAps = new Frequency();
 			apsStat = new SummaryStatistics();
@@ -483,7 +491,7 @@ public class RefineDocumentsFromWlan
 		int m = 0;
 		while (macIter.hasNext() && m < Config.NUM_FREQ_MAC_ADDRS_TO_KEEP) {
 			++m;
-			result.append(" M").append(macIter.next().toString());
+			result.append(" W").append(macIter.next().toString());
 		}
 
 		frequentlySeenAps = new Frequency();
@@ -577,8 +585,10 @@ public class RefineDocumentsFromWlan
 						malletDir, visitDir.getName(), microLocFile.getName()));
 
 				locationsPerUser.addValue(microLocInst);
-				String label = Config.placeLabels.getProperty(microLocInst, "0");
-				meaningsPerUser.addValue(PlaceLabelsEnum.values()[Integer.parseInt(label)]);
+				String label = Config.placeLabels
+						.getProperty(microLocInst, "0");
+				meaningsPerUser.addValue(PlaceLabelsEnum.values()[Integer
+						.parseInt(label)]);
 
 			} else {
 				visitNoWLANFreq.addValue(VisitWithReadingEnum.B);
@@ -609,31 +619,33 @@ public class RefineDocumentsFromWlan
 						// Long.parseLong(instFields[2].substring(0,
 						// instFields[2].length() - 1));
 
-						// FIXMED: Comment out! This case shouldn't happen any
-						// more.. it was a bug
-						// } else if (instFields.length == 3) {
-						//
-						// startTime = Long.parseLong(instFields[1]);
-						// endTime = Long.parseLong(instFields[2]);
-						// // Assume default timezone
-						// Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
-						// startTime, Config.DEFAULT_TIME_ZONE);
-						//
-						// malletInst = String
-						// .format(malletInstFormat,
-						// instFields[1],
-						// instFields[2],
-						// instFields[0],
+					} else if (instFields.length == 3) {
+						// FIXMED: This case shouldn't happen
+						log("\tINFO\tFile with 3 columns: "
+								+ visitDir.getAbsolutePath() + File.separator
+								+ microLocDoc.getKey() + " - Values: "
+								+ instFields);
+						startTime = Long.parseLong(instFields[1]);
+						endTime = Long.parseLong(instFields[2]);
+						// Assume default timezone
+						Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(
+								startTime, Config.DEFAULT_TIME_ZONE);
+						String relTimeWeather = String
+								.format(relTimeWeatherFormat,
+										relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+												.ordinal()],
+										relTimeAndWeather[RelTimeNWeatherElts.SKY
+												.ordinal()]);
+
+						malletInst = String.format(malletInstFormat,
+								instFields[1], instFields[2], instFields[0],
+								"", relTimeWeather);
 						// Config.MISSING_VALUE_PLACEHOLDER,
 						// Config.MISSING_VALUE_PLACEHOLDER,
-						// relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
-						// .ordinal()],
-						// relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
-						// .ordinal()],
-						// relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
-						// .ordinal()],
-						// relTimeAndWeather[RelTimeNWeatherElts.SKY
-						// .ordinal()]);
 
 					} else if (instFields.length == 1) {
 						// This is the case of a file that was loaded into the
@@ -670,15 +682,17 @@ public class RefineDocumentsFromWlan
 						// Config.MISSING_VALUE_PLACEHOLDER,
 
 					} else {
-						log("\tERROR\tDiscarding file with wrong number of columns: "
-								+ visitDir.getAbsolutePath()
-								+ File.separator
-								+ microLocDoc.getKey());
+						File badFile = FileUtils.getFile(visitDir.getAbsolutePath(),
+								 microLocDoc.getKey());
+						log("\tERROR\tDiscarding file with "
+								+ instFields.length + " columns: "
+								+ badFile.getAbsolutePath());
+						deleteMicroLocFile(badFile);
 						continue;
 					}
 
 					locationId = instFields[0];
-				
+
 					writeMallet(startTime, endTime, malletInst,
 							FileUtils.getFile(malletDir, visitDir.getName(),
 									microLocDoc.getKey()));
@@ -686,15 +700,17 @@ public class RefineDocumentsFromWlan
 				}
 
 				locationsPerUser.addValue(locationId);
-				
-				String labelStr = Config.placeLabels.getProperty(locationId, "0");
-				PlaceLabelsEnum meaning = PlaceLabelsEnum.values()[Integer.parseInt(labelStr)];
+
+				String labelStr = Config.placeLabels.getProperty(locationId,
+						"0");
+				PlaceLabelsEnum meaning = PlaceLabelsEnum.values()[Integer
+						.parseInt(labelStr)];
 				meaningsPerUser.addValue(meaning);
-//I don't think the class should be part of the 					
-//				if(!PlaceLabelsEnum.Missing.equals(meaning)){
-//					malletInst += COLNAME_PLACE_MEANING + meaning;
-//				}
-				
+				// I don't think the class should be part of the
+				// if(!PlaceLabelsEnum.Missing.equals(meaning)){
+				// malletInst += COLNAME_PLACE_MEANING + meaning;
+				// }
+
 			}
 		}
 	}
@@ -704,7 +720,8 @@ public class RefineDocumentsFromWlan
 		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
 	}
 
-	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr) throws IOException {
+	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr)
+			throws IOException {
 		Enum<?>[] result = Discretize.relTimeNWeather(startTime,
 				Config.DEFAULT_TIME_ZONE);
 
@@ -715,10 +732,18 @@ public class RefineDocumentsFromWlan
 		return result;
 	}
 
+	
 	protected void writeMallet(long startTime, long endTime, String malletInst,
 			File malletFile) throws IOException {
 		// Calculate duration
 		long durationInSec = endTime - startTime;
+
+		if (durationInSec <= 0) {
+			log("\tWARNING\tRemoving a file with negative duration ("
+					+ durationInSec + " secs): " + malletFile.getAbsolutePath());
+			deleteMicroLocFile(malletFile);
+			return;
+		}
 
 		// TODONE: do we need to discritize even more or less?
 		DurationEunm durDiscrete = Discretize.duration(durationInSec);
@@ -734,6 +759,16 @@ public class RefineDocumentsFromWlan
 		FileUtils.writeStringToFile(malletFile, malletInst, Config.OUT_CHARSET);
 		delta = System.currentTimeMillis() - delta;
 		PerfMon.increment(TimeMetrics.IO_WRITE, delta);
+	}
+
+	private void deleteMicroLocFile(File malletFile) throws IOException {
+		File visitDir = malletFile.getParentFile();
+		malletFile.delete();
+		if (visitDir.listFiles() == null || visitDir.listFiles().length == 0) {
+			log("\tINFO\tRemoving a visit dir with no more microlocations: "
+					+ visitDir.getAbsolutePath());
+			visitDir.delete();
+		}
 	}
 
 	@Override

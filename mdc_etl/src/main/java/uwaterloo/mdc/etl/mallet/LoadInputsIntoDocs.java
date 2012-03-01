@@ -3,6 +3,7 @@ package uwaterloo.mdc.etl.mallet;
 import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
@@ -35,7 +36,7 @@ public abstract class LoadInputsIntoDocs
 	protected final Frequency visitNoReadingStat = new Frequency();
 	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();
 
-	protected long currTime;
+	protected long currTime = 0;
 
 	// Trading memory for performance: removed and (incomplete) synchronization
 	// But we need a global place for storing all labels, to avoid duplocates
@@ -84,6 +85,9 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected void delimiterProcedure() {
+		if(getColsToSkip().contains(currKey)){
+			return;
+		}
 
 		if (currKey.equals(getTimeColumnName())) {
 			// calculateDeltaTime
@@ -107,16 +111,18 @@ public abstract class LoadInputsIntoDocs
 				// System.out.println("blah.. just making sure of something!");
 			}
 			prevTimeColReading = currTime;
-//		} else if ("tz".equals(currKey)) {
-//			// We keep times in GMT.. nothing to do!
+			currTime = 0;
+
 		} else {
-			Enum<?> discreteVal = getValueToWrite();
+			Comparable<?> discreteVal = getValueToWrite();
 			appendCurrValToCol(discreteVal);
 			addCurrValToStats(discreteVal);
 		}
 	}
 
-	protected void appendCurrValToCol(Enum<?> discreteVal) {
+	protected abstract HashSet<String> getColsToSkip();
+
+	protected void appendCurrValToCol(Comparable<?> discreteVal) {
 		// Don't put place holder values (like 0) in the continuous stat
 		if(Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
 			return;
@@ -127,9 +133,12 @@ public abstract class LoadInputsIntoDocs
 				.append(getValueToWrite());
 	}
 
-	protected void addCurrValToStats(Enum<?> discreteVal) {
+	protected void addCurrValToStats(Comparable<?> discreteVal) {
 		Object statsObj = statsMap.get(prependFileName(currKey));
-		
+		if(statsObj == null){
+			// In case of values that are not enums
+			return;
+		}
 		((Frequency) statsObj).addValue(discreteVal);
 
 		if (keepContinuousStatsForColumn(currKey) 
@@ -317,7 +326,7 @@ public abstract class LoadInputsIntoDocs
 		return result;
 	}
 
-	protected abstract Enum<?> getValueToWrite();
+	protected abstract Comparable<?> getValueToWrite();
 
 	protected abstract boolean keepContinuousStatsForColumn(String colName);
 }

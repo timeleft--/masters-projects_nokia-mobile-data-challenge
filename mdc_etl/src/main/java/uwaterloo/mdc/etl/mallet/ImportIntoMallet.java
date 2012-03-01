@@ -142,7 +142,7 @@ class ImportIntoMallet {
 						File userDir = FileUtils.getFile(dataRootFile, userid);
 
 						FileFilter dataFileFilter = new FileFilter() {
-
+							
 							@Override
 							public boolean accept(File file) {
 								String fName = file.getName();
@@ -150,9 +150,16 @@ class ImportIntoMallet {
 										.equals(fName))
 										&& !("wlan.csv".equals(fName))
 										&& !(fName
-												.startsWith("visit_sequence_"));
-								// Testing
-								result = "calllog.csv".equals(fName);
+												.startsWith("visit_sequence_"))
+										&& !("contacts.csv".equals(fName))
+								&& !("gsm.csv".equals(fName))
+								&& !("media.csv".equals(fName))
+								&& !("process.csv".equals(fName));
+//								// Testing
+//								result = "calllog.csv".equals(fName);
+////								result |= "accel.csv".equals(fName);
+//								result |= "application.csv".equals(fName);
+//								result |= "bluetooth.csv".equals(fName);
 								return result;
 							}
 						};

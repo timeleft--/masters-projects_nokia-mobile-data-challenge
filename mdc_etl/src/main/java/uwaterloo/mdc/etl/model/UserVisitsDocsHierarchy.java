@@ -29,11 +29,8 @@ public class UserVisitsDocsHierarchy {
 			Long key = Long.parseLong(StringUtils.removeLastNChars(visitDir.getName(), 1));
 			
 			KeyValuePair<Long, ArrayList<KeyValuePair<Long, StringBuilder>>> microLocsList = new KeyValuePair<Long, ArrayList<KeyValuePair<Long, StringBuilder>>>(key, new ArrayList<KeyValuePair<Long, StringBuilder>>());
-			visitsList.add(microLocsList);
-			visitTrust.add(StringUtils.charAtFromEnd(visitDir.getName(), 1));
 			ArrayList<Character> microLocTrust = new ArrayList<Character>();
-			microLocTrustMap.put(key, microLocTrust); 
-					
+			
 			File[] visitEndFiles = visitDir.listFiles();
 //Unnecessary Overhead		Arrays.sort(visitEndFiles);
 			for (int j = visitEndFiles.length - 1; j >= 0; --j) {
@@ -42,6 +39,17 @@ public class UserVisitsDocsHierarchy {
 						 Long.parseLong(StringUtils.removeLastNChars(visitEndFiles[j].getName(),5)), new StringBuilder()));
 				microLocTrust.add(StringUtils.charAtFromEnd(visitEndFiles[j].getName(),5));
 			}
+			if(microLocsList.getValue().size() == 0){
+				// No files inside any more.. just a sanity check! 
+				// Because the data is insane: user 039 has visits that start and end in different timezones
+				// Actually too many to be those that started just before the day light saving time
+				continue; 
+			}
+			visitsList.add(microLocsList);
+			visitTrust.add(StringUtils.charAtFromEnd(visitDir.getName(), 1));
+			
+			microLocTrustMap.put(key, microLocTrust); 
+
 		}
 
 	}

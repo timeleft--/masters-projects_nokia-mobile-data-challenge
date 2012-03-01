@@ -1,6 +1,7 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
+import java.util.HashSet;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
@@ -80,6 +81,17 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 				LoadInputsIntoDocs_calllog.CallDur.values());
 	}
 
+	private static HashSet<String> colsToSkip = new HashSet<String>();
+	static {
+		// We don't care about the status of sms
+		colsToSkip.add("status");
+		// And the region being called as well
+		colsToSkip.add("number_prefix");
+		// We also don't track repeated numbers (TODO: yet??)
+		colsToSkip.add("number");
+
+	}
+
 	public LoadInputsIntoDocs_calllog(Object master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
 			throws Exception {
@@ -93,48 +105,42 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 
 	@Override
 	protected void delimiterProcedure() {
-
-		if ("status".equals(currKey) || "number_prefix".equals(currKey)
-				|| "number".equals(currKey)) {
-			// We don't care about the status of sms
-			// And the region being called as well
-			// We also don't bother about tracking repeated numbers (TODO:
-			// yet??)
-		} else {
-
-			// Timezone preceeds time only in this stupid case!
-
-			if ("tz".equals(currKey)) {
-				// We keep times in GMT..
-				currTime = Long.parseLong(currValue);
-			} else if (currKey.equals(getTimeColumnName())) {
-				// calculateDeltaTime
-
-				currTime += Long.parseLong(currValue);
-
-				if (prevTimeColReading != null) {
-					long deltaTime = currTime - prevTimeColReading;
-					if (deltaTime != 0) {
-						// We have finished readings for one time slot.. write
-						// them
-						onTimeChanged();
-					}
-
-				} else {
-					// meaningless, because it is the first record
-					// System.out.println("blah.. just making sure of something!");
-				}
-				prevTimeColReading = currTime;
-				// } else if ("tz".equals(currKey)) {
-				// // We keep times in GMT.. nothing to do!
-			} else {
-				super.delimiterProcedure();
-			}
+		// Timezone preceeds time only in this stupid case!
+		if (getColsToSkip().contains(currKey)) {
+			return;
 		}
+
+		if ("tz".equals(currKey)) {
+			// We keep times in GMT..
+			currTime = Long.parseLong(currValue);
+		} else if (currKey.equals(getTimeColumnName())) {
+			// calculateDeltaTime
+
+			currTime += Long.parseLong(currValue);
+
+			if (prevTimeColReading != null) {
+				long deltaTime = currTime - prevTimeColReading;
+				if (deltaTime != 0) {
+					// We have finished readings for one time slot.. write
+					// them
+					onTimeChanged();
+				}
+
+			} else {
+				// meaningless, because it is the first record
+				// System.out.println("blah.. just making sure of something!");
+			}
+			prevTimeColReading = currTime;
+			// } else if ("tz".equals(currKey)) {
+			// // We keep times in GMT.. nothing to do!
+		} else {
+			super.delimiterProcedure();
+		}
+
 	}
 
 	@Override
-	protected Enum<?> getValueToWrite() {
+	protected Comparable<?> getValueToWrite() {
 		Enum<?> result = null;
 		if ("direction".equals(currKey)) {
 			if ("Incoming".equals(currValue)) {
@@ -192,6 +198,11 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 			result = true;
 		}
 		return result;
+	}
+
+	@Override
+	protected HashSet<String> getColsToSkip() {
+		return colsToSkip;
 	}
 
 }
