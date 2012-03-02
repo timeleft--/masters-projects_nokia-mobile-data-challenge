@@ -51,7 +51,7 @@ public class RefineDocumentsFromWlan
 	// protected static final String COLNAME_PLACE_MEANING = " place";
 
 	private final Frequency[] relTimeWStats;
-	protected final Frequency visitNoWLANFreq = new Frequency();
+	protected final Frequency visitWithWLANFreq = new Frequency();
 	protected final Frequency WLANWithinVisitFreq = new Frequency();
 	protected final SummaryStatistics durationStats = new SummaryStatistics();
 	protected final Frequency durationFreqs = new Frequency();
@@ -67,7 +67,7 @@ public class RefineDocumentsFromWlan
 	protected String prevTimeZone;
 
 	// It seems unuseful: protected long recordDeltaT;
-	protected HashMap<String, Integer> prevAccessPoints = null;
+	protected LinkedList<HashMap<String, Integer>> prevAccessPointsHistory = new LinkedList<HashMap<String, Integer>>();
 	protected HashMap<String, Integer> currAccessPoints;
 	protected String currMacAddr = null;
 
@@ -123,7 +123,7 @@ public class RefineDocumentsFromWlan
 			currTime += Long.parseLong(currValue);
 			if (currTime != prevTime) {
 				// A new set of AP sightings (record)
-				if (prevTime != -1 && prevAccessPoints != null) {
+				if (prevTime != -1 && !prevAccessPointsHistory.isEmpty()) {
 					// This is not the first sighting in the file:
 					// // 1) Update the time delta
 					// recordDeltaT = currTime - prevTime;
@@ -145,7 +145,9 @@ public class RefineDocumentsFromWlan
 				prevTimeZone = currValue;
 				prevStartDir = currStartDir;
 				currStartDir = userVisitsHier.getVisitDirForEndTime(currTime);
-				prevAccessPoints = currAccessPoints;
+				if (currAccessPoints != null) {
+					prevAccessPointsHistory.addFirst(currAccessPoints);
+				}
 				currAccessPoints = new HashMap<String, Integer>();
 
 			}
@@ -172,11 +174,21 @@ public class RefineDocumentsFromWlan
 
 		assert prevTime != -1;
 		if (prevStartDir == null) {
+			// DEBUG mesasge below shows that this happens when there is nothing
+			// pending 99.99999% of the time
+			// TODO: act when it happen when there is something pending
+			// log("\tDEBUG\tRecent readings were outside of visits - pendingEndTime: "
+			// + pendingEndTims
+			// + ", apStats.n: "
+			// + apsStat.getN()
+			// + ", frequentlySeen.uniqueCount: "
+			// + frequentlySeenAps.getUniqueCount());
 			// The previous readings, if any are not part of any visit
 			// discard them by returning false
 			// But first prepare for the next visit
 			frequentlySeenAps = new Frequency();
 			apsStat = new SummaryStatistics();
+			prevAccessPointsHistory.clear();
 			pendingEndTims = -1;
 			return false;
 		}
@@ -198,21 +210,39 @@ public class RefineDocumentsFromWlan
 			// Already happens inside force
 			// //We are now tracking a new microlocation
 			// apsStat = new SummaryStatistics();
+			// prevAccessPointsHistory.clear();
 			return true;
 		} // else {
 			// Try to refine from WiFi
-		long macAddressesDistance = Discretize.getRxDistance(currAccessPoints,
-				prevAccessPoints);
-		// TODO: Consider using a Sigmoid function instead of simple
-		// TODO: do we need to do anything with recordDelta?
-		significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
+		double macAddressesDistance = 0;
+		for (HashMap<String, Integer> prevAccessPoints : prevAccessPointsHistory) {
+			long distance = Discretize.getRxDistance(currAccessPoints,
+					prevAccessPoints);
+			if (distance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD) {
+				// This transition alone is enough to indicate a change in
+				// microloc
+				significantChangeInLoc = true;
+				break;
+			}
+			macAddressesDistance += distance;
+		}
+
+		if (!significantChangeInLoc) {
+			// No one transition was enough to indicate change in microloc
+			// So we need to see if the movement was all within a small
+			// area, or was along a trajectory: we take the avg distance
+			macAddressesDistance /= prevAccessPointsHistory.size();
+			// TODO: Consider using a Sigmoid function instead of simple
+			// TODO: do we need to do anything with recordDelta?
+			significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
+		}
 
 		if (!significantChangeInLoc) {
 			// keep tracking the readings... we are still
 			// at the same micro location
 			return true;
 		} // else {
-		// A change in microlocation happened
+			// A change in microlocation happened
 
 		long delta;
 
@@ -259,7 +289,7 @@ public class RefineDocumentsFromWlan
 
 		if (docEndFile == null) {
 			// The end time of the visit was before the record time
-			WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.R);
+			// WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.R);
 			if (pendingEndTims != -1) {
 				// Some readings were still pending from that visit
 				forceStatsWrite();
@@ -268,10 +298,11 @@ public class RefineDocumentsFromWlan
 			frequentlySeenAps = new Frequency();
 			apsStat = new SummaryStatistics();
 			pendingEndTims = -1;
+			prevAccessPointsHistory.clear();
 			// Don't even add this reading to stats
 			return false;
 		} // else {
-		WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.B);
+			// WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.B);
 
 		String visitEndTimeStr = StringUtils.removeLastNChars(
 				docEndFile.getKey(), 5);
@@ -403,6 +434,7 @@ public class RefineDocumentsFromWlan
 			// We are now tracking a new microlocation
 			apsStat = new SummaryStatistics();
 			frequentlySeenAps = new Frequency();
+			prevAccessPointsHistory.clear();
 		}
 		// There is always something pending.. that's right!
 		// In case this is the last microlocation
@@ -506,6 +538,7 @@ public class RefineDocumentsFromWlan
 			frequentlySeenAps = new Frequency();
 			apsStat = new SummaryStatistics();
 			pendingEndTims = -1;
+			prevAccessPointsHistory.clear();
 
 			return;
 		}
@@ -531,6 +564,7 @@ public class RefineDocumentsFromWlan
 		// For the next visit
 		frequentlySeenAps = new Frequency();
 		apsStat = new SummaryStatistics();
+		prevAccessPointsHistory.clear();
 		pendingEndTims = -1;
 	}
 
@@ -593,7 +627,7 @@ public class RefineDocumentsFromWlan
 			LinkedList<KeyValuePair<String, String>> microLocList = userVisitsMap
 					.get(visitDir.getName());
 			if (microLocList == null) {
-				visitNoWLANFreq.addValue(VisitWithReadingEnum.V);
+				visitWithWLANFreq.addValue(VisitWithReadingEnum.V);
 
 				File[] visitFiles = visitDir.listFiles();
 				assert visitFiles.length == 1 : "Processing a directory with stale files";
@@ -639,7 +673,7 @@ public class RefineDocumentsFromWlan
 						.parseInt(label)]);
 
 			} else {
-				visitNoWLANFreq.addValue(VisitWithReadingEnum.B);
+				visitWithWLANFreq.addValue(VisitWithReadingEnum.B);
 				String locationId = null;
 				for (KeyValuePair<String, String> microLocDoc : microLocList) {
 					String[] instFields = tabSplit
@@ -689,7 +723,6 @@ public class RefineDocumentsFromWlan
 						malletInst = String.format(malletInstFormat,
 								instFields[1], instFields[2], instFields[0],
 								"", relTimeWeather);
-	
 
 					} else if (instFields.length == 1) {
 						// This is the case of a file that was loaded into the
@@ -821,7 +854,7 @@ public class RefineDocumentsFromWlan
 	protected KeyValuePair<String, HashMap<String, Object>> getReturnValue()
 			throws Exception {
 		HashMap<String, Object> result = new HashMap<String, Object>();
-		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoWLANFreq);
+		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitWithWLANFreq);
 		result.put(Config.RESULT_KEY_WLAN_VISIT_BOTH_FREQ, WLANWithinVisitFreq);
 		result.put(Config.RESULT_KEY_DURATION_FREQ, durationFreqs);
 		result.put(Config.RESULT_KEY_DURATION_SUMMARY, durationStats);
