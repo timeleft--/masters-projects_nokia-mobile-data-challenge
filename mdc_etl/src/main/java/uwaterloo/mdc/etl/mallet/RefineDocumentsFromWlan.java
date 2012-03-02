@@ -52,7 +52,7 @@ public class RefineDocumentsFromWlan
 
 	private final Frequency[] relTimeWStats;
 	protected final Frequency visitNoWLANFreq = new Frequency();
-	protected final Frequency WLANNoVisitFreq = new Frequency();
+	protected final Frequency WLANWithinVisitFreq = new Frequency();
 	protected final SummaryStatistics durationStats = new SummaryStatistics();
 	protected final Frequency durationFreqs = new Frequency();
 	protected final Frequency locationsPerUser = new Frequency();
@@ -129,7 +129,14 @@ public class RefineDocumentsFromWlan
 					// recordDeltaT = currTime - prevTime;
 
 					// 2) Act upon the difference between it and the prev
-					refineDocument();
+					if (refineDocument()) {
+						// This indicates that the current readings should
+						// be retained.. otherwise, discard
+						apsStat.addValue(currAccessPoints.size());
+						for (String macAddr : currAccessPoints.keySet()) {
+							frequentlySeenAps.addValue(macAddr);
+						}
+					}
 				}
 
 				// Make the current ones be the prev.s
@@ -150,33 +157,45 @@ public class RefineDocumentsFromWlan
 			currMacAddr = currValue;
 
 		} else if ("rx".equals(currKey)) {
-			currAccessPoints.put(currMacAddr, new Integer(currValue));
-
+			if (currStartDir == null) {
+				// store the reading only if it is within some visit
+				WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.R);
+			} else {
+				WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.B);
+				currAccessPoints.put(currMacAddr, new Integer(currValue));
+			}
 		}
 
 	}
 
-	protected void refineDocument() throws IOException {
+	protected boolean refineDocument() throws IOException {
 
 		assert prevTime != -1;
-
-		long delta;
-
-		KeyValuePair<String, String> docEndFile = null;
-		LinkedList<KeyValuePair<String, String>> microLocDocList = null;
-		int newDocIx = -1;
+		if (prevStartDir == null) {
+			// The previous readings, if any are not part of any visit
+			// discard them by returning false
+			// But first prepare for the next visit
+			frequentlySeenAps = new Frequency();
+			apsStat = new SummaryStatistics();
+			pendingEndTims = -1;
+			return false;
+		}
 
 		boolean significantChangeInLoc;
 		// Determine significant changes from Visits
-		if (currStartDir == null && prevStartDir == null) {
-			significantChangeInLoc = false;
-		} else if (currStartDir != null && prevStartDir != null) {
+		if (currStartDir == null) {
+			// && prevStartDir == null) {
+			// one is null the other is not
+			significantChangeInLoc = true; // false;
+		} else {
+			// if (currStartDir != null && prevStartDir != null) {
 			significantChangeInLoc = !(currStartDir.getName()
 					.equals(prevStartDir.getName()));
-		} else {
-			// one is null the other is not
-			significantChangeInLoc = true;
 		}
+		// else {
+		// // one is null the other is not
+		// significantChangeInLoc = true;
+		// }
 
 		if (significantChangeInLoc) {
 			// Change on the Visit level
@@ -184,247 +203,265 @@ public class RefineDocumentsFromWlan
 			// Already happens inside force
 			// //We are now tracking a new microlocation
 			// apsStat = new SummaryStatistics();
-		} else {
+			return true;
+		} // else {
 			// Try to refine from WiFi
-			long macAddressesDistance = Discretize.getRxDistance(
-					currAccessPoints, prevAccessPoints);
-			// TODO: Consider using a Sigmoid function instead of simple
-			// TODO: do we need to do anything with recordDelta?
-			significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
+		long macAddressesDistance = Discretize.getRxDistance(currAccessPoints,
+				prevAccessPoints);
+		// TODO: Consider using a Sigmoid function instead of simple
+		// TODO: do we need to do anything with recordDelta?
+		significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
+		// }
+
+		if (!significantChangeInLoc) {
+			// keep tracking the readings... we are still
+			// at the same micro location
+			return true;
 		}
 
-		if (significantChangeInLoc) {
-			// FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
-			// File userDir = FileUtils.getFile(outPath, userid);
-			// for (File visitDir : userDir.listFiles(timeFilter)) {
-			// int visitStartTime = Integer.parseInt(StringUtils
-			// .removeLastNChars(visitDir.getName(), 1));
-			// if (visitStartTime > prevTime) {
-			// break;
-			// } else {
-			// docStartDir = visitDir;
-			// }
-			// }
-			//
-			if (prevStartDir != null) {
-				microLocDocList = userVisitsMap.get(prevStartDir.getName());
-				if (microLocDocList == null) {
-					// Lazy init
-					microLocDocList = new LinkedList<KeyValuePair<String, String>>();
-					userVisitsMap.put(prevStartDir.getName(), microLocDocList);
+		// else {
+		// A change in microlocation happened
 
-					File[] microLocFiles = prevStartDir.listFiles();
-					Arrays.sort(microLocFiles);
-					for (int i = microLocFiles.length - 1; i >= 0; --i) {
-						// Descending traversal
-						delta = System.currentTimeMillis();
-						String placeid = FileUtils
-								.readFileToString(microLocFiles[i]);
-						delta = System.currentTimeMillis() - delta;
-						PerfMon.increment(TimeMetrics.IO_READ, delta);
+		long delta;
 
-						microLocDocList.add(new KeyValuePair<String, String>(
-								microLocFiles[i].getName(), placeid));
-					}
-				}
+		KeyValuePair<String, String> docEndFile = null;
+		LinkedList<KeyValuePair<String, String>> microLocDocList = null;
+		int newDocIx = -1;
 
-				newDocIx = 0;
-				for (KeyValuePair<String, String> visit : microLocDocList) {
-					int locEndTime = Integer.parseInt(StringUtils
-							.removeLastNChars(visit.getKey(), 5));
-					locEndTime += Discretize.getStartEndTimeError(StringUtils
-							.charAtFromEnd(visit.getKey(), 5));
-					if (locEndTime < prevTime) {
-						break;
-					} else {
-						docEndFile = visit;
-						// The new doc will be for a time slot that is
-						// before
-						// the end of the visit, so it should be
-						// placed after in the descending list
-						++newDocIx;
-					}
+		// FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
+		// File userDir = FileUtils.getFile(outPath, userid);
+		// for (File visitDir : userDir.listFiles(timeFilter)) {
+		// int visitStartTime = Integer.parseInt(StringUtils
+		// .removeLastNChars(visitDir.getName(), 1));
+		// if (visitStartTime > prevTime) {
+		// break;
+		// } else {
+		// docStartDir = visitDir;
+		// }
+		// }
+		//
+		// if (prevStartDir != null) {
+		microLocDocList = userVisitsMap.get(prevStartDir.getName());
+		if (microLocDocList == null) {
+			// Lazy init
+			microLocDocList = new LinkedList<KeyValuePair<String, String>>();
+			userVisitsMap.put(prevStartDir.getName(), microLocDocList);
+
+			File[] microLocFiles = prevStartDir.listFiles();
+			Arrays.sort(microLocFiles);
+			for (int i = microLocFiles.length - 1; i >= 0; --i) {
+				// Descending traversal
+				delta = System.currentTimeMillis();
+				String placeid = FileUtils.readFileToString(microLocFiles[i]);
+				delta = System.currentTimeMillis() - delta;
+				PerfMon.increment(TimeMetrics.IO_READ, delta);
+
+				microLocDocList.add(new KeyValuePair<String, String>(
+						microLocFiles[i].getName(), placeid));
+			}
+		}
+
+		newDocIx = 0;
+		for (KeyValuePair<String, String> visit : microLocDocList) {
+			int locEndTime = Integer.parseInt(StringUtils.removeLastNChars(
+					visit.getKey(), 5));
+			locEndTime += Discretize.getStartEndTimeError(StringUtils
+					.charAtFromEnd(visit.getKey(), 5));
+			if (locEndTime < prevTime) {
+				break;
+			} else {
+				docEndFile = visit;
+				// The new doc will be for a time slot that is
+				// before the end of the visit, so it should be
+				// placed after in the descending list
+				++newDocIx;
+			}
+		}
+		// }
+
+		if (docEndFile == null) {
+			// The end time of the visit was before the record time
+			WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.R);
+			if (pendingEndTims != -1) {
+				// Whatever that means, if it ever happens!!
+				forceStatsWrite();
+			}
+			// Prepare for the next visit
+			frequentlySeenAps = new Frequency();
+			apsStat = new SummaryStatistics();
+			pendingEndTims = -1;
+			// Don't even add this reading to stats
+			return false;
+		} // else {
+		WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.B);
+
+		String visitEndTimeStr = StringUtils.removeLastNChars(
+				docEndFile.getKey(), 5);
+
+		long visitEndTime = Long.parseLong(visitEndTimeStr);
+		if (pendingEndTims != -1 && pendingEndTims != visitEndTime) {
+			// log("\tWARNING\tShould have appended the stat for visit ending: "
+			// + pendingEndTims);
+			forceStatsWrite();
+		}
+
+		// Do not split if the reading is towards the end of the
+		// visit, because this will result in a fragmented
+		// document whose WLAN readings are not specified
+
+		// But this will cause a BLAH.. I dunno!
+		// // We also provision for this happening when curr is
+		// // processed, thus the check for end-curr
+		// // Sooner or later, in both cases, force will be used
+		// && (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)
+		if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)) {
+
+			long microlocStartTime = prevprevtime;
+			if (microlocStartTime == -1) {
+				// This prev time is the first
+				String visitStartDirName = prevStartDir.getName();
+				microlocStartTime = Long.parseLong(StringUtils
+						.removeLastNChars(visitStartDirName, 1));
+			}
+
+			String placeId = docEndFile.getValue();
+			int tabIx = placeId.indexOf('\t');
+			if (tabIx != -1) {
+				// This is not the first time the visit is split
+				placeId = placeId.substring(0, tabIx);
+				if (placeId.indexOf('\t') != -1) {
+					log("\tINFO\tOverriding stats for visit: "
+							+ prevStartDir.getAbsolutePath() + File.separator
+							+ docEndFile.getKey());
 				}
 			}
 
-			if (docEndFile == null) {
-				// The end time of the visit was before the record time
-				WLANNoVisitFreq.addValue(ReadingWithinVisitEnum.R);
+			Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
+					prevTimeZone);
 
-				// We are now tracking a new microlocation
-				forceStatsWrite();
-
-				// Don't even add this reading to stats
-				return;
-			} // else {
-			WLANNoVisitFreq.addValue(ReadingWithinVisitEnum.B);
-
-			String visitEndTimeStr = StringUtils.removeLastNChars(
-					docEndFile.getKey(), 5);
-
-			long visitEndTime = Long.parseLong(visitEndTimeStr);
-			if (pendingEndTims != -1 && pendingEndTims != visitEndTime) {
-				// log("\tWARNING\tShould have appended the stat for visit ending: "
-				// + pendingEndTims);
-				forceStatsWrite();
-			}
-
-			// Do not split if the reading is towards the end of the
-			// visit, because this will result in a fragmented
-			// document whose WLAN readings are not specified
-
-			// But this will cause a BLAH.. I dunno!
-			// // We also provision for this happening when curr is
-			// // processed, thus the check for end-curr
-			// // Sooner or later, in both cases, force will be used
-			// && (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)
-			if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)) {
-
-				long microlocStartTime = prevprevtime;
-				if (microlocStartTime == -1) {
-					// This prev time is the first
-					String visitStartDirName = prevStartDir.getName();
-					microlocStartTime = Long.parseLong(StringUtils
-							.removeLastNChars(visitStartDirName, 1));
-				}
-
-				String placeId = docEndFile.getValue();
-				int tabIx = placeId.indexOf('\t');
-				if (tabIx != -1) {
-					// This is not the first time the visit is split
-					placeId = placeId.substring(0, tabIx);
-					if (placeId.indexOf('\t') != -1) {
-						log("\tINFO\tOverriding stats for visit: "
-								+ prevStartDir.getAbsolutePath()
-								+ File.separator + docEndFile.getKey());
-					}
-				}
-
-				Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
-						prevTimeZone);
-
-				String doc1Key = Long.toString(prevTime)
-						+ Config.TIMETRUSTED_WLAN + ".csv";
-				long doc1EndTime = prevTime;
-				long doc1StartTime = microlocStartTime;
+			String doc1Key = Long.toString(prevTime) + Config.TIMETRUSTED_WLAN
+					+ ".csv";
+			long doc1EndTime = prevTime;
+			long doc1StartTime = microlocStartTime;
+			if (doc1StartTime >= doc1EndTime) {
+				doc1StartTime -= Discretize.getStartEndTimeError(StringUtils
+						.charAtFromEnd(prevStartDir.getName(), 1));
 				if (doc1StartTime >= doc1EndTime) {
-					doc1StartTime -= Discretize
-							.getStartEndTimeError(StringUtils.charAtFromEnd(
-									prevStartDir.getName(), 1));
-					if (doc1StartTime >= doc1EndTime) {
-						log("\tWARNING\tThis split will be later discarded because previous time shouldn't belong to the visit ("
-								+ prevStartDir.getAbsolutePath()
-								+ File.separator
-								+ doc1Key
-								+ "), even with added error! PrevTime: "
-								+ prevTime
-								+ " - microLocStart: "
-								+ microlocStartTime);
-					} else {
-						log("\tDEBUG\tThe previous time shouldn't have belonged to the visit ("
-								+ prevStartDir.getAbsolutePath()
-								+ File.separator
-								+ doc1Key
-								+ "), but we add some error! PrevTime: "
-								+ prevTime
-								+ " - microLocStart: "
-								+ microlocStartTime);
-					}
+					log("\tWARNING\tThis split will be later discarded because previous time shouldn't belong to the visit ("
+							+ prevStartDir.getAbsolutePath()
+							+ File.separator
+							+ doc1Key
+							+ "), even with added error! PrevTime: "
+							+ prevTime
+							+ " - microLocStart: "
+							+ microlocStartTime);
+				} else {
+					log("\tDEBUG\tThe previous time shouldn't have belonged to the visit ("
+							+ prevStartDir.getAbsolutePath()
+							+ File.separator
+							+ doc1Key
+							+ "), but we add some error! PrevTime: "
+							+ prevTime
+							+ " - microLocStart: "
+							+ microlocStartTime);
 				}
-
-				StringBuilder doc1 = new StringBuilder();
-				doc1.append(placeId)
-						.append('\t')
-						.append(doc1StartTime)
-						.append('\t')
-						.append(doc1EndTime)
-						.append('\t')
-						.append(Long.toString(Math.round(apsStat.getMean())))
-						.append('\t')
-						.append(Long.toString(Math.round(apsStat
-								.getStandardDeviation())));
-
-				doc1.append('\t').append(consumeFrequentlySeenMacAddrs());
-
-				doc1.append('\t')
-						.append(relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
-								.ordinal()])
-						.append('\t')
-						.append(relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
-								.ordinal()])
-						.append('\t')
-						.append(relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
-								.ordinal()])
-						.append('\t')
-						.append(relTimeAndWeather[RelTimeNWeatherElts.SKY
-								.ordinal()]);
-
-				KeyValuePair<String, String> newDoc = new KeyValuePair<String, String>(
-						doc1Key, doc1.toString());
-				microLocDocList.add(newDocIx, newDoc);
-
-				long doc2StartTime = currTime;
-				long doc2EndTime = visitEndTime;
-				if (doc2StartTime >= doc2EndTime) {
-					long addedError = Discretize
-							.getStartEndTimeError(StringUtils.charAtFromEnd(
-									docEndFile.getKey(), 5));
-					if (doc2StartTime - doc2EndTime <= addedError) {
-						doc2EndTime += addedError;
-						log("\tDEBUG\tThe current time shouldn't have belonged to the visit ("
-								+ prevStartDir.getAbsolutePath()
-								+ File.separator
-								+ docEndFile.getKey()
-								+ "), but we add some error! Currtime: "
-								+ currTime + " - VisitEnd: " + visitEndTimeStr);
-					} else {
-						// This shouldn't happen because this will be a chang of location on the visit level
-						doc2StartTime = prevTime + 1;
-						log("\tERROR\tThe current time shouldn't belong to the visit ("
-								+ prevStartDir.getAbsolutePath()
-								+ File.separator
-								+ docEndFile.getKey()
-								+ "), even with the added error! Currtime: "
-								+ currTime + " - VisitEnd: " + visitEndTimeStr);
-						//TODO: What can we do about that? Why does it happen?
-					}
-					
-				}
-
-				StringBuilder doc2 = new StringBuilder();
-				doc2.append(placeId).append('\t').append(doc2StartTime)
-						.append('\t').append(doc2EndTime);
-
-				docEndFile.setValue(doc2.toString());
-
-				// We are now tracking a new microlocation
-				apsStat = new SummaryStatistics();
-				// frequentlySeenAps = new Frequency();
-
-				// There is always something pending.. that's right!
 			}
-			// And in case this is the last microlocation
-			// in the visit, but the time stayed there
-			// is longer than WiFi sensing time, we have
-			// to force the addition of the stats, in case
-			// it doesn't get naturally added.
-			// pendingEndTims = visitEndTime;
-			// } else {
-			// We have pending statistics that are not written to the
-			// microlocation document. Keep track of them, and next
-			// iteration force will be called if needed.
-			pendingEndTims = visitEndTime;
-			pendingVisitDir = prevStartDir;
-			pendingStats = apsStat;
 
-			// Always something pending }
+			StringBuilder doc1 = new StringBuilder();
+			doc1.append(placeId)
+					.append('\t')
+					.append(doc1StartTime)
+					.append('\t')
+					.append(doc1EndTime)
+					.append('\t')
+					.append(Long.toString(Math.round(apsStat.getMean())))
+					.append('\t')
+					.append(Long.toString(Math.round(apsStat
+							.getStandardDeviation())));
 
+			doc1.append('\t').append(consumeFrequentlySeenMacAddrs());
+
+			doc1.append('\t')
+					.append(relTimeAndWeather[RelTimeNWeatherElts.DAY_OF_WEEK
+							.ordinal()])
+					.append('\t')
+					.append(relTimeAndWeather[RelTimeNWeatherElts.HOUR_OF_DAY
+							.ordinal()])
+					.append('\t')
+					.append(relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
+							.ordinal()])
+					.append('\t')
+					.append(relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
+
+			KeyValuePair<String, String> newDoc = new KeyValuePair<String, String>(
+					doc1Key, doc1.toString());
+			microLocDocList.add(newDocIx, newDoc);
+
+			long doc2StartTime = currTime;
+			long doc2EndTime = visitEndTime;
+			if (doc2StartTime >= doc2EndTime) {
+				long addedError = Discretize.getStartEndTimeError(StringUtils
+						.charAtFromEnd(docEndFile.getKey(), 5));
+				if (doc2StartTime - doc2EndTime <= addedError) {
+					doc2EndTime += addedError;
+					log("\tDEBUG\tThe current time shouldn't have belonged to the visit ("
+							+ prevStartDir.getAbsolutePath()
+							+ File.separator
+							+ docEndFile.getKey()
+							+ "), but we add some error! Currtime: "
+							+ currTime
+							+ " - VisitEnd: " + visitEndTimeStr);
+				} else {
+					// This shouldn't happen because this will be a chang of
+					// location on the visit level
+					doc2StartTime = prevTime + 1;
+					// I don't think there's anything wrong.. next time
+					// currStartDir will be different from prevStartDir
+					// And thus the stats will not be forced into this
+					// visit, but rather
+					// written into the next visit. TODO: Verify.
+					// //TODONOT: What can we do about that? Why does it
+					// happen?
+					// log("\tERROR\tThe current time shouldn't belong to the visit ("
+					// + prevStartDir.getAbsolutePath()
+					// + File.separator
+					// + docEndFile.getKey()
+					// + "), even with the added error! Currtime: "
+					// + currTime + " - VisitEnd: " + visitEndTimeStr);
+
+				}
+
+			}
+
+			StringBuilder doc2 = new StringBuilder();
+			doc2.append(placeId).append('\t').append(doc2StartTime)
+					.append('\t').append(doc2EndTime);
+
+			docEndFile.setValue(doc2.toString());
+
+			// We are now tracking a new microlocation
+			apsStat = new SummaryStatistics();
+			frequentlySeenAps = new Frequency();
+
+			// There is always something pending.. that's right!
 		}
+		// And in case this is the last microlocation
+		// in the visit, but the time stayed there
+		// is longer than WiFi sensing time, we have
+		// to force the addition of the stats, in case
+		// it doesn't get naturally added.
+		// pendingEndTims = visitEndTime;
+		// } else {
+		// We have pending statistics that are not written to the
+		// microlocation document. Keep track of them, and next
+		// iteration force will be called if needed.
+		pendingEndTims = visitEndTime;
+		pendingVisitDir = prevStartDir;
+		pendingStats = apsStat;
 
-		apsStat.addValue(currAccessPoints.size());
-		for (String macAddr : currAccessPoints.keySet()) {
-			frequentlySeenAps.addValue(macAddr);
-		}
+		// Always something pending }
+
+		return true;
 	}
 
 	protected void forceStatsWrite() throws IOException {
@@ -538,7 +575,7 @@ public class RefineDocumentsFromWlan
 		lastTimeSlot.setValue(doc.toString());
 
 		// For the next visit
-		// frequentlySeenAps = new Frequency();
+		frequentlySeenAps = new Frequency();
 		apsStat = new SummaryStatistics();
 		pendingEndTims = -1;
 	}
@@ -553,7 +590,7 @@ public class RefineDocumentsFromWlan
 			result.append(" W").append(macIter.next().toString());
 		}
 
-		frequentlySeenAps = new Frequency();
+		// frequentlySeenAps = new Frequency();
 
 		return result.toString();
 	}
@@ -841,7 +878,7 @@ public class RefineDocumentsFromWlan
 			throws Exception {
 		HashMap<String, Object> result = new HashMap<String, Object>();
 		result.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ, visitNoWLANFreq);
-		result.put(Config.RESULT_KEY_WLAN_VISIT_BOTH_FREQ, WLANNoVisitFreq);
+		result.put(Config.RESULT_KEY_WLAN_VISIT_BOTH_FREQ, WLANWithinVisitFreq);
 		result.put(Config.RESULT_KEY_DURATION_FREQ, durationFreqs);
 		result.put(Config.RESULT_KEY_DURATION_SUMMARY, durationStats);
 		result.put(Config.RESULT_KEY_DAY_OF_WEEK_FREQ,

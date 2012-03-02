@@ -226,6 +226,10 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected void writeResults() throws Exception {
+		if(userid == null){
+			// this file is empty
+			return;
+		}
 		// We do a check on all the files for stats gathering
 		File userDir = FileUtils.getFile(outPath, userid);
 
