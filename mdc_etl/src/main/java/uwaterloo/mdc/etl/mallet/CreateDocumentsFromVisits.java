@@ -26,10 +26,6 @@ import uwaterloo.mdc.etl.operations.CallableOperation;
  */
 public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 
-	//
-	// protected long recordStartTime = -1;
-	// protected long recordEndTime = -1;
-
 	@SuppressWarnings("deprecation")
 	public CreateDocumentsFromVisits(ImportIntoMallet master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
@@ -51,12 +47,8 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 
 	@Override
 	protected void delimiterProcedure() {
-		// try {
 		Long longVal = new Long(currValue);
 		colOpResult.put(currKey, longVal);
-		// } catch (NumberFormatException e) {
-		// colOpResult.put(currKey, -1L);
-		// }
 	}
 
 	@Override
@@ -67,7 +59,6 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		// startTime += colOpResult.get("tz_start");
 		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
-			// startTime = addError(startTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String startTimeDirName = startTime.toString() + trustIndicator;
@@ -78,7 +69,6 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		// endTime += colOpResult.get("tz_end");
 		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
-			// endTime = addError(endTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String endTimeFileName = endTime.toString() + trustIndicator + ".csv";
@@ -128,13 +118,5 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		// Nothing
 		return userid;
 	}
-	// After a second thought.. no! Let's not change the names of the folders
-	// private long addError(long reading) {
-	// // TODONOT:Add a Gaussian Error of standard deviation of 10 minutes
-	// // since this time is not trusted; the start time is trusted if there
-	// // are location data points in the period of 10 minutes before the
-	// // arrival time (0=false, 1=true).
-	//
-	// return reading;
-	// }
+
 }

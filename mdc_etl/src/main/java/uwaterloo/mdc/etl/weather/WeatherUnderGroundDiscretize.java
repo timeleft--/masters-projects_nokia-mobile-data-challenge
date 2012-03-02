@@ -21,16 +21,6 @@ public class WeatherUnderGroundDiscretize {
 
 	private static Pattern commaSeparator = Pattern.compile("\\,");
 
-	// private static long[] dayStartTimes;
-	// private static File weatherDir;
-	// public static void init(){
-	// weatherDir = FileUtils.getFile(Config.PATH_WEATHER);
-	// File[] dayFileArr = weatherDir.listFiles();
-	// dayStartTimes = dayF
-	// for(File dayFile: ){
-	// dayStartTimes
-	// }
-	// }
 	public static class Weather {
 		// Some files (e.g: LSGG_1304308800-1304395199.csv) have no data!
 		public Sky sky = Sky.Missing;
@@ -42,20 +32,9 @@ public class WeatherUnderGroundDiscretize {
 		Weather result = new Weather();
 
 		long milliTime = unixTimeGMT * 1000;
-		// milliTime += cest.getOffset(milliTime);
 
 		Calendar cal = new GregorianCalendar();
 		cal.setTimeInMillis(milliTime);
-
-		// cal.set(Calendar.HOUR_OF_DAY, 0);
-		// cal.set(Calendar.MINUTE, 0);
-		// cal.set(Calendar.SECOND, 0);
-		// long dayStartSec = cal.getTimeInMillis() / 1000;
-		//
-		// cal.set(Calendar.HOUR_OF_DAY, 23);
-		// cal.set(Calendar.MINUTE, 59);
-		// cal.set(Calendar.SECOND, 59);
-		// long dayEndSec = cal.getTimeInMillis() / 1000;
 
 		Calendar startEndCal = new GregorianCalendar(cal.get(Calendar.YEAR),
 				cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH));
@@ -65,8 +44,6 @@ public class WeatherUnderGroundDiscretize {
 
 		String filename = "LSGG_" + dayStartSec + "-" + dayEndSec + ".csv";
 
-		// cal.setTimeInMillis(milliTime + tz.getOffset(milliTime));
-		// Minus because the offset is BLAAAAAAAHH 
 		cal.setTimeInMillis(milliTime - timeZoneOffset);
 
 		File dayFile = FileUtils.getFile(Config.PATH_WEATHER, filename);
@@ -91,7 +68,6 @@ public class WeatherUnderGroundDiscretize {
 				// TODO: Consider gaussian mixture instead of thresholds
 				if(tempC == null) {
 					continue; // get from next record
-//					result.temprature = Temprature.Missing;
 				} else if (tempC < -10) {
 					result.temprature = Temprature.F;
 				} else if (tempC < 5) {
@@ -105,6 +81,7 @@ public class WeatherUnderGroundDiscretize {
 				}
 
 				// TODO?: take visibility into account in Sky
+				
 				// According to Forecast Description Phrases from
 				// http://www.wunderground.com/weather/api/d/documentation.html
 				if (weatherFields[11].isEmpty()){

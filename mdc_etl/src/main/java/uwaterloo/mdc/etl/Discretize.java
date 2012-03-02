@@ -146,14 +146,6 @@ public class Discretize {
 		};
 	};
 
-	// Not comparable with other enums
-	// public enum Missing{
-	// placeHolder;
-	// public String toString() {
-	// return Config.MISSING_VALUE_PLACEHOLDER;
-	// };
-	// }
-
 	static {
 		enumsMap.put(Config.RESULT_KEY_DURATION_FREQ, DurationEunm.values());
 		enumsMap.put(Config.RESULT_KEY_VISIT_WLAN_BOTH_FREQ,
@@ -204,18 +196,6 @@ public class Discretize {
 	public static Enum<?>[] relTimeNWeather(long startTimeGMT, String timeZoneStr) throws IOException {
 		Enum<?>[] result = new Enum[RelTimeNWeatherElts.values().length];
 
-//		char timeZonePlusMinus = '+';
-//		if (timeZoneStr.charAt(0) == '-') {
-//			timeZonePlusMinus = '-';
-//		}
-//		// Offset in hours (from seconds)
-//		int timeZoneOffset = 0;
-//		timeZoneOffset = Integer.parseInt(timeZoneStr.substring(1)) / 3600;
-//		TimeZone timeZone = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
-//				+ timeZoneOffset);
-//
-//		Calendar calendar = Calendar.getInstance(timeZone);
-		
 		int timeZoneOffset =Integer.parseInt(timeZoneStr);
 		
 		Calendar calendar = new GregorianCalendar();
@@ -258,25 +238,12 @@ public class Discretize {
 			}
 			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
 					.abs(prevRSSI - currRSSI));
-
-			// macAddressesDistance = macAddressesDistance + ((prevRSSI-currRSSI
-			// ) ^ 2);
-			// macAddressesDistance = macAddressesDistance +
-			// Math.abs(prevRSSI-currRSSI);
 		}
 		for (Integer prevRssi : prevAccessPoints.values()) {
 			// This AP is not visible any more, so add its RSSI
 			displacementRelAp += Discretize.estimateApDistanceLaMarca(Math
 					.abs((Config.WLAN_RSSI_MIN - prevRssi)));
-
-			// macAddressesDistance = macAddressesDistance +
-			// ((Config.WLAN_RSSI_MIN - prevRssi) ^ 2);
-			// macAddressesDistance = macAddressesDistance +
-			// Math.abs(Config.WLAN_RSSI_MIN - prevRssi);
 		}
-
-		// macAddressesDistance = Math.round(Math.log10(macAddressesDistance));
-		// macAddressesDistance = Math.round(Math.sqrt(macAddressesDistance));
 
 		// The macAddrDistance is the average of the displacement according to
 		// each AP

@@ -43,9 +43,6 @@ public abstract class LoadInputsIntoDocs
 	private static Map<String, String> shortColLabelsMap = Collections
 			.synchronizedMap(new HashMap<String, String>());
 
-	// private Map<String, String> shortColLabelsMap = new HashMap<String,
-	// String>();
-
 	@SuppressWarnings("deprecation")
 	public LoadInputsIntoDocs(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
@@ -58,11 +55,6 @@ public abstract class LoadInputsIntoDocs
 				readingNoVisitStat);
 		statsMap.put(prependFileName(Config.RESULT_KEY_VISIT_NOREADING_FREQ),
 				visitNoReadingStat);
-		// This a special stats.. we's better handle it when getting the values
-		// from the map by recognizing this special frequency stats
-		// Discretize.enumsMap.add(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
-		// Discretize.VisitReadingBothEnum.values());
-
 	}
 
 	protected String prependFileName(String orig) {
@@ -90,8 +82,6 @@ public abstract class LoadInputsIntoDocs
 		}
 
 		if (currKey.equals(getTimeColumnName())) {
-			// calculateDeltaTime
-
 			currTime = Long.parseLong(currValue);
 			
 		} else if ("tz".equals(currKey)) {
@@ -102,14 +92,9 @@ public abstract class LoadInputsIntoDocs
 				long deltaTime = currTime - prevTimeColReading;
 				if (deltaTime != 0) {
 					// We have finished readings for one time slot.. write
-					// them
 					onTimeChanged();
 				}
-
-			} else {
-				// meaningless, because it is the first record
-				// System.out.println("blah.. just making sure of something!");
-			}
+			} 
 			prevTimeColReading = currTime;
 			currTime = 0;
 
@@ -249,8 +234,6 @@ public abstract class LoadInputsIntoDocs
 
 				if (doc == null) {
 					visitNoReadingStat.addValue(VisitWithReadingEnum.V);
-//					readingNoVisitStat
-//							.addValue(Discretize.VisitReadingBothEnum.V);
 					continue;
 				} // else
 				visitNoReadingStat.addValue(VisitWithReadingEnum.B);
@@ -272,14 +255,10 @@ public abstract class LoadInputsIntoDocs
 
 	@Override
 	protected void eoFileProcedure() {
-
 		if (prevTimeColReading != null) {
 			// The records of the last time
 			onTimeChanged();
-		} else {
-			// meaningless, because it is the first record
-			// System.out.println("blah.. just making sure of something!");
-		}
+		} 
 	}
 
 	protected final void onTimeChanged() {

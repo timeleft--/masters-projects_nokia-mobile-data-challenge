@@ -44,8 +44,7 @@ public class TimeSearch<V> {
 		KeyValuePair<Long, V> result = findExact(timeList, time, ascending);
 		
 		if(result == null && !exact){
-//			assert start==end;
-			
+		
 			int miusOrPlus = (startOrEnd? -1: +1); 
 			
 			int i = start;

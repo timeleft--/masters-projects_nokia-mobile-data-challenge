@@ -184,7 +184,6 @@ public class RefineDocumentsFromWlan
 		boolean significantChangeInLoc;
 		// Determine significant changes from Visits
 		if (currStartDir == null) {
-			// && prevStartDir == null) {
 			// one is null the other is not
 			significantChangeInLoc = true; // false;
 		} else {
@@ -192,10 +191,6 @@ public class RefineDocumentsFromWlan
 			significantChangeInLoc = !(currStartDir.getName()
 					.equals(prevStartDir.getName()));
 		}
-		// else {
-		// // one is null the other is not
-		// significantChangeInLoc = true;
-		// }
 
 		if (significantChangeInLoc) {
 			// Change on the Visit level
@@ -211,15 +206,12 @@ public class RefineDocumentsFromWlan
 		// TODO: Consider using a Sigmoid function instead of simple
 		// TODO: do we need to do anything with recordDelta?
 		significantChangeInLoc = (macAddressesDistance >= Config.WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD);
-		// }
 
 		if (!significantChangeInLoc) {
 			// keep tracking the readings... we are still
 			// at the same micro location
 			return true;
-		}
-
-		// else {
+		} // else {
 		// A change in microlocation happened
 
 		long delta;
@@ -227,20 +219,6 @@ public class RefineDocumentsFromWlan
 		KeyValuePair<String, String> docEndFile = null;
 		LinkedList<KeyValuePair<String, String>> microLocDocList = null;
 		int newDocIx = -1;
-
-		// FilenameFilter timeFilter = new TimeFilenameFilter(prevTime);
-		// File userDir = FileUtils.getFile(outPath, userid);
-		// for (File visitDir : userDir.listFiles(timeFilter)) {
-		// int visitStartTime = Integer.parseInt(StringUtils
-		// .removeLastNChars(visitDir.getName(), 1));
-		// if (visitStartTime > prevTime) {
-		// break;
-		// } else {
-		// docStartDir = visitDir;
-		// }
-		// }
-		//
-		// if (prevStartDir != null) {
 		microLocDocList = userVisitsMap.get(prevStartDir.getName());
 		if (microLocDocList == null) {
 			// Lazy init
@@ -283,7 +261,7 @@ public class RefineDocumentsFromWlan
 			// The end time of the visit was before the record time
 			WLANWithinVisitFreq.addValue(ReadingWithinVisitEnum.R);
 			if (pendingEndTims != -1) {
-				// Whatever that means, if it ever happens!!
+				// Some readings were still pending from that visit
 				forceStatsWrite();
 			}
 			// Prepare for the next visit
@@ -308,12 +286,6 @@ public class RefineDocumentsFromWlan
 		// Do not split if the reading is towards the end of the
 		// visit, because this will result in a fragmented
 		// document whose WLAN readings are not specified
-
-		// But this will cause a BLAH.. I dunno!
-		// // We also provision for this happening when curr is
-		// // processed, thus the check for end-curr
-		// // Sooner or later, in both cases, force will be used
-		// && (visitEndTime - currTime >= Config.WLAN_DELTAT_MIN)
 		if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)) {
 
 			long microlocStartTime = prevprevtime;
@@ -415,22 +387,11 @@ public class RefineDocumentsFromWlan
 					// This shouldn't happen because this will be a chang of
 					// location on the visit level
 					doc2StartTime = prevTime + 1;
-					// I don't think there's anything wrong.. next time
+					// However there won't be anything wrong.. next time
 					// currStartDir will be different from prevStartDir
 					// And thus the stats will not be forced into this
-					// visit, but rather
-					// written into the next visit. TODO: Verify.
-					// //TODONOT: What can we do about that? Why does it
-					// happen?
-					// log("\tERROR\tThe current time shouldn't belong to the visit ("
-					// + prevStartDir.getAbsolutePath()
-					// + File.separator
-					// + docEndFile.getKey()
-					// + "), even with the added error! Currtime: "
-					// + currTime + " - VisitEnd: " + visitEndTimeStr);
-
+					// visit, but rather written into the next visit.
 				}
-
 			}
 
 			StringBuilder doc2 = new StringBuilder();
@@ -442,24 +403,19 @@ public class RefineDocumentsFromWlan
 			// We are now tracking a new microlocation
 			apsStat = new SummaryStatistics();
 			frequentlySeenAps = new Frequency();
-
-			// There is always something pending.. that's right!
 		}
-		// And in case this is the last microlocation
+		// There is always something pending.. that's right!
+		// In case this is the last microlocation
 		// in the visit, but the time stayed there
 		// is longer than WiFi sensing time, we have
 		// to force the addition of the stats, in case
 		// it doesn't get naturally added.
-		// pendingEndTims = visitEndTime;
-		// } else {
-		// We have pending statistics that are not written to the
+		// To have pending statistics that are not written to the
 		// microlocation document. Keep track of them, and next
 		// iteration force will be called if needed.
 		pendingEndTims = visitEndTime;
 		pendingVisitDir = prevStartDir;
 		pendingStats = apsStat;
-
-		// Always something pending }
 
 		return true;
 	}
@@ -526,9 +482,7 @@ public class RefineDocumentsFromWlan
 
 				mean = Long.toString(Math.round(avg));
 
-				// Better than having no value at all.. we use the avg of the
-				// two!
-				// stder = Config.MISSING_VALUE_PLACEHOLDER;
+				// We use the avg of the two, even though that's not right
 				double var = (pendingStats.getStandardDeviation() + apsStat
 						.getStandardDeviation()) / 2;
 				stder = Long.toString(Math.round(var));
@@ -590,6 +544,7 @@ public class RefineDocumentsFromWlan
 			result.append(" W").append(macIter.next().toString());
 		}
 
+		// reducing side effects...the caller is responsible
 		// frequentlySeenAps = new Frequency();
 
 		return result.toString();
@@ -670,9 +625,6 @@ public class RefineDocumentsFromWlan
 						relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
 				malletInst = String.format(malletInstFormat, startTimeStr,
 						endTimeStr, microLocInst, "", relTimeWeather);
-				// No clutter:
-				// Config.MISSING_VALUE_PLACEHOLDER,
-				// Config.MISSING_VALUE_PLACEHOLDER,
 
 				startTime = Long.parseLong(startTimeStr);
 				endTime = Long.parseLong(endTimeStr);
@@ -709,14 +661,11 @@ public class RefineDocumentsFromWlan
 								wifi, relTimeWeather);
 
 						startTime = Long.parseLong(instFields[1]);
-						// Long.parseLong(instFields[1].substring(0,
-						// instFields[1].length() - 1));
+
 						endTime = Long.parseLong(instFields[2]);
-						// Long.parseLong(instFields[2].substring(0,
-						// instFields[2].length() - 1));
 
 					} else if (instFields.length == 3) {
-						// FIXMED: This case shouldn't happen
+						// FIXME: This case shouldn't happen
 						log("\tINFO\tFile with 3 columns: "
 								+ visitDir.getAbsolutePath() + File.separator
 								+ microLocDoc.getKey() + " - Values: "
@@ -740,8 +689,7 @@ public class RefineDocumentsFromWlan
 						malletInst = String.format(malletInstFormat,
 								instFields[1], instFields[2], instFields[0],
 								"", relTimeWeather);
-						// Config.MISSING_VALUE_PLACEHOLDER,
-						// Config.MISSING_VALUE_PLACEHOLDER,
+	
 
 					} else if (instFields.length == 1) {
 						// This is the case of a file that was loaded into the
@@ -773,9 +721,6 @@ public class RefineDocumentsFromWlan
 						malletInst = String.format(malletInstFormat,
 								startTimeStr, endTimeStr, instFields[0], "",
 								relTimeWeather);
-						// No clutter:
-						// Config.MISSING_VALUE_PLACEHOLDER,
-						// Config.MISSING_VALUE_PLACEHOLDER,
 
 					} else {
 						File badFile = FileUtils.getFile(
@@ -841,7 +786,6 @@ public class RefineDocumentsFromWlan
 			return;
 		}
 
-		// TODONE: do we need to discritize even more or less?
 		DurationEunm durDiscrete = Discretize.duration(durationInSec);
 
 		durationStats.addValue(durationInSec);

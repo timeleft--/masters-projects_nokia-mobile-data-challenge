@@ -32,7 +32,7 @@ public class UserVisitsDocsHierarchy {
 			ArrayList<Character> microLocTrust = new ArrayList<Character>();
 			
 			File[] visitEndFiles = visitDir.listFiles();
-//Unnecessary Overhead		Arrays.sort(visitEndFiles);
+
 			for (int j = visitEndFiles.length - 1; j >= 0; --j) {
 				// Descending traversal
 				microLocsList.getValue().add(new KeyValuePair<Long, StringBuilder>(
@@ -60,15 +60,6 @@ public class UserVisitsDocsHierarchy {
 		if(visit ==null){
 			return null;
 		}
-//		Long visitStratDir = null; 
-//		for (KeyValuePair<Long, LinkedList<KeyValuePair<Long, StringBuilder>>> visit: visitsList) {
-//			Long visitStartTime = visit.getKey();
-//			if (visitStartTime > endTimeInSecs) {
-//				break;
-//			} else {
-//				visitStratDir = visitStartTime;
-//			}
-//		}
 
 		KeyValuePair<Long, StringBuilder> microLoc = searchInMicroLocs(visit, endTimeInSecs, false);
 		if(microLoc != null){
@@ -77,21 +68,6 @@ public class UserVisitsDocsHierarchy {
 			return null;
 		}
 		
-//		LinkedList<KeyValuePair<Long, StringBuilder>> visitEndTimes;
-//		if (visitStratDir != null) {
-//			visitEndTimes = visitsList.get(visitStratDir);
-//
-//			for (KeyValuePair<Long, StringBuilder> visit : visitEndTimes) {
-//				long locEndTime = visit.getKey();
-//				if (locEndTime < endTimeInSecs) {
-//					break;
-//				} else {
-//					result = visit.getValue();
-//				}
-//			}
-//		}
-//		
-//		return result;
 	}
 	
 	public StringBuilder getDocExact(Long visitStartTime, Long docEndTime){
@@ -105,15 +81,6 @@ public class UserVisitsDocsHierarchy {
 		} else {
 			return null;
 		}
-//		LinkedList<KeyValuePair<Long, StringBuilder>> visit = visitsList.get(visitStartTime);
-//		for(KeyValuePair<Long, StringBuilder> doc: visit){
-//			if(doc.getKey().equals(docEndTime)){
-//				return doc.getValue();
-//			} else if(doc.getKey() < docEndTime){
-//				break; // the list is sorted descending
-//			}
-//		}
-//		return null; 
 	}
 	
 	private KeyValuePair<Long, ArrayList<KeyValuePair<Long, StringBuilder>>> searchInVisit(Long startTimeInSecs, boolean exact){

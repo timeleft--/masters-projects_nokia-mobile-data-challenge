@@ -100,16 +100,6 @@ public class PrintStatsCallable implements Callable<Void> {
 					valsArr[i] = userid + "_" + (i+1);
 				}
 				
-			} else {
-				// For now, leave it to cause a null pointer exception! But could fall back to 
-				// using the values in the frequency only as below
-//				valsArr = new String[stat.getUniqueCount()];
-//				Iterator<Comparable<?>> valsIter = stat.valuesIterator();
-//				int i=0;
-//				while(valsIter.hasNext()){
-//					valsArr[i] = valsIter.next();
-//					++i;
-//				}
 			}
 		}
 

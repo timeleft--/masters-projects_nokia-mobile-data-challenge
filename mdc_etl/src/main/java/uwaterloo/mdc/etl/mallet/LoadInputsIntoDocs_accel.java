@@ -60,14 +60,8 @@ public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
 					// them
 					onTimeChanged();
 				}
-
-			} else {
-				// meaningless, because it is the first record
-				// System.out.println("blah.. just making sure of something!");
-			}
+			} 
 			prevTimeColReading = currTime;
-			// } else if ("tz".equals(currKey)) {
-			// // We keep times in GMT.. nothing to do!
 		} else {
 			super.delimiterProcedure();
 		}

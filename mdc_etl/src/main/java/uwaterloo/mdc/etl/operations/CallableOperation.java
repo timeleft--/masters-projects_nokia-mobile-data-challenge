@@ -73,14 +73,11 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 	private final String eol;
 	private final char eol0; // For performance boost when eol is \n
 	private final int bufferSize;
-	// // private final Reader source;
-	// private final ReadableByteChannel source;
-	// private final Writer sink;
-	// private final InputWorker inputWorker;
+
 	private final Reader inReader;
 	private FileInputStream inStream;
 
-	protected/* final */HashMap<String, V> colOpResult;
+	protected HashMap<String, V> colOpResult;
 	protected final LinkedList<String> keyList;
 	protected Iterator<String> keyIterator;
 
@@ -213,7 +210,6 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 			return getReturnValue();
 		} catch (Exception e) {
 			e.printStackTrace();
-			//TODO: should we be tolerant to errors or fix them???
 			throw e;
 		} finally {
 			if (inStream != null) {

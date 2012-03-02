@@ -155,11 +155,7 @@ class ImportIntoMallet {
 								&& !("gsm.csv".equals(fName))
 								&& !("media.csv".equals(fName))
 								&& !("process.csv".equals(fName));
-//								// Testing
-//								result = "calllog.csv".equals(fName);
-////								result |= "accel.csv".equals(fName);
-//								result |= "application.csv".equals(fName);
-//								result |= "bluetooth.csv".equals(fName);
+
 								return result;
 							}
 						};
