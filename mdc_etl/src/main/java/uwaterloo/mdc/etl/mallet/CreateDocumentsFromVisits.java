@@ -51,32 +51,34 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 
 	@Override
 	protected void delimiterProcedure() {
-//		try {
-			Long longVal = new Long(currValue);
-			colOpResult.put(currKey, longVal);
-//		} catch (NumberFormatException e) {
-//			colOpResult.put(currKey, -1L);
-//		}
+		// try {
+		Long longVal = new Long(currValue);
+		colOpResult.put(currKey, longVal);
+		// } catch (NumberFormatException e) {
+		// colOpResult.put(currKey, -1L);
+		// }
 	}
 
 	@Override
 	protected void eolProcedure() throws Exception {
 		Long startTime = colOpResult.get("unixtime_start");
-		// Keep times in GMT
-		startTime += colOpResult.get("tz_start");
+		// Times are already in GMT in this file only!!
+		// // Keep times in GMT
+		// startTime += colOpResult.get("tz_start");
 		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
-//			startTime = addError(startTime);
+			// startTime = addError(startTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String startTimeDirName = startTime.toString() + trustIndicator;
 
 		Long endTime = colOpResult.get("unixtime_end");
-		// Keep times in GMT
-		endTime += colOpResult.get("tz_end");
+		// Times are already in GMT in this file only!!
+		// // Keep times in GMT
+		// endTime += colOpResult.get("tz_end");
 		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
-//			endTime = addError(endTime);
+			// endTime = addError(endTime);
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
 		}
 		String endTimeFileName = endTime.toString() + trustIndicator + ".csv";
@@ -85,8 +87,8 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 				startTimeDirName, endTimeFileName);
 
 		long delta = System.currentTimeMillis();
-		String userPlaceId = userid + Config.DELIMITER_USER_FEATURE + colOpResult.get("place_id")
-				.toString(); 
+		String userPlaceId = userid + Config.DELIMITER_USER_FEATURE
+				+ colOpResult.get("place_id").toString();
 		FileUtils.writeStringToFile(visitFile, userPlaceId, Config.OUT_CHARSET);
 		delta = System.currentTimeMillis() - delta;
 		PerfMon.increment(TimeMetrics.IO_WRITE, delta);
@@ -126,13 +128,13 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		// Nothing
 		return userid;
 	}
-// After a second thought.. no! Let's not change the names of the folders	
-//	private long addError(long reading) {
-//		// TODONOT:Add a Gaussian Error of standard deviation of 10 minutes
-//		// since this time is not trusted; the start time is trusted if there
-//		// are location data points in the period of 10 minutes before the
-//		// arrival time (0=false, 1=true).
-//
-//		return reading;
-//	}
+	// After a second thought.. no! Let's not change the names of the folders
+	// private long addError(long reading) {
+	// // TODONOT:Add a Gaussian Error of standard deviation of 10 minutes
+	// // since this time is not trusted; the start time is trusted if there
+	// // are location data points in the period of 10 minutes before the
+	// // arrival time (0=false, 1=true).
+	//
+	// return reading;
+	// }
 }

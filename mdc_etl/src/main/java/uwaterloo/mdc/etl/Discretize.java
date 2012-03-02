@@ -287,11 +287,11 @@ public class Discretize {
 
 	public static Long getStartEndTimeError(char trust) {
 		switch (trust) {
-		case 'W':
+		case Config.TIMETRUSTED_WLAN:case Config.TIMETRUSTED_ERROR:
 			return 0L;
-		case 'T':
+		case Config.TIMETRUSTED_GPS_YES:
 			return Config.ERROR_START_END_TIMES;
-		case 'U':
+		case Config.TIMETRUSTED_GPS_NO:
 			return Config.TIME_SECONDS_IN_10MINS;
 		default:
 			return null;

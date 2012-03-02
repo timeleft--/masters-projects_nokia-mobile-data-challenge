@@ -75,15 +75,16 @@ public class RefineDocumentsFromWlan
 	protected SummaryStatistics apsStat = new SummaryStatistics();
 	protected Frequency frequentlySeenAps = new Frequency();
 
-	protected HashMap<String, LinkedList<KeyValuePair<String, String>>> userHierarchy = new HashMap<String, LinkedList<KeyValuePair<String, String>>>();
-	protected LinkedList<KeyValuePair<String, String>> noVisitHierarchy = new LinkedList<KeyValuePair<String, String>>();
+	protected HashMap<String, LinkedList<KeyValuePair<String, String>>> userVisitsMap = new HashMap<String, LinkedList<KeyValuePair<String, String>>>();
+	// protected LinkedList<KeyValuePair<String, String>> noVisitHierarchy = new
+	// LinkedList<KeyValuePair<String, String>>();
 
 	protected Pattern tabSplit = Pattern.compile("\\t");
 	protected long pendingEndTims = -1;
 	protected File pendingVisitDir;
 	protected SummaryStatistics pendingStats;
 
-	protected final UserVisitHierarchy userVisits;
+	protected final UserVisitHierarchy userVisitsHier;
 
 	@SuppressWarnings("deprecation")
 	public RefineDocumentsFromWlan(Object master, char delimiter, String eol,
@@ -93,8 +94,8 @@ public class RefineDocumentsFromWlan
 		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {
 			relTimeWStats[ix.ordinal()] = new Frequency();
 		}
-		userVisits = new UserVisitHierarchy(FileUtils.getFile(outPath, dataFile
-				.getParentFile().getName()));
+		userVisitsHier = new UserVisitHierarchy(FileUtils.getFile(outPath,
+				dataFile.getParentFile().getName()));
 
 	}
 
@@ -136,7 +137,7 @@ public class RefineDocumentsFromWlan
 				prevTime = currTime;
 				prevTimeZone = currValue;
 				prevStartDir = currStartDir;
-				currStartDir = userVisits.getVisitDirForEndTime(currTime);
+				currStartDir = userVisitsHier.getVisitDirForEndTime(currTime);
 				prevAccessPoints = currAccessPoints;
 				currAccessPoints = new HashMap<String, Integer>();
 
@@ -162,7 +163,7 @@ public class RefineDocumentsFromWlan
 		long delta;
 
 		KeyValuePair<String, String> docEndFile = null;
-		LinkedList<KeyValuePair<String, String>> visitHierarchy = null;
+		LinkedList<KeyValuePair<String, String>> microLocDocList = null;
 		int newDocIx = -1;
 
 		boolean significantChangeInLoc;
@@ -206,11 +207,11 @@ public class RefineDocumentsFromWlan
 			// }
 			//
 			if (prevStartDir != null) {
-				visitHierarchy = userHierarchy.get(prevStartDir.getName());
-				if (visitHierarchy == null) {
+				microLocDocList = userVisitsMap.get(prevStartDir.getName());
+				if (microLocDocList == null) {
 					// Lazy init
-					visitHierarchy = new LinkedList<KeyValuePair<String, String>>();
-					userHierarchy.put(prevStartDir.getName(), visitHierarchy);
+					microLocDocList = new LinkedList<KeyValuePair<String, String>>();
+					userVisitsMap.put(prevStartDir.getName(), microLocDocList);
 
 					File[] microLocFiles = prevStartDir.listFiles();
 					Arrays.sort(microLocFiles);
@@ -222,13 +223,13 @@ public class RefineDocumentsFromWlan
 						delta = System.currentTimeMillis() - delta;
 						PerfMon.increment(TimeMetrics.IO_READ, delta);
 
-						visitHierarchy.add(new KeyValuePair<String, String>(
+						microLocDocList.add(new KeyValuePair<String, String>(
 								microLocFiles[i].getName(), placeid));
 					}
 				}
 
 				newDocIx = 0;
-				for (KeyValuePair<String, String> visit : visitHierarchy) {
+				for (KeyValuePair<String, String> visit : microLocDocList) {
 					int locEndTime = Integer.parseInt(StringUtils
 							.removeLastNChars(visit.getKey(), 5));
 					locEndTime += Discretize.getStartEndTimeError(StringUtils
@@ -281,6 +282,7 @@ public class RefineDocumentsFromWlan
 
 				long microlocStartTime = prevprevtime;
 				if (microlocStartTime == -1) {
+					// This prev time is the first
 					String visitStartDirName = prevStartDir.getName();
 					microlocStartTime = Long.parseLong(StringUtils
 							.removeLastNChars(visitStartDirName, 1));
@@ -301,12 +303,41 @@ public class RefineDocumentsFromWlan
 				Enum<?>[] relTimeAndWeather = getRelTimeAndWeather(prevTime,
 						prevTimeZone);
 
+				String doc1Key = Long.toString(prevTime)
+						+ Config.TIMETRUSTED_WLAN + ".csv";
+				long doc1EndTime = prevTime;
+				long doc1StartTime = microlocStartTime;
+				if (doc1StartTime >= doc1EndTime) {
+					doc1StartTime -= Discretize
+							.getStartEndTimeError(StringUtils.charAtFromEnd(
+									prevStartDir.getName(), 1));
+					if (doc1StartTime >= doc1EndTime) {
+						log("\tWARNING\tThis split will be later discarded because previous time shouldn't belong to the visit ("
+								+ prevStartDir.getAbsolutePath()
+								+ File.separator
+								+ doc1Key
+								+ "), even with added error! PrevTime: "
+								+ prevTime
+								+ " - microLocStart: "
+								+ microlocStartTime);
+					} else {
+						log("\tDEBUG\tThe previous time shouldn't have belonged to the visit ("
+								+ prevStartDir.getAbsolutePath()
+								+ File.separator
+								+ doc1Key
+								+ "), but we add some error! PrevTime: "
+								+ prevTime
+								+ " - microLocStart: "
+								+ microlocStartTime);
+					}
+				}
+
 				StringBuilder doc1 = new StringBuilder();
 				doc1.append(placeId)
 						.append('\t')
-						.append(microlocStartTime)
+						.append(doc1StartTime)
 						.append('\t')
-						.append(prevTime)
+						.append(doc1EndTime)
 						.append('\t')
 						.append(Long.toString(Math.round(apsStat.getMean())))
 						.append('\t')
@@ -329,13 +360,40 @@ public class RefineDocumentsFromWlan
 								.ordinal()]);
 
 				KeyValuePair<String, String> newDoc = new KeyValuePair<String, String>(
-						Long.toString(prevTime) + Config.TIMETRUSTED_WLAN
-								+ ".csv", doc1.toString());
-				visitHierarchy.add(newDocIx, newDoc);
+						doc1Key, doc1.toString());
+				microLocDocList.add(newDocIx, newDoc);
+
+				long doc2StartTime = currTime;
+				long doc2EndTime = visitEndTime;
+				if (doc2StartTime >= doc2EndTime) {
+					long addedError = Discretize
+							.getStartEndTimeError(StringUtils.charAtFromEnd(
+									docEndFile.getKey(), 5));
+					if (doc2StartTime - doc2EndTime <= addedError) {
+						doc2EndTime += addedError;
+						log("\tDEBUG\tThe current time shouldn't have belonged to the visit ("
+								+ prevStartDir.getAbsolutePath()
+								+ File.separator
+								+ docEndFile.getKey()
+								+ "), but we add some error! Currtime: "
+								+ currTime + " - VisitEnd: " + visitEndTimeStr);
+					} else {
+						// This shouldn't happen because this will be a chang of location on the visit level
+						doc2StartTime = prevTime + 1;
+						log("\tERROR\tThe current time shouldn't belong to the visit ("
+								+ prevStartDir.getAbsolutePath()
+								+ File.separator
+								+ docEndFile.getKey()
+								+ "), even with the added error! Currtime: "
+								+ currTime + " - VisitEnd: " + visitEndTimeStr);
+						//TODO: What can we do about that? Why does it happen?
+					}
+					
+				}
 
 				StringBuilder doc2 = new StringBuilder();
-				doc2.append(placeId).append('\t').append(currTime).append('\t')
-						.append(visitEndTimeStr);
+				doc2.append(placeId).append('\t').append(doc2StartTime)
+						.append('\t').append(doc2EndTime);
 
 				docEndFile.setValue(doc2.toString());
 
@@ -381,14 +439,14 @@ public class RefineDocumentsFromWlan
 			pendingEndTims = -1;
 			return;
 		}
-		LinkedList<KeyValuePair<String, String>> visitHierarchy = userHierarchy
+		LinkedList<KeyValuePair<String, String>> microLocDocList = userVisitsMap
 				.get(pendingVisitDir.getName());
 		File docStartDir = pendingVisitDir;
 
 		// Force happens when we have to put the current stats in the last
 		// time slot
 		// last time slot is the first item in the descending list
-		KeyValuePair<String, String> lastTimeSlot = visitHierarchy.get(0);
+		KeyValuePair<String, String> lastTimeSlot = microLocDocList.get(0);
 		long lastEndTime = Long.parseLong(StringUtils.removeLastNChars(
 				lastTimeSlot.getKey(), 5));
 
@@ -442,16 +500,17 @@ public class RefineDocumentsFromWlan
 					.append('\t').append(docFields[2]).append('\t')
 					.append(mean).append('\t').append(stder);
 		} else {
-			String badFileName = visitHierarchy.remove(0).getKey();
+			String badFileName = microLocDocList.remove(0).getKey();
 			assert badFileName == lastTimeSlot.getKey();
-			
+
 			log("\tERROR\tRemoving a file with " + docFields.length
 					+ " columns: " + docStartDir.getAbsolutePath()
 					+ File.separator + badFileName);
-			
-			File microLocFile = FileUtils.getFile(docStartDir.getAbsolutePath(), badFileName);
-			deleteMicroLocFile(microLocFile);  
-			
+
+			File microLocFile = FileUtils.getFile(
+					docStartDir.getAbsolutePath(), badFileName);
+			deleteMicroLocFile(microLocFile);
+
 			// For the next visit
 			frequentlySeenAps = new Frequency();
 			apsStat = new SummaryStatistics();
@@ -539,7 +598,7 @@ public class RefineDocumentsFromWlan
 			long startTime;
 			long endTime;
 
-			LinkedList<KeyValuePair<String, String>> microLocList = userHierarchy
+			LinkedList<KeyValuePair<String, String>> microLocList = userVisitsMap
 					.get(visitDir.getName());
 			if (microLocList == null) {
 				visitNoWLANFreq.addValue(VisitWithReadingEnum.V);
@@ -682,8 +741,9 @@ public class RefineDocumentsFromWlan
 						// Config.MISSING_VALUE_PLACEHOLDER,
 
 					} else {
-						File badFile = FileUtils.getFile(visitDir.getAbsolutePath(),
-								 microLocDoc.getKey());
+						File badFile = FileUtils.getFile(
+								visitDir.getAbsolutePath(),
+								microLocDoc.getKey());
 						log("\tERROR\tDiscarding file with "
 								+ instFields.length + " columns: "
 								+ badFile.getAbsolutePath());
@@ -732,7 +792,6 @@ public class RefineDocumentsFromWlan
 		return result;
 	}
 
-	
 	protected void writeMallet(long startTime, long endTime, String malletInst,
 			File malletFile) throws IOException {
 		// Calculate duration

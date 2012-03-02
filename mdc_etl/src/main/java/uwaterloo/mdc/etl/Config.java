@@ -26,6 +26,7 @@ public class Config {
 	public static final char TIMETRUSTED_GPS_YES = 'T';
 	public static final char TIMETRUSTED_GPS_NO = 'U';
 	public static final char TIMETRUSTED_WLAN = 'W';
+	public static final char TIMETRUSTED_ERROR = 'E';
 
 	public static final long WLAN_MICROLOCATION_RSSI_DIFF_MAX_THRESHOLD = 10;
 	// public static final long WLAN_MICROLOCATION_RSSI_DIFF_MIN_THRESHOLD = 3;
