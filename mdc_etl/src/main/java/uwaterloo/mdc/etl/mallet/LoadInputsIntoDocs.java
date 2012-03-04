@@ -126,7 +126,7 @@ public abstract class LoadInputsIntoDocs
 		
 		colOpResult.get(currKey).append(" ").append(shortKey())
 				.append(Config.DELIMITER_COLNAME_VALUE)
-				.append(getValueToWrite());
+				.append(discreteVal.toString());
 	}
 
 	protected void addCurrValToStats(Comparable<?> discreteVal) {
