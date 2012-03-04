@@ -223,7 +223,12 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 	}
 
 	private void delimiterProcedureInternal() throws Exception {
-		currValue = currValueBuilder.toString().trim();
+		currValue = currValueBuilder.toString();
+		if(currValue == null){
+			currValue = "";
+		} else {
+			currValue = currValue.trim();
+		}
 		currValueBuilder.setLength(0);
 		assert keyIterator.hasNext() : "The columns seem to be less than the values in this row!!";
 		currKey = keyIterator.next();

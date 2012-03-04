@@ -62,10 +62,10 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 		S; // Silence or beep
 	}
 	static{
-		Discretize.enumsMap.put("sys_battery-level", BatteryLevels.values());
-		Discretize.enumsMap.put("sys_charging-states", ChargingState.values());
-		Discretize.enumsMap.put("sys_usage-rates", UsageRate.values());
-		Discretize.enumsMap.put("sys_ring-silence", RingOrSilence.values());
+		Discretize.enumsMap.put("sys_battery", BatteryLevels.values());
+		Discretize.enumsMap.put("sys_charging", ChargingState.values());
+		Discretize.enumsMap.put("sys_inactive", UsageRate.values());
+		Discretize.enumsMap.put("sys_ring", RingOrSilence.values());
 	}
 
 	@Override
@@ -110,7 +110,7 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 		} else if("ring".equals(currKey)) {
 			if("normal".equals(currValue)
 				|| "ascending".equals(currValue)
-				|| "ring once".equals(currValue)){
+				|| "ring_once".equals(currValue)){
 				result = RingOrSilence.R;
 			} else if("beep".equals(currValue)
 					|| "silent".equals(currValue)) {

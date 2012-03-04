@@ -19,7 +19,7 @@ import uwaterloo.mdc.etl.operations.CallableOperation;
  * visit_sequence_10min file (_20min is a subset), and the transitions in
  * micro-location are sensed from wlan changes.
  * 
- * All times are GMT times
+ * In the result, all times are GMT times 
  * 
  * @author yaboulna
  * 
@@ -55,8 +55,8 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 	protected void eolProcedure() throws Exception {
 		Long startTime = colOpResult.get("unixtime_start");
 		// Times are already in GMT in this file only!!
-		// // Keep times in GMT
-		// startTime += colOpResult.get("tz_start");
+//		 // Keep times in GMT
+//		 startTime += colOpResult.get("tz_start");
 		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
@@ -65,8 +65,8 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 
 		Long endTime = colOpResult.get("unixtime_end");
 		// Times are already in GMT in this file only!!
-		// // Keep times in GMT
-		// endTime += colOpResult.get("tz_end");
+//		 // Keep times in GMT
+//		 endTime += colOpResult.get("tz_end");
 		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;

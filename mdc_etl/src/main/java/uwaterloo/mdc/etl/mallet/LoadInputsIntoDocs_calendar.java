@@ -43,7 +43,7 @@ public class LoadInputsIntoDocs_calendar extends LoadInputsIntoDocs {
 	}
 	
 	static {
-		Discretize.enumsMap.put("calendar_entry-types", CalendarTypeEnum.values());
+		Discretize.enumsMap.put("calendar_type", CalendarTypeEnum.values());
 	}
 
 	@Override

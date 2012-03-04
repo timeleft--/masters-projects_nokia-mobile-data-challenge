@@ -44,7 +44,7 @@ public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
 	};
 	
 	static {
-		Discretize.enumsMap.put("mediaplay_player-state", PlayerState.values());
+		Discretize.enumsMap.put("mediaplay_state", PlayerState.values());
 	}
 	
 	@Override

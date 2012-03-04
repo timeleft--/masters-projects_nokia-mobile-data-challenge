@@ -15,7 +15,7 @@ public class Config {
 	public static final String MISSING_VALUE_PLACEHOLDER = "?";
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 16;
+	public static final int NUM_THREADS = 4;
 	public static final int NUM_USERS_TO_PROCESS = 80;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
@@ -67,6 +67,8 @@ public class Config {
 	public static final int NUM_FREQ_MAC_ADDRS_TO_KEEP = 3;
 
 	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
+
+	public static final int NUMBER_TESTING_USERS = 20;
 
 
 

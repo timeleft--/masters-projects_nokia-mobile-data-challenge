@@ -22,6 +22,11 @@ import uwaterloo.mdc.etl.operations.CallableOperation;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.StringUtils;
 
+/**
+ * 
+ * @author yaboulna
+ *
+ */
 public abstract class LoadInputsIntoDocs
 		extends
 		CallableOperation<KeyValuePair<String, HashMap<String, Object>>, StringBuilder> {
@@ -30,10 +35,16 @@ public abstract class LoadInputsIntoDocs
 
 	protected Long prevTimeColReading = null;;
 
-	protected final UserVisitsDocsHierarchy userHierarchy;
+	protected final UserVisitsDocsHierarchy<StringBuilder> userHierarchy;
 
 	protected final Frequency readingNoVisitStat = new Frequency();
 	protected final Frequency visitNoReadingStat = new Frequency();
+	
+	/**
+	 * For a frequency to be included in the result, its possible values
+	 * must be added to the Discritize.enumsMap with a key that is
+	 * FILENAME_COLNAME. This field is the result.
+	 */
 	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();
 
 	protected long currTime = 0;
@@ -48,8 +59,8 @@ public abstract class LoadInputsIntoDocs
 			int bufferSize, File dataFile, String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
 
-		userHierarchy = new UserVisitsDocsHierarchy(FileUtils.getFile(outPath,
-				dataFile.getParentFile().getName()));
+		userHierarchy = new UserVisitsDocsHierarchy<StringBuilder>(FileUtils.getFile(outPath,
+				dataFile.getParentFile().getName()), StringBuilder.class.getConstructor());
 
 		statsMap.put(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
 				readingNoVisitStat);
@@ -232,7 +243,7 @@ public abstract class LoadInputsIntoDocs
 				StringBuilder doc = userHierarchy.getDocExact(visitStartTime,
 						endTimeInSecs);
 
-				if (doc == null) {
+				if (doc == null || doc.length() == 0) {
 					visitNoReadingStat.addValue(VisitWithReadingEnum.V);
 					continue;
 				} // else

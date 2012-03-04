@@ -223,7 +223,9 @@ public class Discretize {
 	}
 
 	public static long getRxDistance(HashMap<String, Integer> currAccessPoints,
-			HashMap<String, Integer> prevAccessPoints) {
+			HashMap<String, Integer> prevAccessPointsConst) {
+		@SuppressWarnings("unchecked")
+		HashMap<String, Integer> prevAccessPoints = (HashMap<String, Integer>) prevAccessPointsConst.clone();
 		double displacementRelAp = 0;
 		// long macAddressesDistance = 0;
 		for (String mac : currAccessPoints.keySet()) {

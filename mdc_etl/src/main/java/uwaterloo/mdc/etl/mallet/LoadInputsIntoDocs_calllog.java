@@ -75,7 +75,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 				LoadInputsIntoDocs_calllog.CommDir.values());
 		Discretize.enumsMap.put("calllog_description",
 				LoadInputsIntoDocs_calllog.CommType.values());
-		Discretize.enumsMap.put("calllog_in-phonebook",
+		Discretize.enumsMap.put("calllog_in_phonebook",
 				LoadInputsIntoDocs_calllog.CommContact.values());
 		Discretize.enumsMap.put("calllog_duration",
 				LoadInputsIntoDocs_calllog.CallDur.values());

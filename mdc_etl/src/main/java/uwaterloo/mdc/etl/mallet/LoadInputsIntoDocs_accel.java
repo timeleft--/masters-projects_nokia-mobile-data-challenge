@@ -15,7 +15,7 @@ public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
 	}
 
 	static {
-		Discretize.enumsMap.put("accel_movement",
+		Discretize.enumsMap.put("accel_avdelt",
 				LoadInputsIntoDocs_accel.Movement.values());
 	}
 	
