@@ -15,8 +15,8 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 
 public class ConcurrUtil {
 
-	private static final Map<Map<String, Writer>, Map<String, Boolean>> writerToLocksMap = Collections
-			.synchronizedMap(new HashMap<Map<String, Writer>, Map<String, Boolean>>());
+	private static final Map<Map<String, Writer>, Map<String, Thread>> writerToLocksMap = Collections
+			.synchronizedMap(new HashMap<Map<String, Writer>, Map<String, Thread>>());
 
 	private ConcurrUtil() {
 		// no init
@@ -32,41 +32,51 @@ public class ConcurrUtil {
 	 * @return
 	 * @throws IOException
 	 */
-	public static final Writer acquireWriter(String outPath, String fileName,
-			Map<String, Writer> writersMap, String header)
-			throws Exception {
+	public static final Writer acquireWriter(String filePath,
+			Map<String, Writer> writersMap, String header) throws Exception {
+
 		long delta = System.currentTimeMillis();
 
-		Map<String, Boolean> locksMap = getLocksMap(writersMap);
+		Map<String, Thread> locksMap = getLocksMap(writersMap);
 
+//		File file = FileUtils.getFile(outPath, fileName);
+//		String filePath = file.getAbsolutePath();
 		Writer writer = null;
 		while (true) {
 			// Loop to acquire the writer
 			synchronized (writersMap) {
-				if (!writersMap.containsKey(fileName)) {
-					writer = Channels.newWriter(
-							FileUtils.openOutputStream(
-									FileUtils.getFile(outPath, fileName))
-									.getChannel(), Config.OUT_CHARSET);
-					writersMap.put(fileName, writer);
+				if (!writersMap.containsKey(filePath)) {
+					writer = Channels.newWriter(FileUtils
+							.openOutputStream(FileUtils.getFile(filePath)).getChannel(),
+							Config.OUT_CHARSET);
+					writersMap.put(filePath, writer);
 
 					writer.write(header);
 
 					synchronized (locksMap) {
-						locksMap.put(fileName, Boolean.FALSE);
+						locksMap.put(filePath, null);
+						// Boolean.FALSE);
 					}
 				}
 
-				Boolean isWriterInUse = Boolean.TRUE;
+				Thread writerUser = null;
 				synchronized (locksMap) {
-					isWriterInUse = locksMap.get(fileName);
-					if (isWriterInUse == null || !isWriterInUse) {
-						isWriterInUse = Boolean.FALSE; // In case of null
-						locksMap.put(fileName,Boolean.TRUE); // Lock it!
+					writerUser = locksMap.get(filePath);
+					if (writerUser == null) {
+						locksMap.put(filePath, Thread.currentThread());
 					}
 				}
-				if (!isWriterInUse) {
-					writer = writersMap.get(fileName);
+				// Boolean isWriterInUse = Boolean.TRUE;
+				// synchronized (locksMap) {
+				// isWriterInUse = locksMap.get(filePath);
+				// if (isWriterInUse == null || !isWriterInUse) {
+				// isWriterInUse = Boolean.FALSE; // In case of null
+				// locksMap.put(filePath,Boolean.TRUE); // Lock it!
+				// }
+				// }
+				// if (!isWriterInUse) {
+				if (writerUser == null) {
+					writer = writersMap.get(filePath);
 				}
 			}
 			if (writer == null) {
@@ -92,22 +102,22 @@ public class ConcurrUtil {
 	 * through this method. No guards are taken to enforce this!
 	 * 
 	 * @param writer
-	 * @param fileName
+	 * @param filePath
 	 * @param writersMap
 	 * @param locksMap
 	 * @throws IOException
 	 */
-	public static final void releaseWriter(Writer writer, String fileName,
+	public static final void releaseWriter(Writer writer, String filePath,
 			Map<String, Writer> writersMap, boolean close) throws IOException {
 		long delta = System.currentTimeMillis();
 
-		Map<String, Boolean> locksMap = getLocksMap(writersMap);
+		Map<String, Thread> locksMap = getLocksMap(writersMap);
 
 		if (close) {
 			synchronized (writersMap) {
-				writersMap.remove(fileName);
+				writersMap.remove(filePath);
 				synchronized (locksMap) {
-					locksMap.remove(fileName);
+					locksMap.remove(filePath);
 				}
 				// We also flush and close the writer.. if we retain it, we
 				// shouldn't
@@ -117,7 +127,7 @@ public class ConcurrUtil {
 		} else {
 			// In case of per feature counting, we need to retain the writers
 			synchronized (locksMap) {
-				locksMap.put(fileName, Boolean.FALSE);
+				locksMap.put(filePath, null);
 			}
 		}
 
@@ -125,13 +135,13 @@ public class ConcurrUtil {
 		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
 	}
 
-	private static Map<String, Boolean> getLocksMap(
+	private static Map<String, Thread> getLocksMap(
 			Map<String, Writer> writersMap) {
-		Map<String, Boolean> locksMap;
+		Map<String, Thread> locksMap;
 		synchronized (writerToLocksMap) {
 			locksMap = writerToLocksMap.get(writersMap);
 			if (locksMap == null) {
-				locksMap = new HashMap<String, Boolean>();
+				locksMap = new HashMap<String, Thread>();
 				writerToLocksMap.put(writersMap, locksMap);
 			}
 		}

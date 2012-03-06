@@ -25,7 +25,7 @@ public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 	

@@ -4,7 +4,9 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.Writer;
 import java.nio.channels.Channels;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
@@ -21,13 +23,34 @@ import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.operations.PrintStatsCallable;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 
-class ImportIntoMallet {
+public class ImportIntoMallet {
+	
+	public static class MalletImportedFiles implements FileFilter {
+		
+			
+			@Override
+			public boolean accept(File file) {
+				String fName = file.getName();
+				boolean result = !("distance_matrix.csv"
+						.equals(fName))
+						&& !("wlan.csv".equals(fName))
+						&& !(fName
+								.startsWith("visit_sequence_"))
+						&& !("contacts.csv".equals(fName))
+				&& !("gsm.csv".equals(fName))
+				&& !("media.csv".equals(fName))
+				&& !("process.csv".equals(fName));
+
+				return result;
+			}
+		};
+	
 
 	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
 	private String outPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
 	private String statsPath = "C:\\mdc-datasets\\mallet\\stats";
 
-	private HashMap<String, Writer> statWriters = new HashMap<String, Writer>();
+	private Map<String, Writer> statWriters = Collections.synchronizedMap(new HashMap<String, Writer>());
 
 	/**
 	 * @param args
@@ -44,7 +67,7 @@ class ImportIntoMallet {
 		app.createDocuments();
 	}
 
-	private void createDocuments() throws Exception {
+	public void createDocuments() throws Exception {
 		try {
 			// To make sure the class is loaded
 			System.out.println(PerfMon.asString());
@@ -69,10 +92,12 @@ class ImportIntoMallet {
 
 			ExecutorService printStatsExec = Executors
 					.newFixedThreadPool(Config.NUM_THREADS / 4);
+			CompletionService<Void> printStatsEcs = new ExecutorCompletionService<Void>(printStatsExec);
 
 			int numLoadDataTasks = 0;
 			int numberWifiTasks = 0;
 			int fromVisitsNumberTasks = 0;
+			int printTasks = 0;
 
 			File fromWifiLogFil = FileUtils.getFile(Config.LOG_PATH,
 					"RefineDocumentsFromWlan.log");
@@ -132,8 +157,8 @@ class ImportIntoMallet {
 							PrintStatsCallable printStatCall = new PrintStatsCallable(
 									wlanStatObj, wlanStat.getKey(),
 									wlanStatKey, statWriters, statsPath);
-							printStatsExec.submit(printStatCall);
-
+							printStatsEcs.submit(printStatCall);
+							++printTasks;
 						}
 
 						// /////////////////////////////////////////////////////
@@ -141,24 +166,7 @@ class ImportIntoMallet {
 						String userid = wlanStat.getKey();
 						File userDir = FileUtils.getFile(dataRootFile, userid);
 
-						FileFilter dataFileFilter = new FileFilter() {
-							
-							@Override
-							public boolean accept(File file) {
-								String fName = file.getName();
-								boolean result = !("distance_matrix.csv"
-										.equals(fName))
-										&& !("wlan.csv".equals(fName))
-										&& !(fName
-												.startsWith("visit_sequence_"))
-										&& !("contacts.csv".equals(fName))
-								&& !("gsm.csv".equals(fName))
-								&& !("media.csv".equals(fName))
-								&& !("process.csv".equals(fName));
-
-								return result;
-							}
-						};
+						FileFilter dataFileFilter = new MalletImportedFiles();
 
 						for (File dataFile : userDir.listFiles(dataFileFilter)) {
 							LoadInputsIntoDocs loadDataOp = (LoadInputsIntoDocs) loadDataFactory
@@ -190,9 +198,15 @@ class ImportIntoMallet {
 							PrintStatsCallable printStatCall = new PrintStatsCallable(
 									loadDataStatObj, loadDataStat.getKey(),
 									loadDataStatKey, statWriters, statsPath);
-							printStatsExec.submit(printStatCall);
+							printStatsEcs.submit(printStatCall);
+							++printTasks;
 						}
 					}
+				}
+				
+				for(int i=0; i<printTasks;++i){
+					System.out.println(PerfMon.asString());
+					printStatsEcs.take();
 				}
 
 				// This will make the executor accept no new threads

@@ -1,9 +1,10 @@
 package uwaterloo.mdc.etl.operations;
 
 import java.io.Writer;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
@@ -26,11 +27,11 @@ public class PrintStatsCallable implements Callable<Void> {
 	private final String userid;
 	private final String statKey;
 
-	private final HashMap<String, Writer> statWriters;
+	private final Map<String, Writer> statWriters;
 	private final String statsPath;
 
 	public PrintStatsCallable(Object statObj, String userid, String statKey,
-			HashMap<String, Writer> statWriters, String statsPath) {
+			Map<String, Writer> statWriters, String statsPath) {
 		super();
 		this.statObj = statObj;
 		this.userid = userid;
@@ -53,11 +54,9 @@ public class PrintStatsCallable implements Callable<Void> {
 	private void writeStats(String userid, String statKey,
 			SummaryStatistics stat) throws Exception {
 
-		String filename = PERUSER_SUMMART_PREFX + statKey + ".csv";
+		String filePath = FilenameUtils.concat(statsPath,  PERUSER_SUMMART_PREFX + statKey + ".csv");
 		Writer summaryWriter = ConcurrUtil
-				.acquireWriter(
-						statsPath,
-						filename,
+				.acquireWriter(filePath,
 						statWriters,
 						StringUtils.quote(Config.USERID_COLNAME)
 								+ "\t\"n\"\t\"min\"\t\"max\"\t\"mean\"\t\"standard_deviation\"\t\"variance\"\t\"geometric_mean\"\t\"second_moment\"\n");
@@ -75,7 +74,7 @@ public class PrintStatsCallable implements Callable<Void> {
 			delta = System.currentTimeMillis() - delta;
 			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
 		} finally {
-			ConcurrUtil.releaseWriter(summaryWriter, filename, statWriters,
+			ConcurrUtil.releaseWriter(summaryWriter, filePath, statWriters,
 					false);
 		}
 	}
@@ -119,9 +118,9 @@ public class PrintStatsCallable implements Callable<Void> {
 
 		headerBuilder.append('\n');
 
-		String filename = PERUSER_FREQ_PREFX + statKey + ".csv";
-
-		Writer freqWriter = ConcurrUtil.acquireWriter(statsPath, filename,
+		String filePath = FilenameUtils.concat(statsPath, PERUSER_FREQ_PREFX + statKey + ".csv");
+		
+		Writer freqWriter = ConcurrUtil.acquireWriter(filePath,
 				statWriters, headerBuilder.toString());
 		try {
 			long delta = System.currentTimeMillis();
@@ -146,7 +145,7 @@ public class PrintStatsCallable implements Callable<Void> {
 			delta = System.currentTimeMillis() - delta;
 			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
 		} finally {
-			ConcurrUtil.releaseWriter(freqWriter, filename, statWriters, false);
+			ConcurrUtil.releaseWriter(freqWriter, filePath, statWriters, false);
 		}
 	}
 }

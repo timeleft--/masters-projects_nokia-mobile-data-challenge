@@ -16,42 +16,6 @@ public class UserVisitHierarchy extends UserVisitsDocsHierarchy<FileStringPair> 
 		super(userDir, FileStringPair.class.getConstructor());
 	}
 
-	// protected final File userDir;
-	//
-	// protected final ArrayList<KeyValuePair<Long, File>> visitList;
-	// protected final ArrayList<Character> trust;
-	//
-	// public UserVisitHierarchy(File userDir) {
-	// super();
-	// this.userDir = userDir;
-	// visitList = new ArrayList<KeyValuePair<Long, File>>();
-	// trust =new ArrayList<Character>();
-	//
-	// File[] visitDirArr = userDir.listFiles();
-	//
-	// for (File visitDir: visitDirArr) {
-	// if(!visitDir.isDirectory()){
-	// continue;
-	// }
-	// Long key =
-	// Long.parseLong(StringUtils.removeLastNChars(visitDir.getName(), 1));
-	//
-	// trust.add(StringUtils.charAtFromEnd(visitDir.getName(), 1));
-	// visitList.add(new KeyValuePair<Long, File>(key, visitDir));
-	// }
-	//
-	// }
-	//
-	// public File getVisitDirForEndTime(long startTime){
-	// KeyValuePair<Long, File> pair = new
-	// TimeSearch<File>().findForTime(visitList, startTime, /*true,*/ true,
-	// trust);
-	// if(pair!= null){
-	// return pair.getValue();
-	// } else {
-	// return null;
-	// }
-	// }
 	@Override
 	protected FileStringPair getValueObj(Constructor<FileStringPair> vConstr,
 			File visitEndFile) throws Exception {

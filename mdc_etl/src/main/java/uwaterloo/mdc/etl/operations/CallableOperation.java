@@ -66,7 +66,7 @@ public abstract class CallableOperation<R, V> implements Callable<R> {
 	// }
 
 	public static final char DEFAULT_DELIMITER = '\t';
-	public static final int DEFAULT_BUFF_SIZE = 4 * 1024;
+	public static final int DEFAULT_BUFF_SIZE = 64 * 1024;
 	public static final String DEFAULT_EOL = "\n";// System.getProperty("line.separator");
 
 	private final char delimiter;

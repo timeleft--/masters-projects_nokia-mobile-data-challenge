@@ -33,7 +33,7 @@ public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 
@@ -93,7 +93,7 @@ public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected String getTimeColumnName() {
+	public String getTimeColumnName() {
 		return "start";
 	}
 }

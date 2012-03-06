@@ -26,7 +26,7 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 	

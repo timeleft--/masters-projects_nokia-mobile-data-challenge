@@ -1,10 +1,8 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -48,11 +46,6 @@ public abstract class LoadInputsIntoDocs
 	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();
 
 	protected long currTime = 0;
-
-	// Trading memory for performance: removed and (incomplete) synchronization
-	// But we need a global place for storing all labels, to avoid duplocates
-	private static Map<String, String> shortColLabelsMap = Collections
-			.synchronizedMap(new HashMap<String, String>());
 
 	@SuppressWarnings("deprecation")
 	public LoadInputsIntoDocs(Object master, char delimiter, String eol,
@@ -116,7 +109,7 @@ public abstract class LoadInputsIntoDocs
 		}
 	}
 
-	protected abstract HashSet<String> getColsToSkip();
+	public abstract HashSet<String> getColsToSkip();
 
 	protected void appendCurrValToCol(Comparable<?> discreteVal) {
 		// Don't put place holder values (like 0) in the continuous stat
@@ -152,63 +145,7 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected String shortKey() {
-		String result;
-
-		String key = dataFile.getName() + currKey;
-
-		long delta = System.currentTimeMillis();
-		synchronized (shortColLabelsMap) {
-			result = shortColLabelsMap.get(key);
-			if (result == null) {
-				if ("accel.csv".equals(dataFile.getName())) {
-					result = "ac";
-				} else if ("application.csv".equals(dataFile.getName())) {
-					result = "ap";
-				} else if ("bluetooth.csv".equals(dataFile.getName())) {
-					result = "b";
-				} else if ("calendar.csv".equals(dataFile.getName())) {
-					result = "cr";
-				} else if ("calllog.csv".equals(dataFile.getName())) {
-					result = "cg";
-				} else if ("contacts.csv".equals(dataFile.getName())) {
-					result = "cs";
-				} else if ("gsm.csv".equals(dataFile.getName())) {
-					result = "g";
-				} else if ("media.csv".equals(dataFile.getName())) {
-					result = "md";
-				} else if ("mediaplay.csv".equals(dataFile.getName())) {
-					result = "mp";
-				} else if ("process.csv".equals(dataFile.getName())) {
-					result = "p";
-				} else if ("sys.csv".equals(dataFile.getName())) {
-					result = "s";
-				} else {
-					throw new IllegalArgumentException(
-							"Check the spelling of the filename in the above list");
-				}
-
-				int underscoreIx = -1;
-				do {
-					result += currKey.charAt(underscoreIx + 1);
-					underscoreIx = currKey.indexOf("_", underscoreIx + 1);
-				} while (underscoreIx != -1);
-
-				if (shortColLabelsMap.containsValue(result)) {
-					int i = 2;
-					while (shortColLabelsMap.containsValue(result + i)) {
-						++i;
-					}
-					result += i;
-				}
-
-				shortColLabelsMap.put(key, result);
-			}
-
-		}
-		delta = System.currentTimeMillis() - delta;
-		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
-
-		return result;
+		return Discretize.getShortKey(dataFile, currKey);
 	}
 
 	/**
@@ -217,7 +154,7 @@ public abstract class LoadInputsIntoDocs
 	 * 
 	 * @return The anem of the column representing time
 	 */
-	protected String getTimeColumnName() {
+	public String getTimeColumnName() {
 		return "time";
 	}
 

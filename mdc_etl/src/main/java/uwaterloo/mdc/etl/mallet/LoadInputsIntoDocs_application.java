@@ -21,7 +21,7 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 
@@ -38,7 +38,7 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 	@Override
 	protected Comparable<?> getValueToWrite() {
 		if (foregroundEvent) {
-			return "A" + currValue; // The UID
+			return "A" + currValue.toString(); // The UID
 		} else {
 			return Config.MISSING_VALUE_PLACEHOLDER;
 		}

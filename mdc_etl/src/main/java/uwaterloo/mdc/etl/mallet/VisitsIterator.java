@@ -20,16 +20,18 @@ public class VisitsIterator implements Iterator<Instance> {
 
 	File currDir;
 	File[] currFiles;
-	
+
 	Instance nextInst;
 
+	private boolean onlyKnownTarget = true;
+
 	public VisitsIterator(File dataDir) {
-		
+
 		this.dataDirParent = dataDir.getParentFile();
 		dirIndexMap = new HashMap<File, Integer>();
 
 		goIntoDir(dataDir);
-		
+
 		nextInst = nextInternal();
 	}
 
@@ -44,9 +46,9 @@ public class VisitsIterator implements Iterator<Instance> {
 		Instance result = nextInst;
 		nextInst = nextInternal();
 		return result;
-	} 
-	
-	public Instance nextInternal(){
+	}
+
+	public Instance nextInternal() {
 		int i = dirIndexMap.get(currDir);
 		++i;
 
@@ -62,13 +64,19 @@ public class VisitsIterator implements Iterator<Instance> {
 					String[] instFields = tabSplit.split(instStr);
 					String target = Config.placeLabels
 							.getProperty(instFields[1]);
-					if (target != null) {
-						String name = instFields[0] + "@" + instFields[1];
-						return new Instance(instFields[2], target, name,
-								currFiles[i].getAbsolutePath());
-					} else {
-						return nextInternal();
+					
+					if (target == null) {
+						if (onlyKnownTarget) {
+							return nextInternal();
+						} else {
+							target = "?";
+						}
 					}
+					
+					String name = instFields[0] + "@" + instFields[1];
+					return new Instance(instFields[2], target, name,
+							currFiles[i].getAbsolutePath());
+
 				} catch (IOException ignore) {
 					return nextInternal();
 				}
@@ -88,13 +96,22 @@ public class VisitsIterator implements Iterator<Instance> {
 
 	@Override
 	public boolean hasNext() {
-//		return !(dirIndexMap.get(currDir) == (currFiles.length - 1) && currDir
-//				.getParentFile().equals(dataDirParent));
+		// return !(dirIndexMap.get(currDir) == (currFiles.length - 1) &&
+		// currDir
+		// .getParentFile().equals(dataDirParent));
 		return nextInst != null;
 	}
 
 	@Override
 	public void remove() {
 		throw new UnsupportedOperationException();
+	}
+
+	public boolean isOnlyKnownTarget() {
+		return onlyKnownTarget;
+	}
+
+	public void setOnlyKnownTarget(boolean onlyKnownTarget) {
+		this.onlyKnownTarget = onlyKnownTarget;
 	}
 }

@@ -28,10 +28,11 @@ public class LoadInputsIntoDocs_calendar extends LoadInputsIntoDocs {
 		colsToSkip.add("location");
 		colsToSkip.add("class");
 		colsToSkip.add("last_mod");
+		colsToSkip.add("title");
 	}
 
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 
@@ -72,7 +73,7 @@ public class LoadInputsIntoDocs_calendar extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected String getTimeColumnName() {
+	public String getTimeColumnName() {
 		// We don't care when the calendar entry was recorded
 		// But when will it actually start
 		return "begin";

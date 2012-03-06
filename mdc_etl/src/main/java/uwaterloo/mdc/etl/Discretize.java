@@ -1,5 +1,6 @@
 package uwaterloo.mdc.etl;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Calendar;
 import java.util.Collections;
@@ -7,6 +8,7 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Map;
 
+import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.weather.WeatherUnderGroundDiscretize;
 import uwaterloo.mdc.etl.weather.WeatherUnderGroundDiscretize.Weather;
 
@@ -15,7 +17,12 @@ public class Discretize {
 		// prevents init
 	}
 
-	public static Map<String, Enum<?>[]> enumsMap = Collections
+	// Trading memory for performance: removed and (incomplete) synchronization
+	// But we need a global place for storing all labels, to avoid duplocates
+	public static final Map<String, String> shortColLabelsMap = Collections
+			.synchronizedMap(new HashMap<String, String>());
+
+	public static final Map<String, Enum<?>[]> enumsMap = Collections
 			.synchronizedMap(new HashMap<String, Enum<?>[]>());
 
 	/**
@@ -265,5 +272,65 @@ public class Discretize {
 		default:
 			return null;
 		}
+	}
+	
+	public static String getShortKey(File dataFile, String currKey){
+		String result;
+
+		String key = dataFile.getName() + currKey;
+
+		long delta = System.currentTimeMillis();
+		synchronized (shortColLabelsMap) {
+			result = shortColLabelsMap.get(key);
+			if (result == null) {
+				if ("accel.csv".equals(dataFile.getName())) {
+					result = "ac";
+				} else if ("application.csv".equals(dataFile.getName())) {
+					result = "ap";
+				} else if ("bluetooth.csv".equals(dataFile.getName())) {
+					result = "b";
+				} else if ("calendar.csv".equals(dataFile.getName())) {
+					result = "cr";
+				} else if ("calllog.csv".equals(dataFile.getName())) {
+					result = "cg";
+				} else if ("contacts.csv".equals(dataFile.getName())) {
+					result = "cs";
+				} else if ("gsm.csv".equals(dataFile.getName())) {
+					result = "g";
+				} else if ("media.csv".equals(dataFile.getName())) {
+					result = "md";
+				} else if ("mediaplay.csv".equals(dataFile.getName())) {
+					result = "mp";
+				} else if ("process.csv".equals(dataFile.getName())) {
+					result = "p";
+				} else if ("sys.csv".equals(dataFile.getName())) {
+					result = "s";
+				} else {
+					throw new IllegalArgumentException(
+							"Check the spelling of the filename in the above list");
+				}
+
+				int underscoreIx = -1;
+				do {
+					result += currKey.charAt(underscoreIx + 1);
+					underscoreIx = currKey.indexOf("_", underscoreIx + 1);
+				} while (underscoreIx != -1);
+
+				if (shortColLabelsMap.containsValue(result)) {
+					int i = 2;
+					while (shortColLabelsMap.containsValue(result + i)) {
+						++i;
+					}
+					result += i;
+				}
+
+				shortColLabelsMap.put(key, result);
+			}
+
+		}
+		delta = System.currentTimeMillis() - delta;
+		PerfMon.increment(TimeMetrics.WAITING_LOCK, delta);
+
+		return result;
 	}
 }

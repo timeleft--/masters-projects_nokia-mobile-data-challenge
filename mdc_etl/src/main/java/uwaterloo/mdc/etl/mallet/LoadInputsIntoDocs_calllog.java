@@ -99,7 +99,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected String getTimeColumnName() {
+	public String getTimeColumnName() {
 		return "call_time";
 	}
 
@@ -201,7 +201,7 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 	}
 
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 

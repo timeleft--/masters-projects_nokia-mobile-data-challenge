@@ -19,14 +19,14 @@ public class LoadInputsIntoDocs_bluetooth extends LoadInputsIntoDocs {
 	}
 	
 	@Override
-	protected HashSet<String> getColsToSkip() {
+	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
 
 
 	@Override
 	protected Comparable<?> getValueToWrite() {
-		return "B" + currValue; //Mac Address
+		return "B" + currValue.toString(); //Mac Address
 	}
 
 	@Override

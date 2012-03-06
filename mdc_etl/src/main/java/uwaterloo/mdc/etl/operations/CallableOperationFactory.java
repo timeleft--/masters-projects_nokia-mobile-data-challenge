@@ -36,16 +36,8 @@ public class CallableOperationFactory<R, V> {
 			char delimiter, String eol, int bufferSize, File dataFile,
 			String outPath) throws Exception {
 		long delta = System.currentTimeMillis();
-		String resultClassName = prototype.getCanonicalName() + "_" + FilenameUtils.removeExtension(dataFile.getName());
-		Class<? extends CallableOperation<R,V>> resultClazz = resultClazzes.get(resultClassName);
-		if(resultClazz == null){
-			try{
-			resultClazz = (Class<? extends CallableOperation<R,V>>) Class.forName(resultClassName);
-			resultClazzes.put(resultClassName, resultClazz);
-			}catch(ClassNotFoundException e){
-				resultClazz = prototype;
-			}
-		}
+		Class<? extends CallableOperation<R,V>> resultClazz = loadClass(prototype, dataFile.getName());
+
 		
 		Constructor<? extends CallableOperation<R,V>> constructor = (Constructor<? extends CallableOperation<R,V>>) resultClazz.getConstructors()[0];
 		CallableOperation<R,V> result = constructor.newInstance(master,
@@ -58,5 +50,19 @@ public class CallableOperationFactory<R, V> {
 		PerfMon.increment(TimeMetrics.REFLECTION, delta);
 		
 		return result;
+	}
+	
+	public Class<? extends CallableOperation<R, V>> loadClass(Class<? extends CallableOperation<R,V>> prototype, String dataFileName){
+		String resultClassName = prototype.getCanonicalName() + "_" + FilenameUtils.removeExtension(dataFileName);
+		Class<? extends CallableOperation<R,V>> resultClazz = resultClazzes.get(resultClassName);
+		if(resultClazz == null){
+			try{
+			resultClazz = (Class<? extends CallableOperation<R,V>>) Class.forName(resultClassName);
+			resultClazzes.put(resultClassName, resultClazz);
+			}catch(ClassNotFoundException e){
+				resultClazz = prototype;
+			}
+		}
+		return resultClazz;
 	}
 }
