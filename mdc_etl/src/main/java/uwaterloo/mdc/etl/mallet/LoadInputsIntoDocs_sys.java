@@ -1,12 +1,15 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
 
 public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
+
+	private HashMap<String,Comparable<?>> prevVal = new HashMap<String,Comparable<?>>();
 
 	public LoadInputsIntoDocs_sys(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
@@ -117,7 +120,20 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 				result = RingOrSilence.S;
 			}
 		}
+		if (prevVal.containsKey(currKey) && result.equals(prevVal.get(currKey))) {
+			// prevent repeating the values of high granuality files
+			//TODO: how will this affect stats?
+			result = null;
+		} else {
+			prevVal.put(currKey, result);
+		}
+		
 		return result;
+	}
+	
+	@Override
+	protected void onMicroLocChange() {
+		prevVal.clear();
 	}
 
 	@Override

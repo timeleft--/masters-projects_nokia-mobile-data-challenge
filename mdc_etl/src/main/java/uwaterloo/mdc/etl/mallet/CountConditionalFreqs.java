@@ -27,7 +27,7 @@ import cc.mallet.types.Instance;
 
 //import uwaterloo.mdc.etl.mallet.*;
 
-public class CountConditionalFreqs {
+public class CountConditionalFreqs implements Callable<Void> {
 
 	private String statsPath = "C:\\mdc-datasets\\mallet\\stats";
 	private String shotColNamesPath = "C:\\mdc-datasets\\short-col-names.properties";
@@ -41,7 +41,7 @@ public class CountConditionalFreqs {
 	private ExecutorService countExec;
 	private CompletionService<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>> countEcs;
 
-	private Map<String, HashMap<String, Enum<?>>> valueDomainMap;
+	private Map<String, HashMap<String, Comparable<?>>> valueDomainMap;
 
 	/**
 	 * @param args
@@ -53,25 +53,32 @@ public class CountConditionalFreqs {
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
 
 		CountConditionalFreqs app = new CountConditionalFreqs();
-		app.count();
+
+		app.call();
+	}
+	
+	public Void call() throws Exception {
+		
+		this.count();
 
 		// This will make the executor accept no new threads
 		// and finish all existing threads in the queue
-		app.printExec.shutdown();
+		this.printExec.shutdown();
 		// Wait until all threads are finish
-		while (!app.printExec.isTerminated()) {
+		while (!this.printExec.isTerminated()) {
 			Thread.sleep(5000);
 			System.out.println("Shutting down");
 		}
 
-		for (Writer wr : app.statWriters.values()) {
+		for (Writer wr : this.statWriters.values()) {
 			if (wr != null) {
 				wr.flush();
 				wr.close();
 			}
 		}
 
-		app.countExec.shutdown();
+		this.countExec.shutdown();
+		return null;
 	}
 
 	public CountConditionalFreqs() throws IOException {
@@ -94,15 +101,17 @@ public class CountConditionalFreqs {
 		}
 
 		valueDomainMap = Collections
-				.synchronizedMap(new HashMap<String, HashMap<String, Enum<?>>>());
+				.synchronizedMap(new HashMap<String, HashMap<String, Comparable<?>>>());
 		for (String statKey : Discretize.enumsMap.keySet()) {
-			HashMap<String, Enum<?>> valueDomain = new HashMap<String, Enum<?>>();
+			HashMap<String, Comparable<?>> valueDomain = new HashMap<String, Comparable<?>>();
 			valueDomainMap.put(statKey, valueDomain);
 
 			for (Enum<?> enumVal : Discretize.enumsMap.get(statKey)) {
 				valueDomain.put(enumVal.toString(), enumVal);
 			}
 		}
+		
+
 	}
 
 	public void count() throws InterruptedException, ExecutionException {
@@ -191,14 +200,18 @@ public class CountConditionalFreqs {
 
 						// /
 
-						HashMap<String, Enum<?>> valueDomain = valueDomainMap
+						HashMap<String, Comparable<?>> valueDomain = valueDomainMap
 								.get(statKey);
-						if (valueDomain == null) {
+						Comparable<?> enumVal;
+						
+						if (valueDomain != null) {
+							enumVal = valueDomain.get(value);
+						} else if(statKey!= null && statKey.endsWith(Config.RESULT_POSTFX_INTEGER)) {
+							enumVal = Integer.parseInt(value);
+						} else{
 							continue; // apu and bma is ok to skip.. we don't
 										// keep stats for it!
 						}
-
-						Enum<?> enumVal = valueDomain.get(value);
 
 						HashMap<String, Frequency> freqMap = targetStats
 								.get(Integer.parseInt(inst.getTarget()

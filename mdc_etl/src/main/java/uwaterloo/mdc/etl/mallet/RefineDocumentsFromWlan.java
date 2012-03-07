@@ -29,6 +29,7 @@ import uwaterloo.mdc.etl.model.Visit;
 import uwaterloo.mdc.etl.operations.CallableOperation;
 import uwaterloo.mdc.etl.util.FileStringPair;
 import uwaterloo.mdc.etl.util.KeyValuePair;
+import uwaterloo.mdc.etl.util.MathUtil;
 import uwaterloo.mdc.etl.util.StringUtils;
 
 public class RefineDocumentsFromWlan
@@ -39,8 +40,8 @@ public class RefineDocumentsFromWlan
 	// protected static final String WLAN_NOVISITS_FILENAME =
 	// "wlan_no-visit.csv";
 
-	protected static final String COLNAME_AVG_NUM_APS = " avgAps";
-	protected static final String COLNAME_STDDEV_NUM_APS = " sdvAps";
+	protected static final String COLNAME_AVG_NUM_APS = " avgaps";
+	protected static final String COLNAME_STDDEV_NUM_APS = " sdvaps";
 
 	// protected static final String READINGS_AT_SAME_TIME =
 	// "TIME_CARDINALITY_";
@@ -59,6 +60,8 @@ public class RefineDocumentsFromWlan
 	protected final Frequency durationFreqs = new Frequency();
 	protected final Frequency locationsPerUser = new Frequency();
 	protected final Frequency meaningsPerUser = new Frequency();
+	protected final Frequency numMicroLocsFreq = new Frequency();
+	protected final Frequency avgApsFreq = new Frequency();
 
 	protected long prevTime = -1;
 	protected long prevprevtime;
@@ -185,12 +188,14 @@ public class RefineDocumentsFromWlan
 			// DEBUG mesasge below shows that this happens when there is nothing
 			// pending 99.99999% of the time
 			// TODO: act when it happen when there is something pending
-			// log("\tDEBUG\tRecent readings were outside of visits - pendingEndTime: "
-			// + pendingEndTims
-			// + ", apStats.n: "
-			// + apsStat.getN()
-			// + ", frequentlySeen.uniqueCount: "
-			// + frequentlySeenAps.getUniqueCount());
+			if (pendingEndTims != -1) {
+				log("\tERROR\tRecent readings were outside of visits - pendingEndTime: "
+						+ pendingEndTims
+						+ ", apStats.n: "
+						+ apsStat.getN()
+						+ ", frequentlySeen.uniqueCount: "
+						+ frequentlySeenAps.getUniqueCount());
+			}
 			// The previous readings, if any are not part of any visit
 			// discard them by returning false
 			// But first prepare for the next visit
@@ -543,7 +548,7 @@ public class RefineDocumentsFromWlan
 		int m = 0;
 		while (macIter.hasNext() && m < Config.NUM_FREQ_MAC_ADDRS_TO_KEEP) {
 			++m;
-			result.append(" W").append(macIter.next().toString());
+			result.append(" mW").append(macIter.next().toString());
 		}
 
 		// reducing side effects...the caller is responsible
@@ -604,7 +609,7 @@ public class RefineDocumentsFromWlan
 
 					String wifi = String.format(wifiReadingFormat,
 							instFields[3], instFields[4]);
-
+					avgApsFreq.addValue(Integer.parseInt(instFields[3]));
 					// frequenty seen macs
 					wifi += instFields[5];
 
@@ -686,7 +691,8 @@ public class RefineDocumentsFromWlan
 				String visitName = Long.toString(visit.getKey())
 						+ ((Visit<FileStringPair>) visit).trust;
 				writeMallet(startTime, endTime, malletInst, FileUtils.getFile(
-						malletDir, visitName, microLocDoc.getKey().getName()));
+						malletDir, visitName, microLocDoc.getKey().getName()),
+						microLocList.size());
 
 				locationsPerUser.addValue(locationId);
 
@@ -722,7 +728,7 @@ public class RefineDocumentsFromWlan
 	}
 
 	protected void writeMallet(long startTime, long endTime, String malletInst,
-			File malletFile) throws IOException {
+			File malletFile, int numMicroLocs) throws IOException {
 		// Calculate duration
 		long durationInSec = endTime - startTime;
 
@@ -740,6 +746,11 @@ public class RefineDocumentsFromWlan
 
 		malletInst += " dur" + Config.DELIMITER_COLNAME_VALUE
 				+ durDiscrete.toString();
+
+		numMicroLocsFreq.addValue(numMicroLocs);
+		if (numMicroLocs > 1) {
+			malletInst += " nml" + MathUtil.lgSmoothing(numMicroLocs);
+		}
 
 		long delta = System.currentTimeMillis();
 
@@ -782,6 +793,9 @@ public class RefineDocumentsFromWlan
 				relTimeWStats[RelTimeNWeatherElts.SKY.ordinal()]);
 		result.put(Config.RESULT_KEY_LOCATIONS_PER_USER, locationsPerUser);
 		result.put(Config.RESULT_KEY_MEANINGS_PER_USER, meaningsPerUser);
+		result.put(Config.RESULT_KEY_NUM_MICRO_LOCS_FREQ, numMicroLocsFreq);
+		result.put(Config.RESULT_KEY_AVG_APS_FREQ, avgApsFreq);
+		// result.put(Config.RESULT_KEY_STDV_APS_??, meaningsPerUser);
 		return new KeyValuePair<String, HashMap<String, Object>>(userid, result);
 	}
 

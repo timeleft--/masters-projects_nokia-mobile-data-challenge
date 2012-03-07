@@ -23,7 +23,7 @@ import uwaterloo.mdc.etl.util.StringUtils;
 /**
  * 
  * @author yaboulna
- *
+ * 
  */
 public abstract class LoadInputsIntoDocs
 		extends
@@ -31,29 +31,32 @@ public abstract class LoadInputsIntoDocs
 
 	private static final String CONTINUOUS_POSTFIX = "C";
 
-	protected Long prevTimeColReading = null;;
+	protected Long prevTimeColReading = null;
 
 	protected final UserVisitsDocsHierarchy<StringBuilder> userHierarchy;
 
 	protected final Frequency readingNoVisitStat = new Frequency();
 	protected final Frequency visitNoReadingStat = new Frequency();
-	
+
 	/**
-	 * For a frequency to be included in the result, its possible values
-	 * must be added to the Discritize.enumsMap with a key that is
-	 * FILENAME_COLNAME. This field is the result.
+	 * For a frequency to be included in the result, its possible values must be
+	 * added to the Discritize.enumsMap with a key that is FILENAME_COLNAME.
+	 * This field is the result.
 	 */
 	protected final HashMap<String, Object> statsMap = new HashMap<String, Object>();
 
 	protected long currTime = 0;
+
+	private StringBuilder prevDocBuilder;
 
 	@SuppressWarnings("deprecation")
 	public LoadInputsIntoDocs(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
 
-		userHierarchy = new UserVisitsDocsHierarchy<StringBuilder>(FileUtils.getFile(outPath,
-				dataFile.getParentFile().getName()), StringBuilder.class.getConstructor());
+		userHierarchy = new UserVisitsDocsHierarchy<StringBuilder>(
+				FileUtils.getFile(outPath, dataFile.getParentFile().getName()),
+				StringBuilder.class.getConstructor());
 
 		statsMap.put(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
 				readingNoVisitStat);
@@ -81,24 +84,24 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected void delimiterProcedure() {
-		if(getColsToSkip().contains(currKey)){
+		if (getColsToSkip().contains(currKey)) {
 			return;
 		}
 
 		if (currKey.equals(getTimeColumnName())) {
 			currTime = Long.parseLong(currValue);
-			
+
 		} else if ("tz".equals(currKey)) {
-			// We keep times in GMT.. 
+			// We keep times in GMT..
 			currTime += Long.parseLong(currValue);
-			
+
 			if (prevTimeColReading != null) {
 				long deltaTime = currTime - prevTimeColReading;
 				if (deltaTime != 0) {
 					// We have finished readings for one time slot.. write
 					onTimeChanged();
 				}
-			} 
+			}
 			prevTimeColReading = currTime;
 			currTime = 0;
 
@@ -113,10 +116,12 @@ public abstract class LoadInputsIntoDocs
 
 	protected void appendCurrValToCol(Comparable<?> discreteVal) {
 		// Don't put place holder values (like 0) in the continuous stat
-		if(Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
+		if (discreteVal == null || // comment below when adding new discritizers
+									// (to allow null pointer exc)
+				Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
 			return;
 		}
-		
+
 		colOpResult.get(currKey).append(" ").append(shortKey())
 				.append(Config.DELIMITER_COLNAME_VALUE)
 				.append(discreteVal.toString());
@@ -124,15 +129,18 @@ public abstract class LoadInputsIntoDocs
 
 	protected void addCurrValToStats(Comparable<?> discreteVal) {
 		Object statsObj = statsMap.get(prependFileName(currKey));
-		if(statsObj == null){
+		if (statsObj == null
+				// comment for debugging new discretizers
+				|| discreteVal == null) {
 			// In case of values that are not enums
 			return;
 		}
 		((Frequency) statsObj).addValue(discreteVal);
 
-		if (keepContinuousStatsForColumn(currKey) 
-				// Don't put place holder values (like 0) in the continuous stat
-				&& !Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
+		if (keepContinuousStatsForColumn(currKey)
+		// Don't put place holder values (like 0) in the continuous stat
+				&& !Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal
+						.toString())) {
 			statsObj = statsMap.get(prependFileName(currKey
 					+ CONTINUOUS_POSTFIX));
 			try {
@@ -159,7 +167,7 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected void writeResults() throws Exception {
-		if(userid == null){
+		if (userid == null) {
 			// this file is empty
 			return;
 		}
@@ -206,12 +214,15 @@ public abstract class LoadInputsIntoDocs
 		if (prevTimeColReading != null) {
 			// The records of the last time
 			onTimeChanged();
-		} 
+		}
 	}
 
 	protected final void onTimeChanged() {
 		StringBuilder docBuilder = userHierarchy
 				.getDocForEndTime(prevTimeColReading);
+		if (prevDocBuilder != null && !prevDocBuilder.equals(docBuilder)) {
+			onMicroLocChange();
+		}
 		if (docBuilder == null) {
 			// This reading doesn't have an associated visit
 			readingNoVisitStat.addValue(ReadingWithinVisitEnum.R);
@@ -232,7 +243,10 @@ public abstract class LoadInputsIntoDocs
 
 			}
 		}
+		prevDocBuilder = docBuilder;
+	}
 
+	protected void onMicroLocChange() {
 	}
 
 	@Override

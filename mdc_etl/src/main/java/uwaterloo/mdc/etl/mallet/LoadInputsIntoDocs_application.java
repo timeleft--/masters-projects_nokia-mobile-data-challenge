@@ -3,10 +3,19 @@ package uwaterloo.mdc.etl.mallet;
 import java.io.File;
 import java.util.HashSet;
 
+import org.apache.commons.math.stat.Frequency;
+
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.util.MathUtil;
 
 public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 
+	private Frequency appUsageFreq = new Frequency();
+	@Override
+	protected void onMicroLocChange() {
+		appUsageFreq = new Frequency();
+	}
+	
 	public LoadInputsIntoDocs_application(Object master, char delimiter,
 			String eol, int bufferSize, File dataFile, String outPath)
 			throws Exception {
@@ -26,6 +35,7 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 	}
 
 	private boolean foregroundEvent = false;
+	
 
 	@Override
 	protected void delimiterProcedure() {
@@ -38,7 +48,17 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 	@Override
 	protected Comparable<?> getValueToWrite() {
 		if (foregroundEvent) {
-			return "A" + currValue.toString(); // The UID
+			
+			appUsageFreq.addValue(currValue);
+			long encounters = appUsageFreq.getCount(currValue);
+			
+			if(MathUtil.getPow2(encounters) <0){
+				// In case of num > 1024, that's a stop word!
+				return null;
+			}
+			long lgEnc = MathUtil.lgSmoothing(encounters);
+			
+			return Long.toString(lgEnc) + "A" + currValue.toString(); // The UID
 		} else {
 			return Config.MISSING_VALUE_PLACEHOLDER;
 		}
@@ -49,5 +69,6 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 		// Auto-generated method stub
 		return false;
 	}
+
 
 }

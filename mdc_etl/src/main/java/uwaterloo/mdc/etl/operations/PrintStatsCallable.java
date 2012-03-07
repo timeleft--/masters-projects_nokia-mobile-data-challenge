@@ -98,8 +98,12 @@ public class PrintStatsCallable implements Callable<Void> {
 				for(int i = 0; i<valsArr.length; ++i){
 					valsArr[i] = userid + "_" + (i+1);
 				}
-				
-			}
+			} else if (statKey.endsWith(Config.RESULT_POSTFX_INTEGER)) {
+				valsArr = new Integer[55];
+				for(int i = 0; i<valsArr.length; ++i){
+					valsArr[i] = i+1;
+				}
+			} 
 		}
 
 		StringBuilder headerBuilder = new StringBuilder();

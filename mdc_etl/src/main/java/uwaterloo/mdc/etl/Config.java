@@ -52,6 +52,8 @@ public class Config {
 
 	public static final String DEFAULT_TIME_ZONE = "-7200";
 
+	public static final String RESULT_POSTFX_INTEGER = "_int";
+
 	public static final String RESULT_KEY_VISIT_WLAN_BOTH_FREQ = "visit-with-wlan_freq";
 	public static final String RESULT_KEY_WLAN_VISIT_BOTH_FREQ = "wlan-with-visit_freq";
 	public static final String RESULT_KEY_DURATION_FREQ = "microloc-duration_freq";
@@ -62,6 +64,9 @@ public class Config {
 	public static final String RESULT_KEY_SKY_FREQ = "sky_freq";
 	public static final String RESULT_KEY_LOCATIONS_PER_USER = "location-ids_freq";
 	public static final String RESULT_KEY_MEANINGS_PER_USER = "location-meanings_freq";
+	public static final String RESULT_KEY_NUM_MICRO_LOCS_FREQ = "microloc-per-visit_freq" + RESULT_POSTFX_INTEGER;
+	public static final String RESULT_KEY_AVG_APS_FREQ = "microloc-wlan-aps-count_freq" + RESULT_POSTFX_INTEGER;
+
 
 	public static final long ERROR_START_END_TIMES = 60 * 3;
 
@@ -73,7 +78,7 @@ public class Config {
 
 	public static final int VALIDATION_FOLDS = 10;
 
-
+	
 
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.

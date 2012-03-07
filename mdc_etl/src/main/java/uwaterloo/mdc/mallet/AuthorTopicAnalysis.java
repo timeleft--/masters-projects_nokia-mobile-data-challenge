@@ -7,6 +7,7 @@ import java.io.PrintWriter;
 import java.io.Writer;
 import java.nio.channels.Channels;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 
 import org.apache.commons.io.FileUtils;
 
@@ -23,7 +24,7 @@ import cc.mallet.types.InstanceList;
 import cc.mallet.util.CharSequenceLexer;
 import cc.mallet.util.Randoms;
 
-public class AuthorTopicAnalysis {
+public class AuthorTopicAnalysis implements Callable<Void> {
 
 	private String outputPath = "C:\\mdc-datasets\\mallet\\out";
 	private String inputPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
@@ -43,9 +44,14 @@ public class AuthorTopicAnalysis {
 		// importer.createDocuments();
 
 		AuthorTopicAnalysis app = new AuthorTopicAnalysis();
-		// app.hierarchicalLDA();
-		app.perUserHLDA();
+		app.call();
+	}
 
+	public Void call() throws Exception {
+		// app.hierarchicalLDA();
+		this.perUserHLDA();
+
+		return null;
 	}
 
 	public void perUserHLDA() throws Exception {
@@ -84,9 +90,10 @@ public class AuthorTopicAnalysis {
 							i = 0;
 						}
 					}
-					
-					if(training.size() == 0|| validation.size() == 0){
-						System.err.println("Not enough data for user: " + userDir.getAbsolutePath());
+
+					if (training.size() == 0 || validation.size() == 0) {
+						System.err.println("Not enough data for user: "
+								+ userDir.getAbsolutePath());
 						continue;
 					}
 

@@ -2,6 +2,7 @@ package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
 import java.io.FileFilter;
+import java.io.IOException;
 import java.io.Writer;
 import java.nio.channels.Channels;
 import java.util.Collections;
@@ -22,50 +23,71 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.operations.PrintStatsCallable;
 import uwaterloo.mdc.etl.util.KeyValuePair;
+import uwaterloo.mdc.mallet.AuthorTopicAnalysis;
 
 public class ImportIntoMallet {
-	
-	public static class MalletImportedFiles implements FileFilter {
-		
-			
-			@Override
-			public boolean accept(File file) {
-				String fName = file.getName();
-				boolean result = !("distance_matrix.csv"
-						.equals(fName))
-						&& !("wlan.csv".equals(fName))
-						&& !(fName
-								.startsWith("visit_sequence_"))
-						&& !("contacts.csv".equals(fName))
-				&& !("gsm.csv".equals(fName))
-				&& !("media.csv".equals(fName))
-				&& !("process.csv".equals(fName));
 
-				return result;
-			}
-		};
-	
+	public static class MalletImportedFiles implements FileFilter {
+
+		@Override
+		public boolean accept(File file) {
+			String fName = file.getName();
+			boolean result = !("distance_matrix.csv".equals(fName))
+					&& !("wlan.csv".equals(fName))
+					&& !(fName.startsWith("visit_sequence_"))
+					&& !("contacts.csv".equals(fName))
+					&& !("gsm.csv".equals(fName))
+					&& !("media.csv".equals(fName))
+					&& !("process.csv".equals(fName));
+
+			return result;
+		}
+	};
 
 	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
 	private String outPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
 	private String statsPath = "C:\\mdc-datasets\\mallet\\stats";
 
-	private Map<String, Writer> statWriters = Collections.synchronizedMap(new HashMap<String, Writer>());
+	private Map<String, Writer> statWriters = Collections
+			.synchronizedMap(new HashMap<String, Writer>());
 
 	/**
 	 * @param args
-	 * @throws Exception 
+	 * @throws Exception
 	 */
 	public static void main(String[] args) throws Exception {
-		
-		
+
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
-					.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-		
+				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
+
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
+		
+		CountConditionalFreqs countCond = new CountConditionalFreqs();
+		ExecutorService countExec = Executors.newSingleThreadExecutor();
+		countExec.submit(countCond);
+		
+		AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
+		ExecutorService ldaExec = Executors.newSingleThreadExecutor();
+		ldaExec.submit(lda);
+		
+		ldaExec.shutdown();
+		while(!ldaExec.isTerminated()){
+			Thread.sleep(5000);
+		}
+		
+		countExec.shutdown();
+		while(!countExec.isTerminated()){
+			Thread.sleep(5000);
+		}
 	}
+
+	public ImportIntoMallet() throws IOException {
+		File outDir = FileUtils.getFile(outPath);
+		if(outDir != null){
+		FileUtils.deleteDirectory(outDir);
+	}}
 
 	public void createDocuments() throws Exception {
 		try {
@@ -92,7 +114,8 @@ public class ImportIntoMallet {
 
 			ExecutorService printStatsExec = Executors
 					.newFixedThreadPool(Config.NUM_THREADS / 4);
-			CompletionService<Void> printStatsEcs = new ExecutorCompletionService<Void>(printStatsExec);
+			CompletionService<Void> printStatsEcs = new ExecutorCompletionService<Void>(
+					printStatsExec);
 
 			int numLoadDataTasks = 0;
 			int numberWifiTasks = 0;
@@ -203,8 +226,8 @@ public class ImportIntoMallet {
 						}
 					}
 				}
-				
-				for(int i=0; i<printTasks;++i){
+
+				for (int i = 0; i < printTasks; ++i) {
 					System.out.println(PerfMon.asString());
 					printStatsEcs.take();
 				}
