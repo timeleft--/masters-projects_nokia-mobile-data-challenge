@@ -119,12 +119,14 @@ public class RefineDocumentsFromWlan
 
 	@Override
 	protected void delimiterProcedure() throws Exception {
-		if ("time".equals(currKey)) {
+		if("tz".equals(currKey)){
+			prevTimeZone = currValue;
+		} else	if ("time".equals(currKey)) {
 			// We'd better let the errors propagate: try {
 			currTime = Long.parseLong(currValue);
-		} else if ("tz".equals(currKey)) {
-			// Act on time in GMT
-			currTime += Long.parseLong(currValue);
+//		} else if ("tz".equals(currKey)) {
+//			// Act on time in GMT
+//			currTime += Long.parseLong(currValue);
 			if (currTime != prevTime) {
 				// A new set of AP sightings (record)
 				if (prevTime != -1 && !prevAccessPointsHistory.isEmpty()) {
@@ -146,7 +148,7 @@ public class RefineDocumentsFromWlan
 				// Make the current ones be the prev.s
 				prevprevtime = prevTime;
 				prevTime = currTime;
-				prevTimeZone = currValue;
+//				prevTimeZone = currValue;
 				prevVisit = currVisit;
 				prevStartDir = currStartDir;
 				currVisit = userVisitHier.searchInVisit(currTime, false);
@@ -542,19 +544,23 @@ public class RefineDocumentsFromWlan
 	}
 
 	private String consumeFrequentlySeenMacAddrs() {
+		if(Config.USER_SPECIFIC_FEATURES){
 		StringBuilder result = new StringBuilder();
 
 		Iterator<Comparable<?>> macIter = frequentlySeenAps.valuesIterator();
 		int m = 0;
 		while (macIter.hasNext() && m < Config.NUM_FREQ_MAC_ADDRS_TO_KEEP) {
 			++m;
-			result.append(" mW").append(macIter.next().toString());
+			result.append(" ap").append(macIter.next().toString());
 		}
 
 		// reducing side effects...the caller is responsible
 		// frequentlySeenAps = new Frequency();
 
 		return result.toString();
+		} else {
+			return "";
+		}
 	}
 
 	@Override
@@ -710,15 +716,15 @@ public class RefineDocumentsFromWlan
 		}
 	}
 
-	protected Enum<?>[] getRelTimeAndWeather(String startTimeStr,
-			String timeZoneStr) throws NumberFormatException, IOException {
-		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
-	}
+//	protected Enum<?>[] getRelTimeAndWeather(String startTimeStr,
+//			String timeZoneStr) throws NumberFormatException, IOException {
+//		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
+//	}
 
 	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr)
 			throws IOException {
-		Enum<?>[] result = Discretize.relTimeNWeather(startTime,
-				Config.DEFAULT_TIME_ZONE);
+		Enum<?>[] result = Discretize.relTimeNWeather(startTime,timeZoneStr);
+//				Config.DEFAULT_TIME_ZONE);
 
 		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {
 			relTimeWStats[ix.ordinal()].addValue(result[ix.ordinal()]);
@@ -749,7 +755,7 @@ public class RefineDocumentsFromWlan
 
 		numMicroLocsFreq.addValue(numMicroLocs);
 		if (numMicroLocs > 1) {
-			malletInst += " nml" + MathUtil.lgSmoothing(numMicroLocs);
+			malletInst += " numml" + MathUtil.lgSmoothing(numMicroLocs);
 		}
 
 		long delta = System.currentTimeMillis();

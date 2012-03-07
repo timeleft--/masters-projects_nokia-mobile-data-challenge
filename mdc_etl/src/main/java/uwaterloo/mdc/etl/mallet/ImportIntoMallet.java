@@ -63,31 +63,32 @@ public class ImportIntoMallet {
 
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
-		
+
 		CountConditionalFreqs countCond = new CountConditionalFreqs();
 		ExecutorService countExec = Executors.newSingleThreadExecutor();
 		countExec.submit(countCond);
-		
-		AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
-		ExecutorService ldaExec = Executors.newSingleThreadExecutor();
-		ldaExec.submit(lda);
-		
-		ldaExec.shutdown();
-		while(!ldaExec.isTerminated()){
-			Thread.sleep(5000);
-		}
-		
+
+//		AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
+//		ExecutorService ldaExec = Executors.newSingleThreadExecutor();
+//		ldaExec.submit(lda);
+//
+//		ldaExec.shutdown();
+//		while (!ldaExec.isTerminated()) {
+//			Thread.sleep(5000);
+//		}
+
 		countExec.shutdown();
-		while(!countExec.isTerminated()){
+		while (!countExec.isTerminated()) {
 			Thread.sleep(5000);
 		}
 	}
 
 	public ImportIntoMallet() throws IOException {
 		File outDir = FileUtils.getFile(outPath);
-		if(outDir != null){
-		FileUtils.deleteDirectory(outDir);
-	}}
+		if (outDir != null) {
+			FileUtils.deleteDirectory(outDir);
+		}
+	}
 
 	public void createDocuments() throws Exception {
 		try {
@@ -162,6 +163,10 @@ public class ImportIntoMallet {
 					}
 				}
 
+//				SequentialProcessing wlanProcessPrinting = new SequentialProcessing(statsPath, statWriters, printStatsEcs);
+				File[] wlanPrintUserDirs = dataRootFile.listFiles();
+				int wlanPrintUserDirsIx = 0;
+				HashMap<String, HashMap<String, Object>> pendingWlanPrintTasks = new HashMap<String, HashMap<String, Object>>();
 				for (int i = 0; i < numberWifiTasks; ++i) {
 
 					System.out.println(PerfMon.asString());
@@ -170,20 +175,54 @@ public class ImportIntoMallet {
 							.take();
 					KeyValuePair<String, HashMap<String, Object>> wlanStat = finishedWlan
 							.get();
+
 					if (wlanStat != null) {
-						HashMap<String, Object> wlanStatMap = wlanStat
-								.getValue();
-						for (String wlanStatKey : wlanStatMap.keySet()) {
+//						wlanProcessPrinting.processResult(wlanStat, dataRootFile.listFiles());
+						if (wlanStat.getKey().equals(
+								wlanPrintUserDirs[wlanPrintUserDirsIx]
+										.getName())) {
+							HashMap<String, Object> wlanStatMap = wlanStat
+									.getValue();
+							for (String wlanStatKey : wlanStatMap.keySet()) {
 
-							Object wlanStatObj = wlanStatMap.get(wlanStatKey);
+								Object wlanStatObj = wlanStatMap
+										.get(wlanStatKey);
 
-							PrintStatsCallable printStatCall = new PrintStatsCallable(
-									wlanStatObj, wlanStat.getKey(),
-									wlanStatKey, statWriters, statsPath);
-							printStatsEcs.submit(printStatCall);
-							++printTasks;
+								PrintStatsCallable printStatCall = new PrintStatsCallable(
+										wlanStatObj, wlanStat.getKey(),
+										wlanStatKey, statWriters, statsPath);
+								printStatsEcs.submit(printStatCall);
+								++printTasks;
+							}
+							++wlanPrintUserDirsIx;
+							while (wlanPrintUserDirsIx < wlanPrintUserDirs.length
+									&& pendingWlanPrintTasks
+											.containsKey(wlanPrintUserDirs[wlanPrintUserDirsIx]
+													.getName())) {
+								HashMap<String, Object> pendingWlanStat = pendingWlanPrintTasks
+										.remove(wlanPrintUserDirs[wlanPrintUserDirsIx]
+												.getName());
+								for (String wlanStatKey : pendingWlanStat
+										.keySet()) {
+
+									Object wlanStatObj = pendingWlanStat
+											.get(wlanStatKey);
+
+									PrintStatsCallable printStatCall = new PrintStatsCallable(
+											wlanStatObj,
+											wlanPrintUserDirs[wlanPrintUserDirsIx]
+													.getName(), wlanStatKey,
+											statWriters, statsPath);
+									printStatsEcs.submit(printStatCall);
+									++printTasks;
+								}
+								++wlanPrintUserDirsIx;
+							}
+						} else {
+
+							pendingWlanPrintTasks.put(wlanStat.getKey(),
+									wlanStat.getValue());
 						}
-
 						// /////////////////////////////////////////////////////
 						// start filling the user documents with data
 						String userid = wlanStat.getKey();
@@ -198,10 +237,19 @@ public class ImportIntoMallet {
 							loadDataEcs.submit(loadDataOp);
 							++numLoadDataTasks;
 						}
+
 					}
 				}
+				
+				assert (pendingWlanPrintTasks.size() == 0) : "Missed printing wlan stat objects " + pendingWlanPrintTasks.toString();
 
+				assert (printTasks == Config.NUM_USERS_TO_PROCESS) : "You printed wlan stats only users: " + printTasks;
+				
 				// ////////// Print load stats
+//				SequentialProcessing seqLoadPrint = new SequentialProcessing(statsPath, statWriters, printStatsEcs);
+				File[] loadPrintUserDirs = dataRootFile.listFiles();
+				int loadPrintUserDirsIx = 0;
+				HashMap<String, HashMap<String, Object>> pendingloadPrintTasks = new HashMap<String, HashMap<String, Object>>();
 				for (int j = 0; j < numLoadDataTasks; ++j) {
 
 					System.out.println(PerfMon.asString());
@@ -211,22 +259,60 @@ public class ImportIntoMallet {
 					KeyValuePair<String, HashMap<String, Object>> loadDataStat = finishedLoading
 							.get();
 					if (loadDataStat != null) {
-						HashMap<String, Object> loadDataStatMap = loadDataStat
-								.getValue();
-						for (String loadDataStatKey : loadDataStatMap.keySet()) {
+//						printTasks += seqLoadPrint.processResult(loadDataStat, dataRootFile.listFiles());
+						if (loadDataStat.getKey().equals(
+								loadPrintUserDirs[loadPrintUserDirsIx]
+										.getName())) {
 
-							Object loadDataStatObj = loadDataStatMap
-									.get(loadDataStatKey);
+							HashMap<String, Object> loadDataStatMap = loadDataStat
+									.getValue();
+							for (String loadDataStatKey : loadDataStatMap
+									.keySet()) {
 
-							PrintStatsCallable printStatCall = new PrintStatsCallable(
-									loadDataStatObj, loadDataStat.getKey(),
-									loadDataStatKey, statWriters, statsPath);
-							printStatsEcs.submit(printStatCall);
-							++printTasks;
+								Object loadDataStatObj = loadDataStatMap
+										.get(loadDataStatKey);
+
+								PrintStatsCallable printStatCall = new PrintStatsCallable(
+										loadDataStatObj, loadDataStat.getKey(),
+										loadDataStatKey, statWriters, statsPath);
+								printStatsEcs.submit(printStatCall);
+								++printTasks;
+							}
+							++loadPrintUserDirsIx;
+							while (loadPrintUserDirsIx < loadPrintUserDirs.length
+									&& pendingloadPrintTasks
+											.containsKey(loadPrintUserDirs[loadPrintUserDirsIx]
+													.getName())) {
+								HashMap<String, Object> pendingloadStat = pendingloadPrintTasks
+										.remove(loadPrintUserDirs[loadPrintUserDirsIx]
+												.getName());
+								for (String loadStatKey : pendingloadStat
+										.keySet()) {
+
+									Object loadStatObj = pendingloadStat
+											.get(loadStatKey);
+
+									PrintStatsCallable printStatCall = new PrintStatsCallable(
+											loadStatObj,
+											loadPrintUserDirs[loadPrintUserDirsIx]
+													.getName(), loadStatKey,
+											statWriters, statsPath);
+									printStatsEcs.submit(printStatCall);
+									++printTasks;
+								}
+								++loadPrintUserDirsIx;
+							}
+						} else {
+
+							pendingloadPrintTasks.put(loadDataStat.getKey(),
+									loadDataStat.getValue());
 						}
 					}
 				}
-
+				
+				assert (pendingloadPrintTasks.size() == 0) : "Missed printing load stat objects " + pendingloadPrintTasks.toString();
+				assert (printTasks == 2 * Config.NUM_USERS_TO_PROCESS) : "You printed stats only users: " + printTasks;
+				
 				for (int i = 0; i < printTasks; ++i) {
 					System.out.println(PerfMon.asString());
 					printStatsEcs.take();

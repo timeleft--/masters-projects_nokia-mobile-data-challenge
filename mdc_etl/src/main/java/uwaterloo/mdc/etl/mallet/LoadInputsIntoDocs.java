@@ -54,8 +54,9 @@ public abstract class LoadInputsIntoDocs
 			int bufferSize, File dataFile, String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
 
+		userid = dataFile.getParentFile().getName();
 		userHierarchy = new UserVisitsDocsHierarchy<StringBuilder>(
-				FileUtils.getFile(outPath, dataFile.getParentFile().getName()),
+				FileUtils.getFile(outPath, userid),
 				StringBuilder.class.getConstructor());
 
 		statsMap.put(prependFileName(Config.RESULT_KEY_READING_NOVISIT_FREQ),
@@ -91,9 +92,9 @@ public abstract class LoadInputsIntoDocs
 		if (currKey.equals(getTimeColumnName())) {
 			currTime = Long.parseLong(currValue);
 
-		} else if ("tz".equals(currKey)) {
-			// We keep times in GMT..
-			currTime += Long.parseLong(currValue);
+//		} else if ("tz".equals(currKey)) {
+//			// We keep times in GMT..
+//			currTime += Long.parseLong(currValue);
 
 			if (prevTimeColReading != null) {
 				long deltaTime = currTime - prevTimeColReading;
@@ -104,7 +105,8 @@ public abstract class LoadInputsIntoDocs
 			}
 			prevTimeColReading = currTime;
 			currTime = 0;
-
+		} else if ("tz".equals(currKey)) {
+			// just skipping this column
 		} else {
 			Comparable<?> discreteVal = getValueToWrite();
 			appendCurrValToCol(discreteVal);
@@ -167,10 +169,10 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected void writeResults() throws Exception {
-		if (userid == null) {
-			// this file is empty
-			return;
-		}
+//		if (userid == null) {
+//			// this file is empty
+//			return;
+//		}
 		// We do a check on all the files for stats gathering
 		File userDir = FileUtils.getFile(outPath, userid);
 
@@ -212,12 +214,13 @@ public abstract class LoadInputsIntoDocs
 	@Override
 	protected void eoFileProcedure() {
 		if (prevTimeColReading != null) {
+			onMicroLocChange();
 			// The records of the last time
 			onTimeChanged();
 		}
 	}
 
-	protected final void onTimeChanged() {
+	protected void onTimeChanged() {
 		StringBuilder docBuilder = userHierarchy
 				.getDocForEndTime(prevTimeColReading);
 		if (prevDocBuilder != null && !prevDocBuilder.equals(docBuilder)) {

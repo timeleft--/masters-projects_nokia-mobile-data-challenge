@@ -16,8 +16,8 @@ public class Config {
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 15;
-	public static final int NUM_USERS_TO_PROCESS = 80;
+	public static final int NUM_THREADS = 16;
+	public static final int NUM_USERS_TO_PROCESS = 10;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -66,6 +66,7 @@ public class Config {
 	public static final String RESULT_KEY_MEANINGS_PER_USER = "location-meanings_freq";
 	public static final String RESULT_KEY_NUM_MICRO_LOCS_FREQ = "microloc-per-visit_freq" + RESULT_POSTFX_INTEGER;
 	public static final String RESULT_KEY_AVG_APS_FREQ = "microloc-wlan-aps-count_freq" + RESULT_POSTFX_INTEGER;
+	public static final String RESULT_KEY_AVG_BTS_FREQ = "microloc-bluetooth-dev-avg_freq" + RESULT_POSTFX_INTEGER;
 
 
 	public static final long ERROR_START_END_TIMES = 60 * 3;
@@ -77,6 +78,8 @@ public class Config {
 	public static final int NUMBER_TESTING_USERS = 20;
 
 	public static final int VALIDATION_FOLDS = 10;
+
+	public static final boolean USER_SPECIFIC_FEATURES = false;
 
 	
 

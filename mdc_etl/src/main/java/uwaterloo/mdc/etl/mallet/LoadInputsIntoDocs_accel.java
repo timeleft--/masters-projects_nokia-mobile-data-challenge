@@ -1,11 +1,14 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import uwaterloo.mdc.etl.Discretize;
 
 public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
+
+	private HashMap<String,Comparable<?>> prevVal = new HashMap<String,Comparable<?>>();
 
 	
 	public enum Movement {
@@ -38,34 +41,35 @@ public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
 	}
 
 
-	@Override
-	protected void delimiterProcedure() {
-		// Timezone preceeds time only in this stupid case!
-		if (getColsToSkip().contains(currKey)) {
-			return;
-		}
-
-		if ("tz".equals(currKey)) {
-			// We keep times in GMT..
-			currTime = Long.parseLong(currValue);
-		} else if (currKey.equals(getTimeColumnName())) {
-			// calculateDeltaTime
-
-			currTime += Long.parseLong(currValue);
-
-			if (prevTimeColReading != null) {
-				long deltaTime = currTime - prevTimeColReading;
-				if (deltaTime != 0) {
-					// We have finished readings for one time slot.. write
-					// them
-					onTimeChanged();
-				}
-			} 
-			prevTimeColReading = currTime;
-		} else {
-			super.delimiterProcedure();
-		}
-	}
+	
+//	@Override
+//	protected void delimiterProcedure() {
+//		// Timezone preceeds time only in this stupid case!
+//		if (getColsToSkip().contains(currKey)) {
+//			return;
+//		}
+//
+//		if ("tz".equals(currKey)) {
+//			// We keep times in GMT..
+//			currTime = Long.parseLong(currValue);
+//		} else if (currKey.equals(getTimeColumnName())) {
+//			// calculateDeltaTime
+//
+//			currTime += Long.parseLong(currValue);
+//
+//			if (prevTimeColReading != null) {
+//				long deltaTime = currTime - prevTimeColReading;
+//				if (deltaTime != 0) {
+//					// We have finished readings for one time slot.. write
+//					// them
+//					onTimeChanged();
+//				}
+//			} 
+//			prevTimeColReading = currTime;
+//		} else {
+//			super.delimiterProcedure();
+//		}
+//	}
 
 	@Override
 	protected Comparable<?> getValueToWrite() {
@@ -80,7 +84,20 @@ public class LoadInputsIntoDocs_accel extends LoadInputsIntoDocs {
 				result = Movement.U;
 			}
 		}
+		if (prevVal.containsKey(currKey) && result.equals(prevVal.get(currKey))) {
+			// prevent repeating the values of high granuality files
+			//TODO: how will this affect stats?
+			result = null;
+		} else {
+			prevVal.put(currKey, result);
+		}
+		
 		return result;
+	}
+	
+	@Override
+	protected void onMicroLocChange() {
+		prevVal.clear();
 	}
 
 	@Override

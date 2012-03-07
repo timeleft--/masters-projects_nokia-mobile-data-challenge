@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TimeZone;
 
 import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.weather.WeatherUnderGroundDiscretize;
@@ -143,7 +144,8 @@ public class Discretize {
 		N, // Normal Event
 		H, // Heavy Event
 		T, // sTorm
-		Missing;
+		Missing, 
+		Abroad; // A nasty hack to overload the sky feature
 		public String toString() {
 			if (this == Missing) {
 				return Config.MISSING_VALUE_PLACEHOLDER;
@@ -205,8 +207,19 @@ public class Discretize {
 
 		int timeZoneOffset =Integer.parseInt(timeZoneStr);
 		
+		char timeZonePlusMinus = '+';
+		if (timeZoneStr.charAt(0) == '+') { //it's offset
+			timeZonePlusMinus = '-';
+		}
+		// Offset in hours (from seconds)
+		int hrs = timeZoneOffset / 3600;
+		
+		TimeZone timeZoneOfRecord = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
+				+ hrs);
 		Calendar calendar = new GregorianCalendar();
-		// Minus because the offset is BLAH 
+		calendar.setTimeZone(timeZoneOfRecord);
+		
+		// Minus because the offset is from to the TZ to GMT 
 		calendar.setTimeInMillis((startTimeGMT - timeZoneOffset) * 1000);
 
 		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
@@ -222,7 +235,7 @@ public class Discretize {
 		} else {
 			//TODO: get the weather from elsewhere!
 			result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Temprature.Missing;
-			result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Missing;
+			result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Abroad;
 		}
 		
 

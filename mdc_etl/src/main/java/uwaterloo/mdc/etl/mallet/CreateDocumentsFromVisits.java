@@ -54,9 +54,10 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 	@Override
 	protected void eolProcedure() throws Exception {
 		Long startTime = colOpResult.get("unixtime_start");
-		// Times are already in GMT in this file only!! --> I doubt it! 
-		 // Keep times in GMT
-		 startTime += colOpResult.get("tz_start");
+		// Unix time
+//		// Times are already in GMT in this file only!! --> I doubt it! 
+//		 // Keep times in GMT
+//		 startTime += colOpResult.get("tz_start");
 		char trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_start") == 0) {
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;
@@ -64,9 +65,10 @@ public class CreateDocumentsFromVisits extends CallableOperation<String, Long> {
 		String startTimeDirName = startTime.toString() + trustIndicator;
 
 		Long endTime = colOpResult.get("unixtime_end");
-		// Times are already in GMT in this file only!! --> I doubt it! 
-		 // Keep times in GMT
-		 endTime += colOpResult.get("tz_end");
+// Unix time
+//		// Times are already in GMT in this file only!! --> I doubt it! 
+//		 // Keep times in GMT
+//		 endTime += colOpResult.get("tz_end");
 		trustIndicator = Config.TIMETRUSTED_GPS_YES;
 		if (colOpResult.get("trusted_end") == 0) {
 			trustIndicator = Config.TIMETRUSTED_GPS_NO;

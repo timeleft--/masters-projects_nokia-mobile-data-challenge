@@ -103,41 +103,41 @@ public class LoadInputsIntoDocs_calllog extends LoadInputsIntoDocs {
 		return "call_time";
 	}
 
-	@Override
-	protected void delimiterProcedure() {
-		// Timezone preceeds time only in this stupid case!
-		if (getColsToSkip().contains(currKey)) {
-			return;
-		}
-
-		if ("tz".equals(currKey)) {
-			// We keep times in GMT..
-			currTime = Long.parseLong(currValue);
-		} else if (currKey.equals(getTimeColumnName())) {
-			// calculateDeltaTime
-
-			currTime += Long.parseLong(currValue);
-
-			if (prevTimeColReading != null) {
-				long deltaTime = currTime - prevTimeColReading;
-				if (deltaTime != 0) {
-					// We have finished readings for one time slot.. write
-					// them
-					onTimeChanged();
-				}
-
-			} else {
-				// meaningless, because it is the first record
-				// System.out.println("blah.. just making sure of something!");
-			}
-			prevTimeColReading = currTime;
-			// } else if ("tz".equals(currKey)) {
-			// // We keep times in GMT.. nothing to do!
-		} else {
-			super.delimiterProcedure();
-		}
-
-	}
+//	@Override
+//	protected void delimiterProcedure() {
+//		// Timezone preceeds time only in this stupid case!
+//		if (getColsToSkip().contains(currKey)) {
+//			return;
+//		}
+//
+//		if ("tz".equals(currKey)) {
+//			// We keep times in GMT..
+//			currTime = Long.parseLong(currValue);
+//		} else if (currKey.equals(getTimeColumnName())) {
+//			// calculateDeltaTime
+//
+//			currTime += Long.parseLong(currValue);
+//
+//			if (prevTimeColReading != null) {
+//				long deltaTime = currTime - prevTimeColReading;
+//				if (deltaTime != 0) {
+//					// We have finished readings for one time slot.. write
+//					// them
+//					onTimeChanged();
+//				}
+//
+//			} else {
+//				// meaningless, because it is the first record
+//				// System.out.println("blah.. just making sure of something!");
+//			}
+//			prevTimeColReading = currTime;
+//			// } else if ("tz".equals(currKey)) {
+//			// // We keep times in GMT.. nothing to do!
+//		} else {
+//			super.delimiterProcedure();
+//		}
+//
+//	}
 
 	@Override
 	protected Comparable<?> getValueToWrite() {

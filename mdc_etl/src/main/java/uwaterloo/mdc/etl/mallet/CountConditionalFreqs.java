@@ -56,9 +56,9 @@ public class CountConditionalFreqs implements Callable<Void> {
 
 		app.call();
 	}
-	
+
 	public Void call() throws Exception {
-		
+
 		this.count();
 
 		// This will make the executor accept no new threads
@@ -110,7 +110,6 @@ public class CountConditionalFreqs implements Callable<Void> {
 				valueDomain.put(enumVal.toString(), enumVal);
 			}
 		}
-		
 
 	}
 
@@ -122,10 +121,13 @@ public class CountConditionalFreqs implements Callable<Void> {
 			CountingCallable countCall = new CountingCallable(userDir);
 			countEcs.submit(countCall);
 			++countingJobs;
-//			// Testing
-//			if (countingJobs == 10)
-//				break;
+			// // Testing
+			// if (countingJobs == 10)
+			// break;
 		}
+		File[] userDirs = dataDir.listFiles();
+		int currUserIx = 0;
+		HashMap<String, HashMap<Integer, HashMap<String, Frequency>>> pendingTasks = new HashMap<String, HashMap<Integer, HashMap<String, Frequency>>>();
 		for (int c = 0; c < countingJobs; ++c) {
 			Future<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>> targetStatsFuture = countEcs
 					.take();
@@ -139,6 +141,7 @@ public class CountConditionalFreqs implements Callable<Void> {
 				System.out.println("null Pair!!!");
 				continue;
 			}
+			if(targetStatsPair.getKey().equals(userDirs[currUserIx].getName())){
 			for (int i = 1; i <= 10; ++i) {
 				HashMap<String, Frequency> freqMap = targetStatsPair.getValue()
 						.get(i);
@@ -152,8 +155,38 @@ public class CountConditionalFreqs implements Callable<Void> {
 					++printingJobs;
 				}
 			}
-
+			++currUserIx;
+			while (currUserIx < userDirs.length
+					&& pendingTasks
+							.containsKey(userDirs[currUserIx]
+									.getName())) {
+				HashMap<Integer, HashMap<String, Frequency>> pendingStats = pendingTasks
+				.remove(userDirs[currUserIx]
+						.getName());
+				for (int i = 1; i <= 10; ++i) {
+					HashMap<String, Frequency> freqMap = pendingStats
+							.get(i);
+					for (String freqKey : freqMap.keySet()) {
+						Frequency freq = freqMap.get(freqKey);
+						PrintStatsCallable freqPrint = new PrintStatsCallable(freq,
+								userDirs[currUserIx]
+										.getName(), freqKey, statWriters,
+								statsPath + "\\cond_" + i);
+						// printExec.submit(freqPrint);
+						printEcs.submit(freqPrint);
+						++printingJobs;
+					}
+				}
+				++currUserIx;
+			}
+			} else {
+				pendingTasks.put(targetStatsPair.getKey(), targetStatsPair.getValue());
+			}
 		}
+		
+		assert (pendingTasks.size() == 0) : "Missed printing conitional stat objects " + pendingTasks.toString();
+		assert (printingJobs == Config.NUM_USERS_TO_PROCESS) : "You printed cond stats only users: " + printingJobs;
+		
 		for (int i = 0; i < printingJobs; ++i) {
 			printEcs.take();
 		}
@@ -176,11 +209,15 @@ public class CountConditionalFreqs implements Callable<Void> {
 				StringBuilder buffer = new StringBuilder();
 				for (int i = 0; i < dataChars.length; ++i) {
 					if (Character.isLowerCase(dataChars[i])
-					// avg|sdvAps is really a bad choice, but we don't keep
-					// stats for that anyway! || buffer.indexOf("avg")==-1
-							|| (Character.isDigit(dataChars[i]) && buffer
-									.indexOf("hod") == -1)) {
-
+					// Make sure this is not an integer valued feature
+							|| (Character.isDigit(dataChars[i])
+									&& buffer.indexOf("hod") == -1 
+									&& buffer.indexOf("num") == -1 
+									&& buffer
+									.indexOf("avg") == -1
+							// we don't keep stats of standard dev: &&
+							// buffer.indexOf("sdv") == -1
+							)) {
 						buffer.append(dataChars[i]);
 
 					} else {
@@ -203,12 +240,14 @@ public class CountConditionalFreqs implements Callable<Void> {
 						HashMap<String, Comparable<?>> valueDomain = valueDomainMap
 								.get(statKey);
 						Comparable<?> enumVal;
-						
+
 						if (valueDomain != null) {
 							enumVal = valueDomain.get(value);
-						} else if(statKey!= null && statKey.endsWith(Config.RESULT_POSTFX_INTEGER)) {
-							enumVal = Integer.parseInt(value);
-						} else{
+						} else if (statKey != null
+								&& statKey
+										.endsWith(Config.RESULT_POSTFX_INTEGER)) {
+							enumVal = Double.parseDouble(value);
+						} else {
 							continue; // apu and bma is ok to skip.. we don't
 										// keep stats for it!
 						}
@@ -235,6 +274,9 @@ public class CountConditionalFreqs implements Callable<Void> {
 				for (String statKey : Discretize.enumsMap.keySet()) {
 					freqMap.put(statKey, new Frequency());
 				}
+				freqMap.put(Config.RESULT_KEY_NUM_MICRO_LOCS_FREQ, new Frequency());
+				freqMap.put(Config.RESULT_KEY_AVG_APS_FREQ, new Frequency());
+				freqMap.put(Config.RESULT_KEY_AVG_BTS_FREQ, new Frequency());
 				targetStats.put(i, freqMap);
 			}
 

@@ -26,7 +26,7 @@ import cc.mallet.util.Randoms;
 
 public class AuthorTopicAnalysis implements Callable<Void> {
 
-	private String outputPath = "C:\\mdc-datasets\\mallet\\out";
+	private String outputPath = "C:\\mdc-datasets\\mallet\\lda";
 	private String inputPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
 	private InstanceList training;
 	private InstanceList validation;

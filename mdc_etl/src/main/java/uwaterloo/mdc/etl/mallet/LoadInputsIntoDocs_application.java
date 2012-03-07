@@ -58,7 +58,7 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 			}
 			long lgEnc = MathUtil.lgSmoothing(encounters);
 			
-			return Long.toString(lgEnc) + "A" + currValue.toString(); // The UID
+			return Long.toString(lgEnc) + " aid" + Config.DELIMITER_COLNAME_VALUE + currValue.toString(); // The UID
 		} else {
 			return Config.MISSING_VALUE_PLACEHOLDER;
 		}
