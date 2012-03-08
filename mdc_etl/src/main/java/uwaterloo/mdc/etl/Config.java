@@ -79,6 +79,8 @@ public class Config {
 
 	public static final boolean USER_SPECIFIC_FEATURES = false;
 
+	public static final int NUM_LABELS_CONSIDERED = 10;
+
 	
 
 	// This class is thread-safe: multiple threads can share a single Properties
