@@ -77,7 +77,8 @@ public class Config {
 
 	public static final int NUMBER_TESTING_USERS = 20;
 
-	public static final int VALIDATION_FOLDS = 10;
+	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
+	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
 	public static final boolean USER_SPECIFIC_FEATURES = false;
 

@@ -3,14 +3,12 @@ package uwaterloo.mdc.etl.mallet;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -37,9 +35,10 @@ public class CountConditionalFreqs implements Callable<Void> {
 			.synchronizedMap(new HashMap<String, Writer>());
 	private Properties shortColNameDict = new Properties();
 	private ExecutorService printExec;
-	private CompletionService<Void> printEcs;
+	// private CompletionService<Void> printEcs;
 	private ExecutorService countExec;
-	private CompletionService<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>> countEcs;
+	// private CompletionService<KeyValuePair<String, HashMap<Integer,
+	// HashMap<String, Frequency>>>> countEcs;
 
 	private Map<String, HashMap<String, Comparable<?>>> valueDomainMap;
 
@@ -86,10 +85,11 @@ public class CountConditionalFreqs implements Callable<Void> {
 				.getFile(shotColNamesPath)));
 
 		countExec = Executors.newFixedThreadPool(Config.NUM_THREADS / 2);
-		countEcs = new ExecutorCompletionService<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>>(
-				countExec);
+		// countEcs = new ExecutorCompletionService<KeyValuePair<String,
+		// HashMap<Integer, HashMap<String, Frequency>>>>(
+		// countExec);
 		printExec = Executors.newFixedThreadPool(Config.NUM_THREADS / 2);
-		printEcs = new ExecutorCompletionService<Void>(printExec);
+		// printEcs = new ExecutorCompletionService<Void>(printExec);
 
 		// init the enumMap
 		CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, StringBuilder> loadDataFactory = new CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, StringBuilder>();
@@ -113,24 +113,27 @@ public class CountConditionalFreqs implements Callable<Void> {
 
 	}
 
-	public void count() throws InterruptedException, ExecutionException {
+	public void count() throws Exception {
 		File dataDir = FileUtils.getFile(inputPath);
 		int countingJobs = 0;
 		int printingJobs = 0;
+
+		ArrayList<Future<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>>> countedFutures = new ArrayList<Future<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>>>();
 		for (File userDir : dataDir.listFiles()) {
 			CountingCallable countCall = new CountingCallable(userDir);
-			countEcs.submit(countCall);
+			countedFutures.add(countExec.submit(countCall));
+			// countEcs.submit(countCall);
 			++countingJobs;
 			// // Testing
 			// if (countingJobs == 10)
 			// break;
 		}
-		File[] userDirs = dataDir.listFiles();
-		int currUserIx = 0;
-		HashMap<String, HashMap<Integer, HashMap<String, Frequency>>> pendingTasks = new HashMap<String, HashMap<Integer, HashMap<String, Frequency>>>();
 		for (int c = 0; c < countingJobs; ++c) {
-			Future<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>> targetStatsFuture = countEcs
-					.take();
+			Future<KeyValuePair<String, HashMap<Integer, HashMap<String, Frequency>>>> targetStatsFuture = countedFutures
+					.get(c);
+			// Future<KeyValuePair<String, HashMap<Integer, HashMap<String,
+			// Frequency>>>> targetStatsFuture = countEcs
+			// .take();
 			if (targetStatsFuture == null) {
 				System.out.println("null future!!!");
 				continue;
@@ -141,7 +144,6 @@ public class CountConditionalFreqs implements Callable<Void> {
 				System.out.println("null Pair!!!");
 				continue;
 			}
-			if(targetStatsPair.getKey().equals(userDirs[currUserIx].getName())){
 			for (int i = 1; i <= 10; ++i) {
 				HashMap<String, Frequency> freqMap = targetStatsPair.getValue()
 						.get(i);
@@ -150,46 +152,22 @@ public class CountConditionalFreqs implements Callable<Void> {
 					PrintStatsCallable freqPrint = new PrintStatsCallable(freq,
 							targetStatsPair.getKey(), freqKey, statWriters,
 							statsPath + "\\cond_" + i);
-					// printExec.submit(freqPrint);
-					printEcs.submit(freqPrint);
+					printExec.submit(freqPrint);
+					// printEcs.submit(freqPrint);
 					++printingJobs;
 				}
 			}
-			++currUserIx;
-			while (currUserIx < userDirs.length
-					&& pendingTasks
-							.containsKey(userDirs[currUserIx]
-									.getName())) {
-				HashMap<Integer, HashMap<String, Frequency>> pendingStats = pendingTasks
-				.remove(userDirs[currUserIx]
-						.getName());
-				for (int i = 1; i <= 10; ++i) {
-					HashMap<String, Frequency> freqMap = pendingStats
-							.get(i);
-					for (String freqKey : freqMap.keySet()) {
-						Frequency freq = freqMap.get(freqKey);
-						PrintStatsCallable freqPrint = new PrintStatsCallable(freq,
-								userDirs[currUserIx]
-										.getName(), freqKey, statWriters,
-								statsPath + "\\cond_" + i);
-						// printExec.submit(freqPrint);
-						printEcs.submit(freqPrint);
-						++printingJobs;
-					}
-				}
-				++currUserIx;
-			}
-			} else {
-				pendingTasks.put(targetStatsPair.getKey(), targetStatsPair.getValue());
-			}
 		}
-		
-		assert (pendingTasks.size() == 0) : "Missed printing conitional stat objects " + pendingTasks.toString();
-		assert (printingJobs == Config.NUM_USERS_TO_PROCESS) : "You printed cond stats only users: " + printingJobs;
-		
-		for (int i = 0; i < printingJobs; ++i) {
-			printEcs.take();
-		}
+
+		// many freq per result
+//		if (printingJobs != countingJobs) {
+//			throw new Exception("You printed  stats only : " + printingJobs
+//					+ " time, you needed: " + countingJobs);
+//		}
+
+		// for (int i = 0; i < printingJobs; ++i) {
+		// printEcs.take();
+		// }
 	}
 
 	private class CountingCallable
@@ -211,9 +189,8 @@ public class CountConditionalFreqs implements Callable<Void> {
 					if (Character.isLowerCase(dataChars[i])
 					// Make sure this is not an integer valued feature
 							|| (Character.isDigit(dataChars[i])
-									&& buffer.indexOf("hod") == -1 
-									&& buffer.indexOf("num") == -1 
-									&& buffer
+									&& buffer.indexOf("hod") == -1
+									&& buffer.indexOf("num") == -1 && buffer
 									.indexOf("avg") == -1
 							// we don't keep stats of standard dev: &&
 							// buffer.indexOf("sdv") == -1
@@ -274,7 +251,8 @@ public class CountConditionalFreqs implements Callable<Void> {
 				for (String statKey : Discretize.enumsMap.keySet()) {
 					freqMap.put(statKey, new Frequency());
 				}
-				freqMap.put(Config.RESULT_KEY_NUM_MICRO_LOCS_FREQ, new Frequency());
+				freqMap.put(Config.RESULT_KEY_NUM_MICRO_LOCS_FREQ,
+						new Frequency());
 				freqMap.put(Config.RESULT_KEY_AVG_APS_FREQ, new Frequency());
 				freqMap.put(Config.RESULT_KEY_AVG_BTS_FREQ, new Frequency());
 				targetStats.put(i, freqMap);
