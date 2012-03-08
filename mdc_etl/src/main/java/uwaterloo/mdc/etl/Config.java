@@ -47,9 +47,6 @@ public class Config {
 	public static final String RESULT_KEY_READING_NOVISIT_FREQ = "reading-within-visit-freq";
 	public static final String RESULT_KEY_VISIT_NOREADING_FREQ = "visit-with-reading-freq";
 
-	public static final String COLNAME_HOUR_OF_DAY = "hod";
-	public static final String COLNAME_DAY_OF_WEEK = "dow";
-
 	public static final String DEFAULT_TIME_ZONE = "-7200";
 
 	public static final String RESULT_POSTFX_INTEGER = "_int";

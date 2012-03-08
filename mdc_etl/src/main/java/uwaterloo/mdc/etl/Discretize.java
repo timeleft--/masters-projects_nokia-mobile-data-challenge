@@ -110,13 +110,24 @@ public class Discretize {
 	};
 
 	public enum HourOfDay {
-		H0, H1, H2, H3, H4, H5, H6, H7, H8, H9, H10, H11, H12, H13, H14, H15, H16, H17, H18, H19, H20, H21, H22, H23;
-		public String toString() {
-			return super.toString().substring(1);
-
-		};
+		S, //Sleep time
+		E, //EARLY
+		M, //MORNING
+		N, //NOON,
+		A, //AFTERNOON
+		V, //EVENING
+		G; //NIGHT
+		
 
 	};
+//	public enum HourOfDay {
+//		H0, H1, H2, H3, H4, H5, H6, H7, H8, H9, H10, H11, H12, H13, H14, H15, H16, H17, H18, H19, H20, H21, H22, H23;
+//		public String toString() {
+//			return super.toString().substring(1);
+//			
+//		};
+//		
+//	};
 
 	public enum Temprature {
 		// TODO?
@@ -222,8 +233,29 @@ public class Discretize {
 		// Minus because the offset is from to the TZ to GMT 
 		calendar.setTimeInMillis((startTimeGMT - timeZoneOffset) * 1000);
 
-		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
-				.get(Calendar.HOUR_OF_DAY)];
+		 int hod = calendar
+				.get(Calendar.HOUR_OF_DAY);
+		 if(hod < 5){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.S;
+		 } else if(hod < 8){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.E;
+		 } else if(hod < 11){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.M;
+		 } else if(hod < 13){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.N;
+		 } else if(hod < 17){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.A;
+		 } else if(hod < 21){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.V;
+		 } else if(hod < 23){
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.G;
+		 } else {
+			 result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.S;
+				
+		 }
+		 
+//		result[RelTimeNWeatherElts.HOUR_OF_DAY.ordinal()] = HourOfDay.values()[calendar
+//		                                                                       .get(Calendar.HOUR_OF_DAY)];
 		result[RelTimeNWeatherElts.DAY_OF_WEEK.ordinal()] = DaysOfWeek.values()[calendar
 				.get(Calendar.DAY_OF_WEEK) - 1];
 

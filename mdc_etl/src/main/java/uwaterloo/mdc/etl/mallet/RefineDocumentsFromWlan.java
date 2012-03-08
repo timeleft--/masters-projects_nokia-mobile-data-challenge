@@ -45,7 +45,7 @@ public class RefineDocumentsFromWlan
 
 	// protected static final String READINGS_AT_SAME_TIME =
 	// "TIME_CARDINALITY_";
-	protected static final String COLNAME_HOUR_OF_DAY = " hod";
+	protected static final String COLNAME_HOUR_OF_DAY = " tod";
 	protected static final String COLNAME_DAY_OF_WEEK = " dow";
 
 	protected static final String COLNAME_TEMPRATURE = " tmp";

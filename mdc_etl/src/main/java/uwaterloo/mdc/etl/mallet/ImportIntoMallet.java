@@ -24,6 +24,7 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.operations.PrintStatsCallable;
 import uwaterloo.mdc.etl.util.KeyValuePair;
+import uwaterloo.mdc.mallet.NaiveBayesClassify;
 
 public class ImportIntoMallet {
 
@@ -68,6 +69,14 @@ public class ImportIntoMallet {
 		ExecutorService countExec = Executors.newSingleThreadExecutor();
 		countExec.submit(countCond);
 
+		NaiveBayesClassify nb = new NaiveBayesClassify();
+		ExecutorService nbExec = Executors.newSingleThreadExecutor();
+		nbExec.submit(nb);
+
+		nbExec.shutdown();
+		while (!nbExec.isTerminated()) {
+			Thread.sleep(5000);
+		}
 		// AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
 		// ExecutorService ldaExec = Executors.newSingleThreadExecutor();
 		// ldaExec.submit(lda);
@@ -288,7 +297,7 @@ public class ImportIntoMallet {
 				for (int j = 0; j < numLoadDataTasks; ++j) {
 
 					System.out.println(PerfMon.asString());
-					
+
 					Future<KeyValuePair<String, HashMap<String, Object>>> finishedLoading = loadDataFutures
 							.get(j);
 
@@ -311,11 +320,12 @@ public class ImportIntoMallet {
 					}
 
 				}
-				
+
 				// TODO: correct condition.. many fewqs per result
-//				if(printTasks != (numLoadDataTasks + numberWifiTasks)){
-//					throw new Exception("Didn't print as many as counted: " + printTasks + " vs " + (numLoadDataTasks + numberWifiTasks));
-//				}
+				// if(printTasks != (numLoadDataTasks + numberWifiTasks)){
+				// throw new Exception("Didn't print as many as counted: " +
+				// printTasks + " vs " + (numLoadDataTasks + numberWifiTasks));
+				// }
 
 				for (int i = 0; i < printTasks; ++i) {
 					System.out.println(PerfMon.asString());
