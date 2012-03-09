@@ -284,6 +284,11 @@ public class LoadCountsAsAttributes implements
 							token.setLength(0);
 
 							// /
+							
+							if(pfx.equals("si")){
+								// useless features??
+								continue;
+							}
 
 							HashMap<String, Attribute> valueDomain = valueDomainMap
 									.get(statKey);
