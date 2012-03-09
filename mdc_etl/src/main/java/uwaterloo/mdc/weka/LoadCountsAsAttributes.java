@@ -325,7 +325,7 @@ public class LoadCountsAsAttributes implements
 					}
 				}
 
-				weka.core.Instance wekaInst = new weka.core.SparseInstance(
+				weka.core.Instance wekaInst = new weka.core.Instance(
 						allAttributes.size());
 				wekaInst.setDataset(wekaDoc);
 
@@ -344,7 +344,7 @@ public class LoadCountsAsAttributes implements
 					if (count > 0) {
 						wekaInst.setValue(attrib, count);
 					} else {
-//						wekaInst.setMissing(attrib);
+						wekaInst.setMissing(attrib);
 					}
 
 				}
