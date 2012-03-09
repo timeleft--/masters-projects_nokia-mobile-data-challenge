@@ -8,7 +8,6 @@ import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
-import uwaterloo.mdc.etl.Discretize.ReadingWithinVisitEnum;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.MathUtil;
 
@@ -57,6 +56,7 @@ public class LoadInputsIntoDocs_bluetooth extends LoadInputsIntoDocs {
 
 	@Override
 	protected Comparable<?> getValueToWrite() {
+		//TODO: Debug, why does this result in huge numbers?
 		macFreq.addValue(currValue);
 
 		if (Config.USER_SPECIFIC_FEATURES) {

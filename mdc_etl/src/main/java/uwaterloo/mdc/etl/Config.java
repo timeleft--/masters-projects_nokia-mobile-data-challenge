@@ -17,7 +17,7 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 16;
-	public static final int NUM_USERS_TO_PROCESS = 80;
+	public static final int NUM_USERS_TO_PROCESS = 10;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -80,6 +80,10 @@ public class Config {
 	public static final boolean USER_SPECIFIC_FEATURES = false;
 
 	public static final int NUM_LABELS_CONSIDERED = 10;
+
+	public static final String[] LABELS = {"1","2","3","4","5","6","7","8","9","10"};
+
+	public static final int IO_BUFFER_SIZE = 64 * 1024;
 
 	
 

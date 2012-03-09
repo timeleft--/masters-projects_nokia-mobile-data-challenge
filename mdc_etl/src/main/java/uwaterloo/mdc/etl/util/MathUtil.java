@@ -21,4 +21,9 @@ public class MathUtil {
 	public static int getPow2(long num) {
 		return Arrays.binarySearch(pows2, num);
 	}
+
+	public static long lgSmoothing(double d) {
+		long l = Math.round(d);
+		return lgSmoothing(l);
+	}
 }
