@@ -2,6 +2,7 @@ package uwaterloo.mdc.weka;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
@@ -9,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -17,6 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
@@ -24,18 +27,12 @@ import uwaterloo.mdc.etl.Config;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.CfsSubsetEval;
-import weka.attributeSelection.ChiSquaredAttributeEval;
 import weka.attributeSelection.ConsistencySubsetEval;
-import weka.attributeSelection.FilteredAttributeEval;
-import weka.attributeSelection.FilteredSubsetEval;
-import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
 import weka.attributeSelection.InfoGainAttributeEval;
 import weka.attributeSelection.Ranker;
 import weka.attributeSelection.ReliefFAttributeEval;
-import weka.attributeSelection.SVMAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
-import weka.attributeSelection.SymmetricalUncertAttributeEval;
 import weka.attributeSelection.WrapperSubsetEval;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
@@ -56,14 +53,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	// Class<? extends ASEvaluation>[] cannot create!
 	@SuppressWarnings("rawtypes")
 	public static Class[] attrSelectEvaluationClazzes = { CfsSubsetEval.class,
-			ChiSquaredAttributeEval.class, ConsistencySubsetEval.class,
-			FilteredAttributeEval.class, FilteredSubsetEval.class,
-			GainRatioAttributeEval.class, InfoGainAttributeEval.class,
+			// ChiSquaredAttributeEval.class,
+			ConsistencySubsetEval.class,
+			// FilteredAttributeEval.class, FilteredSubsetEval.class,
+			// GainRatioAttributeEval.class,
 			InfoGainAttributeEval.class, ReliefFAttributeEval.class,
-			SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
-			WrapperSubsetEval.class };
+			// SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
+			WrapperSubsetEval.class, };
 
-	private class FoldCallable implements Callable<Double[]> {
+	// TODO Attribute Transformers: PrincipalComponents and
+	// LatentSemanticAnalysis
+	public static final String ALL_FEATS = "all-features";
+
+	private class FoldCallable implements Callable<HashMap<String, Double>> {
 
 		final Classifier baseClassifier;
 
@@ -78,8 +80,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 
 		@Override
-		public Double[] call() throws Exception {
-			Double[] accuracy = { 0.0, 0.0 };
+		public HashMap<String, Double> call() throws Exception {
+			HashMap<String, Double> accuracyMap = new HashMap<String, Double>();
 
 			Frequency[] foldConfusionMatrix;
 			foldConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
@@ -105,56 +107,93 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			boolean firstUser = true;
 			int userIx = 0;
 			for (File userData : inputArrfs) {
-				
-				if(userData.getName().startsWith("113")){
-					continue; // too mcuh data, and might make us run out of memory
+				if (userIx == Config.NUM_USERS_TO_PROCESS) {
+					break;
 				}
-				
+				if (userData.getName().startsWith("113")) {
+					continue; // too mcuh data, and might make us run out of
+								// memory
+				}
+
+				File appData = FileUtils.getFile(FilenameUtils
+						.removeExtension(userData.getAbsolutePath()) + ".app");
+
 				if (userIx == (foldStart + inFoldTestIx)) {
 					validationSet = new Instances(Channels.newReader(FileUtils
 							.openInputStream(userData).getChannel(),
 							Config.OUT_CHARSET));
+					Reader appReader = Channels.newReader(FileUtils
+							.openInputStream(appData).getChannel(),
+							Config.OUT_CHARSET);
+					validationSet = Instances.mergeInstances(new Instances(
+							appReader), validationSet);
 					validationSet
 							.setClassIndex(validationSet.numAttributes() - 1);
+					validationSet.setRelationName(FilenameUtils
+							.removeExtension(userData.getName()));
 				} else {
-
 					ArffLoader dataLoader = new ArffLoader();
 					dataLoader.setFile(userData);
 
+					ArffLoader appLoader = new ArffLoader();
+					appLoader.setFile(appData);
+
 					// load structure
-					Instances structure = dataLoader.getStructure();
-					structure.setClassIndex(structure.numAttributes() - 1);
+					Instances dataStruct = dataLoader.getStructure();
+					Instances appStruct = appLoader.getStructure();
+					Instances joinedStruct = Instances.mergeInstances(
+							appStruct, dataStruct);
+					joinedStruct
+							.setClassIndex(joinedStruct.numAttributes() - 1);
+					joinedStruct.setRelationName(FilenameUtils
+							.removeExtension(userData.getName()));
 
 					if (firstUser) {
 						if (baseClassifier instanceof UpdateableClassifier) {
-							baseClassifier.buildClassifier(structure);
+							baseClassifier.buildClassifier(joinedStruct);
 						} else {
-							trainingSet = new Instances(structure);
+							trainingSet = new Instances(joinedStruct);
 						}
 					}
 
 					// load data
-					Instance current;
-					while ((current = dataLoader.getNextInstance(structure)) != null) {
-						if (current.classIsMissing()) {
+					Instance dataInst;
+					Instance appInst;
+					int instIx = 0;
+					while ((dataInst = dataLoader.getNextInstance(dataStruct)) != null) {
+						appInst = appLoader.getNextInstance(appStruct);
+
+						if (appInst == null) {
+							throw new Exception(
+									"App Insances fewer than data instances: "
+											+ instIx);
+						}
+						// isClassMissing but without haveing to set the clas
+						if (dataInst.isMissing(dataInst.numAttributes() - 1)) {
 							continue;
 						}
 
+						Instance joinedInst = dataInst.mergeInstance(appInst);
+						joinedInst.setDataset(joinedStruct);
+
 						if (baseClassifier instanceof UpdateableClassifier) {
 							((UpdateableClassifier) baseClassifier)
-									.updateClassifier(current);
+									.updateClassifier(joinedInst);
 						} else {
-							trainingSet.add(current);
+							trainingSet.add(joinedInst);
 						}
-
-						// Not supported :(
-						// baseClassifier.updateClassifier(dataLoader.getDataSet());
-
+						++instIx;
+					}
+					if (appLoader.getNextInstance(appStruct) != null) {
+						throw new Exception(
+								"App Insances more than data instances: "
+										+ instIx);
 					}
 				}
-				System.out.println(baseClassifierClazz.getSimpleName() + " - " + (System.currentTimeMillis() - startTime)
-						+ " (fold " + v + "): Done reading user: "
-						+ userData.getName());
+
+				System.out.println(baseClassifierClazz.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime) + " (fold "
+						+ v + "): Done reading user: " + userData.getName());
 				++userIx;
 			}
 
@@ -165,18 +204,20 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				trainingSet = null;
 			}
 
-			System.out.println(baseClassifierClazz.getSimpleName() + " - " + (System.currentTimeMillis() - startTime)
-					+ " (fold " + v + "): Finished training for fold: " + v);
+			System.out.println(baseClassifierClazz.getSimpleName() + " - "
+					+ (System.currentTimeMillis() - startTime) + " (fold " + v
+					+ "): Finished training for fold: " + v);
 			Writer classificationsWr = Channels.newWriter(
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outputPath, baseClassifier
 									.getClass().getName(), "v" + v
 									+ "_classifications.txt")).getChannel(),
 					Config.OUT_CHARSET);
+
 			try {
 				classificationsWr
 						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
-				
+
 				// TODO: user 113
 				if (validationSet.numInstances() == 0) {
 					classificationsWr.append("No validation data for fold: "
@@ -223,8 +264,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									.addValue(bestLabelInt);
 						}
 					}
-					accuracy[0] = trueClassificationsCount * 1.0
-							/ validationSet.numInstances();
+					accuracyMap.put(ALL_FEATS, trueClassificationsCount * 1.0
+							/ validationSet.numInstances());
 					synchronized (cvClassificationAccuracyWr) {
 
 						cvClassificationAccuracyWr
@@ -234,9 +275,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										.toString(trueClassificationsCount))
 								.append('\t')
 								.append(Integer.toString(validationSet
-										.numInstances())).append('\t')
-								.append(Double.toString(accuracy[0]))
-								.append('\n');
+										.numInstances()))
+								.append('\t')
+								.append(Double.toString(accuracyMap
+										.get(ALL_FEATS))).append('\n');
 					}
 
 				}
@@ -256,8 +298,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				foldConfusionWr.flush();
 				foldConfusionWr.close();
 			}
-			System.out.println(baseClassifierClazz.getSimpleName() + " - " + (System.currentTimeMillis() - startTime)
-					+ " (fold " + v + "): Finished validation for fold: " + v);
+			System.out.println(baseClassifierClazz.getSimpleName() + " - "
+					+ (System.currentTimeMillis() - startTime) + " (fold " + v
+					+ "): Finished validation for fold: " + v);
 
 			// //////////////////////////////////////
 
@@ -350,9 +393,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										.addValue(bestLabelInt);
 							}
 						}
-						//TODO a map of accuracies for different algot
-						accuracy[1] = featSelectCorrectCount * 1.0
-								/ validationSet.numInstances();
+						// a map of accuracies for different algot
+						accuracyMap.put(
+								attrSelectEvalClazz.getName(),
+								featSelectCorrectCount * 1.0
+										/ validationSet.numInstances());
 						synchronized (cvFeatSelectAccuracyWr) {
 
 							cvFeatSelectAccuracyWr
@@ -368,8 +413,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 											.toString(featSelectCorrectCount))
 									.append('\t')
 									.append(Integer.toString(validationSet
-											.numInstances())).append('\t')
-									.append(Double.toString(accuracy[1]))
+											.numInstances()))
+									.append('\t')
+									.append(Double.toString(accuracyMap
+											.get(attrSelectEvalClazz.getName())))
 									.append('\n');
 						}
 
@@ -393,14 +440,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						attrSelectEvalClazz.getName(), "v" + v
 								+ "_feat-selection.txt"), featSelector
 						.toString());
-				//TODO: algo name
-				System.out.println(baseClassifierClazz.getSimpleName() + " - " + (System.currentTimeMillis() - startTime)
-						+ " (fold " + v
-						+ "): Finished feature selection for fold: " + v);
+				// algo name
+				System.out.println(baseClassifierClazz.getSimpleName() + "/"
+						+ attrSelectEvalClazz.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime) + " (fold "
+						+ v + "): Finished feature selection for fold: " + v);
 			}
 			// //////////////////////////////////////
 
-			return accuracy;
+			return accuracyMap;
 		}
 
 	}
@@ -479,17 +527,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-		
-		// Naive Bayes 
+
+		// Naive Bayes
 		ClassifyAndFeatSelect app = new ClassifyAndFeatSelect(
 				NaiveBayesUpdateable.class);
 		app.call();
-		
+
 		// C4.5 decision tree
-		app = new ClassifyAndFeatSelect(
-				J48.class);
+		app = new ClassifyAndFeatSelect(J48.class);
 		app.call();
-		
+
 		// Bayesian Logisitc Regression
 		app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
 		app.call();
@@ -497,19 +544,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		// Bayes Net
 		app = new ClassifyAndFeatSelect(BayesNet.class);
 		app.call();
-		
+
 		// Logistic Regression
 		app = new ClassifyAndFeatSelect(Logistic.class);
 		app.call();
-		
+
 		// SVM
 		app = new ClassifyAndFeatSelect(LibSVM.class);
 		app.call();
-		
+
 		// By clustering
 		app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
 		app.call();
-		
+
 	}
 
 	public Void call() throws Exception {
@@ -519,18 +566,22 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	}
 
 	public void acrossUsersClassify() throws Exception {
-
 		SummaryStatistics accuracySummaryAllFeatures = new SummaryStatistics();
-		SummaryStatistics accuracySummaryFeatSelected = new SummaryStatistics();
+		HashMap<String, SummaryStatistics> accuracySummaryFeatSelected = new HashMap<String, SummaryStatistics>();
 		try {
+			for (Class clazz : attrSelectEvaluationClazzes) {
+				accuracySummaryFeatSelected.put(clazz.getName(),
+						new SummaryStatistics());
+			}
 
-			System.out.println(baseClassifierClazz.getSimpleName() + " - " + new Date().toString()
+			System.out.println(baseClassifierClazz.getSimpleName() + " - "
+					+ new Date().toString()
 					+ " (total): Validating with every user number "
 					+ inFoldTestIx + " within every "
 					+ Config.VALIDATION_FOLD_WIDTH + " users");
 			ExecutorService foldExecutors = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
-			ArrayList<Future<Double[]>> foldFutures = new ArrayList<Future<Double[]>>();
+			ArrayList<Future<HashMap<String, Double>>> foldFutures = new ArrayList<Future<HashMap<String, Double>>>();
 			int numClassifyTasks = 0;
 			for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
 				FoldCallable FoldCallable = new FoldCallable(v);
@@ -538,13 +589,17 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				++numClassifyTasks;
 			}
 			for (int i = 0; i < numClassifyTasks; ++i) {
-				Double[] accuracies = foldFutures.get(i).get();
-				accuracySummaryAllFeatures.addValue(accuracies[0]);
-				accuracySummaryFeatSelected.addValue(accuracies[1]);
+				HashMap<String, Double> accuracies = foldFutures.get(i).get();
+				accuracySummaryAllFeatures.addValue(accuracies.get(ALL_FEATS));
+				for (Class clazz : attrSelectEvaluationClazzes) {
+					accuracySummaryFeatSelected.get(clazz.getName()).addValue(
+							accuracies.get(clazz.getName()));
+				}
 			}
 			foldExecutors.shutdown();
 			while (!foldExecutors.isTerminated()) {
-				System.out.println(baseClassifierClazz.getSimpleName() + " - " + (System.currentTimeMillis() - startTime)
+				System.out.println(baseClassifierClazz.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime)
 						+ " (total): shutting down");
 				Thread.sleep(1000);
 			}
@@ -559,11 +614,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
 				baseClassifierClazz.getName(), "accuracy-summary.txt"),
 				accuracySummaryAllFeatures.toString());
-		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-				baseClassifierClazz.getName(),
-				"feat-selected_accuracy-summary.txt"),
-				accuracySummaryFeatSelected.toString());
 
+		for (Class clazz : attrSelectEvaluationClazzes) {
+			FileUtils
+					.writeStringToFile(FileUtils.getFile(outputPath,
+							baseClassifierClazz.getName(), clazz.getName(),
+							"feat-selected_accuracy-summary.txt"),
+							accuracySummaryFeatSelected.get(clazz.getName())
+									.toString());
+		}
 		Writer totalConfusionWr = Channels.newWriter(
 				FileUtils.openOutputStream(
 						FileUtils.getFile(outputPath,
@@ -601,7 +660,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				featSelectedConfusionWr.close();
 			}
 		}
-		System.out.println(baseClassifierClazz.getSimpleName() + " - " + new Date().toString() + " (total): Done in "
+		System.out.println(baseClassifierClazz.getSimpleName() + " - "
+				+ new Date().toString() + " (total): Done in "
 				+ (System.currentTimeMillis() - startTime) + " millis");
 	}
 

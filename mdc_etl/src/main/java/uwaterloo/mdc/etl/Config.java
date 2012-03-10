@@ -16,7 +16,7 @@ public class Config {
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 2;
+	public static final int NUM_THREADS = 16;
 	public static final int NUM_USERS_TO_PROCESS = 10;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
@@ -87,6 +87,10 @@ public class Config {
 
 	public static final int APP_USAGE_FREQ_PERCENTILE_MAX = 90;
 	public static final int APP_USAGE_FREQ_PERCENTILE_MIN = 25;
+
+	// The label from previous visit will be kept as a feature 
+	// as long as the previous visit ended within these secs
+	public static final long INTERVAL_LABEL_CARRY_OVER = 7200;
 
 	
 

@@ -26,6 +26,7 @@ import uwaterloo.mdc.etl.mallet.LoadInputsIntoDocs;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.MathUtil;
+import uwaterloo.mdc.etl.util.StringUtils;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
@@ -80,6 +81,7 @@ public class LoadCountsAsAttributes implements
 	private Map<String, HashMap<String, Attribute>> valueDomainMap;
 	private FastVector allAttributes;
 	private Attribute labelAttribute;
+	private Attribute prevLabelAttribute;
 	private int countingJobs;
 
 	private HashMap<String, HashMap<String, HashMap<String, Integer>>> allUsersAppFreqMap = new HashMap<String, HashMap<String, HashMap<String, Integer>>>();
@@ -133,17 +135,19 @@ public class LoadCountsAsAttributes implements
 			HashMap<String, HashMap<String, Integer>> appFreqMap = app.allUsersAppFreqMap
 					.get(userDir.getName());
 			for (File visit : userDir.listFiles()) {
-				HashMap<String, Integer> visitAppFreq = appFreqMap.get(visit
-						.getName());
-				for (String appUid : visitAppFreq.keySet()) {
-					Integer appCnt = aggregateAppFreq.get(appUid);
-					if (appCnt == null) {
-						appCnt = 0;
-					}
-					int newFreq = appCnt + visitAppFreq.get(appUid);
-					aggregateAppFreq.put(appUid, newFreq);
-					if (newFreq > maxAppUsageOccurs) {
-						maxAppUsageOccurs = newFreq;
+				for (File microLFile : visit.listFiles()) {
+					HashMap<String, Integer> microLocAppFreq = appFreqMap
+							.get(microLFile.getName() + visit.getName());
+					for (String appUid : microLocAppFreq.keySet()) {
+						Integer appCnt = aggregateAppFreq.get(appUid);
+						if (appCnt == null) {
+							appCnt = 0;
+						}
+						int newFreq = appCnt + microLocAppFreq.get(appUid);
+						aggregateAppFreq.put(appUid, newFreq);
+						if (newFreq > maxAppUsageOccurs) {
+							maxAppUsageOccurs = newFreq;
+						}
 					}
 				}
 			}
@@ -161,10 +165,12 @@ public class LoadCountsAsAttributes implements
 		}
 
 		appUsagePct.setData(aggregateAppFreqVals);
-		long stopWordAppTh = Math.round(appUsagePct.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MAX));
+		long stopWordAppTh = Math.round(appUsagePct
+				.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MAX));
 		System.out.println("Stop Word Apps Threshold (90 percentile): "
 				+ stopWordAppTh);
-		long rareWordAppTh = Math.round(appUsagePct.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MIN));
+		long rareWordAppTh = Math.round(appUsagePct
+				.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MIN));
 		System.out.println("Rare Apps Threshold (25 percentile): "
 				+ rareWordAppTh);
 
@@ -172,8 +178,8 @@ public class LoadCountsAsAttributes implements
 		FastVector appUsageAttrsFV = new FastVector();
 		for (String appUid : aggregateAppFreq.keySet()) {
 			Integer appUsageOccurs = aggregateAppFreq.get(appUid);
-			if (appUsageOccurs > stopWordAppTh ||
-					appUsageOccurs < rareWordAppTh) {
+			if (appUsageOccurs > stopWordAppTh
+					|| appUsageOccurs < rareWordAppTh) {
 				continue;
 			}
 			Attribute appAttr = new Attribute(appUid);
@@ -191,18 +197,20 @@ public class LoadCountsAsAttributes implements
 			Instances userAppUsage = new Instances(userDir.getName(),
 					appUsageAttrsFV, 0);
 			for (File visit : userDir.listFiles()) {
-				Instance visitAppUsage = new Instance(appUsageAttrsFV.size());
-				visitAppUsage.setDataset(userAppUsage);
-
-				HashMap<String, Integer> visitAppFreq = appFreqMap.get(visit
-						.getName());
-				for (String appUid : visitAppFreq.keySet()) {
-					Attribute appAttr = appUsageAttrs.get(appUid);
-					if (appAttr == null) {
-						continue;
+				for (File microLoc : visit.listFiles()) {
+					Instance microLocAppUsage = new Instance(appUsageAttrsFV.size());
+					microLocAppUsage.setDataset(userAppUsage);
+					HashMap<String, Integer> visitAppFreq = appFreqMap
+							.get(microLoc.getName() + visit.getName());
+					for (String appUid : visitAppFreq.keySet()) {
+						Attribute appAttr = appUsageAttrs.get(appUid);
+						if (appAttr == null) {
+							continue;
+						}
+						microLocAppUsage.setValue(appAttr,
+								MathUtil.tf(visitAppFreq.get(appUid)));
 					}
-					visitAppUsage.setValue(appAttr,
-							MathUtil.tf(visitAppFreq.get(appUid)));
+					userAppUsage.add(microLocAppUsage);
 				}
 			}
 			ArffSaverCallable arffSaveCall = new ArffSaverCallable(userAppUsage);
@@ -212,7 +220,6 @@ public class LoadCountsAsAttributes implements
 			printExec.submit(arffSaveCall);
 			++userIx;
 		}
-		
 
 		// for (int i = 0; i < printingJobs; ++i) {
 		// printEcs.take();
@@ -284,8 +291,10 @@ public class LoadCountsAsAttributes implements
 		for (String label : Config.LABELS) {
 			labelsVector.addElement(label);
 		}
+		prevLabelAttribute = new Attribute("prevLabel", labelsVector);
 		labelAttribute = new Attribute("label", labelsVector);
 
+		allAttributes.addElement(prevLabelAttribute);
 		allAttributes.addElement(labelAttribute);
 
 	}
@@ -296,7 +305,10 @@ public class LoadCountsAsAttributes implements
 		for (File userDir : dataDir.listFiles()) {
 			HashMap<String, HashMap<String, Integer>> appFreqMap = new HashMap<String, HashMap<String, Integer>>();
 			for (File visit : userDir.listFiles()) {
-				appFreqMap.put(visit.getName(), new HashMap<String, Integer>());
+				for (File microLFile : visit.listFiles()) {
+					appFreqMap.put(microLFile.getName() + visit.getName(),
+							new HashMap<String, Integer>());
+				}
 			}
 			allUsersAppFreqMap.put(userDir.getName(), appFreqMap);
 			CountingCallable countCall = new CountingCallable(userDir,
@@ -324,7 +336,11 @@ public class LoadCountsAsAttributes implements
 			weka.core.Instances wekaDoc = new weka.core.Instances(
 					userDir.getName(), allAttributes, microLocsFiles.size());
 			wekaDoc.setClassIndex(labelAttribute.index());
-
+			
+			Long prevStartTime = null;
+			Long prevEndTime = null;
+			String prevLabel = null;
+			String instLabel = null;
 			for (File microLocF : microLocsFiles) {
 				HashMap<Attribute, Integer> countMap = new HashMap<Attribute, Integer>();
 				for (int i = 0; i < allAttributes.size(); ++i) {
@@ -337,12 +353,22 @@ public class LoadCountsAsAttributes implements
 				int chInt;
 				int numTabs = 0;
 				StringBuffer header = new StringBuffer();
-				String instLabel = null;
+				
+				long currStartTime = Long.parseLong(StringUtils.removeLastNChars(microLocF.getParentFile().getName(),1));
+				long currEndTime = Long.parseLong(StringUtils.removeLastNChars(microLocF.getName(),5));
 				while ((chInt = microLocR.read()) != -1) {
 					if ((char) chInt == '\t') {
 						if (numTabs == 0) {
 							// inst name.. not useful in weka
 						} else if (numTabs == 1) {
+							if(prevStartTime != null && prevStartTime.equals(currStartTime)){
+								// same visit, different micro loc.. nothing to do
+//								System.out.println("dummy!");
+							} else if(prevEndTime != null && currStartTime - prevEndTime < Config.INTERVAL_LABEL_CARRY_OVER){
+								prevLabel = instLabel;
+							} else {
+								prevLabel = null;
+							}
 							instLabel = Config.placeLabels.getProperty(header
 									.toString());
 						}
@@ -355,7 +381,10 @@ public class LoadCountsAsAttributes implements
 						header.append((char) chInt);
 					}
 				}
+				prevStartTime = currStartTime;
+				prevEndTime = currEndTime;
 				header = null;
+				
 
 				char[] dataChars = new char[Config.IO_BUFFER_SIZE];
 				StringBuilder token = new StringBuilder();
@@ -424,7 +453,7 @@ public class LoadCountsAsAttributes implements
 								attribute = valueDomain.get(value);
 							} else if (pfx.equals("aid")) {
 								HashMap<String, Integer> appFreq = appFreqMap
-										.get(microLocF.getParentFile()
+										.get(microLocF.getName() + microLocF.getParentFile()
 												.getName());
 								Integer appCnt = appFreq.get(value);
 								if (appCnt == null) {
@@ -460,11 +489,14 @@ public class LoadCountsAsAttributes implements
 					wekaInst.setClassValue(instLabel);
 				} else {
 					wekaInst.setClassMissing();
-
+				}
+				
+				if(prevLabel != null){
+					wekaInst.setValue(prevLabelAttribute, prevLabel);
 				}
 
 				for (Attribute attrib : countMap.keySet()) {
-					if (attrib == labelAttribute) {
+					if (attrib == labelAttribute || attrib == prevLabelAttribute) {
 						continue;
 					}
 					int count = countMap.get(attrib);
