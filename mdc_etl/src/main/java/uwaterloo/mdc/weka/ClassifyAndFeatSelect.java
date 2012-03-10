@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -33,7 +32,6 @@ import weka.attributeSelection.InfoGainAttributeEval;
 import weka.attributeSelection.Ranker;
 import weka.attributeSelection.ReliefFAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
-import weka.attributeSelection.WrapperSubsetEval;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
 import weka.classifiers.bayes.BayesNet;
@@ -50,6 +48,7 @@ import weka.core.WekaException;
 import weka.core.converters.ArffLoader;
 
 public class ClassifyAndFeatSelect implements Callable<Void> {
+	// Commented out are Dimensionality reductions that failed
 	// Class<? extends ASEvaluation>[] cannot create!
 	@SuppressWarnings("rawtypes")
 	public static Class[] attrSelectEvaluationClazzes = { CfsSubsetEval.class,
@@ -59,7 +58,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// GainRatioAttributeEval.class,
 			InfoGainAttributeEval.class, ReliefFAttributeEval.class,
 			// SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
-			WrapperSubsetEval.class, };
+//			WrapperSubsetEval.class, 
+			};
 
 	// TODO Attribute Transformers: PrincipalComponents and
 	// LatentSemanticAnalysis
@@ -191,9 +191,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					}
 				}
 
-				System.out.println(baseClassifierClazz.getSimpleName() + " - "
-						+ (System.currentTimeMillis() - startTime) + " (fold "
-						+ v + "): Done reading user: " + userData.getName());
+//				System.out.println(baseClassifierClazz.getSimpleName() + " - "
+//						+ (System.currentTimeMillis() - startTime) + " (fold "
+//						+ v + "): Done reading user: " + userData.getName());
 				++userIx;
 			}
 
@@ -569,7 +569,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		SummaryStatistics accuracySummaryAllFeatures = new SummaryStatistics();
 		HashMap<String, SummaryStatistics> accuracySummaryFeatSelected = new HashMap<String, SummaryStatistics>();
 		try {
-			for (Class clazz : attrSelectEvaluationClazzes) {
+			for (@SuppressWarnings("rawtypes") Class clazz : attrSelectEvaluationClazzes) {
 				accuracySummaryFeatSelected.put(clazz.getName(),
 						new SummaryStatistics());
 			}
@@ -591,7 +591,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			for (int i = 0; i < numClassifyTasks; ++i) {
 				HashMap<String, Double> accuracies = foldFutures.get(i).get();
 				accuracySummaryAllFeatures.addValue(accuracies.get(ALL_FEATS));
-				for (Class clazz : attrSelectEvaluationClazzes) {
+				for (@SuppressWarnings("rawtypes") Class clazz : attrSelectEvaluationClazzes) {
 					accuracySummaryFeatSelected.get(clazz.getName()).addValue(
 							accuracies.get(clazz.getName()));
 				}
@@ -615,7 +615,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				baseClassifierClazz.getName(), "accuracy-summary.txt"),
 				accuracySummaryAllFeatures.toString());
 
-		for (Class clazz : attrSelectEvaluationClazzes) {
+		for (@SuppressWarnings("rawtypes")
+		Class clazz : attrSelectEvaluationClazzes) {
 			FileUtils
 					.writeStringToFile(FileUtils.getFile(outputPath,
 							baseClassifierClazz.getName(), clazz.getName(),
