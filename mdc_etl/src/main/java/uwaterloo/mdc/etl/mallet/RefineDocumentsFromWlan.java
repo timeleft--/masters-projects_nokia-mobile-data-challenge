@@ -755,7 +755,7 @@ public class RefineDocumentsFromWlan
 
 		numMicroLocsFreq.addValue(numMicroLocs);
 		if (numMicroLocs > 1) {
-			malletInst += " numml" + MathUtil.lgSmoothing(numMicroLocs);
+			malletInst += " numml" + MathUtil.tf(numMicroLocs);
 		}
 
 		long delta = System.currentTimeMillis();

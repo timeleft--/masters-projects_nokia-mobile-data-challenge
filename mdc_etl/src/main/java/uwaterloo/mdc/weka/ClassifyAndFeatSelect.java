@@ -39,8 +39,13 @@ import weka.attributeSelection.SymmetricalUncertAttributeEval;
 import weka.attributeSelection.WrapperSubsetEval;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
+import weka.classifiers.bayes.BayesNet;
+import weka.classifiers.bayes.BayesianLogisticRegression;
 import weka.classifiers.bayes.NaiveBayesUpdateable;
+import weka.classifiers.functions.LibSVM;
+import weka.classifiers.functions.Logistic;
 import weka.classifiers.meta.AttributeSelectedClassifier;
+import weka.classifiers.meta.ClassificationViaClustering;
 import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -100,7 +105,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			boolean firstUser = true;
 			int userIx = 0;
 			for (File userData : inputArrfs) {
-
+				
+				if(userData.getName().startsWith("113")){
+					continue; // too mcuh data, and might make us run out of memory
+				}
+				
 				if (userIx == (foldStart + inFoldTestIx)) {
 					validationSet = new Instances(Channels.newReader(FileUtils
 							.openInputStream(userData).getChannel(),
@@ -167,6 +176,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			try {
 				classificationsWr
 						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+				
+				// TODO: user 113
 				if (validationSet.numInstances() == 0) {
 					classificationsWr.append("No validation data for fold: "
 							+ v);
@@ -339,6 +350,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										.addValue(bestLabelInt);
 							}
 						}
+						//TODO a map of accuracies for different algot
 						accuracy[1] = featSelectCorrectCount * 1.0
 								/ validationSet.numInstances();
 						synchronized (cvFeatSelectAccuracyWr) {
@@ -366,7 +378,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					if (e.getMessage().startsWith(
 							"Not enough training instances")) {
 						featSelectWr.append(e.getMessage());
+						continue;
 					}
+				} catch (Exception ignored) {
+					ignored.printStackTrace(System.err);
+					continue;
 				} finally {
 					featSelectWr.flush();
 					featSelectWr.close();
@@ -377,7 +393,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						attrSelectEvalClazz.getName(), "v" + v
 								+ "_feat-selection.txt"), featSelector
 						.toString());
-
+				//TODO: algo name
 				System.out.println(baseClassifierClazz.getSimpleName() + " - " + (System.currentTimeMillis() - startTime)
 						+ " (fold " + v
 						+ "): Finished feature selection for fold: " + v);
@@ -463,15 +479,36 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-
-		ClassifyAndFeatSelect nb = new ClassifyAndFeatSelect(
+		
+		// Naive Bayes 
+		ClassifyAndFeatSelect app = new ClassifyAndFeatSelect(
 				NaiveBayesUpdateable.class);
-		nb.call();
+		app.call();
 		
-		ClassifyAndFeatSelect decisionTree = new ClassifyAndFeatSelect(
+		// C4.5 decision tree
+		app = new ClassifyAndFeatSelect(
 				J48.class);
-		decisionTree.call();
+		app.call();
 		
+		// Bayesian Logisitc Regression
+		app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
+		app.call();
+
+		// Bayes Net
+		app = new ClassifyAndFeatSelect(BayesNet.class);
+		app.call();
+		
+		// Logistic Regression
+		app = new ClassifyAndFeatSelect(Logistic.class);
+		app.call();
+		
+		// SVM
+		app = new ClassifyAndFeatSelect(LibSVM.class);
+		app.call();
+		
+		// By clustering
+		app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
+		app.call();
 		
 	}
 

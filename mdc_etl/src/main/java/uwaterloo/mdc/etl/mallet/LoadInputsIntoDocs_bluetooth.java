@@ -66,7 +66,7 @@ public class LoadInputsIntoDocs_bluetooth extends LoadInputsIntoDocs {
 				// In case of num > 1024, that's a stop word!
 				return null;
 			}
-			long lgEnc = MathUtil.lgSmoothing(encounters);
+			long lgEnc = MathUtil.tf(encounters);
 
 			return Long.toString(lgEnc) + " bt" + currValue.toString(); // Mac
 																		// Address

@@ -3,27 +3,37 @@ package uwaterloo.mdc.etl.util;
 import java.util.Arrays;
 
 public class MathUtil {
-	public static final double LG2 = Math.log(2);
-	public static final long[] pows2 = new long[10];
+	public static final double LOG_OF_2 = Math.log(2);
+	public static final long[] POWS_OF_2 = new long[8]; //0 -> 128
 	static {
-		for(int i = 0; i<pows2.length; ++i){
-			pows2[i] = Math.round(Math.pow(2, i));
+		for(int i = 0; i<POWS_OF_2.length; ++i){
+			POWS_OF_2[i] = Math.round(Math.pow(2, i));
 		}
 	}
 	private MathUtil() {
 
 	}
 
-	public static long lgSmoothing(long orig) {
-		return 1 + Math.round(Math.floor((Math.log(orig) / LG2)));
+	public static long tf(double orig) {
+		if(orig == 0){
+			return 0;
+		}
+		return 1 + Math.round(lg2(orig)); //Math.floor(
 	}
 
 	public static int getPow2(long num) {
-		return Arrays.binarySearch(pows2, num);
+		return Arrays.binarySearch(POWS_OF_2, num);
 	}
 
-	public static long lgSmoothing(double d) {
-		long l = Math.round(d);
-		return lgSmoothing(l);
+	public static long tfIdf(int inDocFreq, int numDocsAppearing, int totalNumDocs) {
+		assert totalNumDocs != 0;
+		if(numDocsAppearing == 0 || inDocFreq == 0){
+			return 0;
+		}
+		return Math.round((1 + lg2(inDocFreq)) * lg2(totalNumDocs / numDocsAppearing));
+	}
+	
+	public static double lg2(double orig){
+		return (Math.log(orig) / LOG_OF_2);
 	}
 }

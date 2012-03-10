@@ -16,7 +16,7 @@ public class Config {
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 4;
+	public static final int NUM_THREADS = 2;
 	public static final int NUM_USERS_TO_PROCESS = 10;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
@@ -84,6 +84,9 @@ public class Config {
 	public static final String[] LABELS = {"1","2","3","4","5","6","7","8","9","10"};
 
 	public static final int IO_BUFFER_SIZE = 64 * 1024;
+
+	public static final int APP_USAGE_FREQ_PERCENTILE_MAX = 90;
+	public static final int APP_USAGE_FREQ_PERCENTILE_MIN = 25;
 
 	
 

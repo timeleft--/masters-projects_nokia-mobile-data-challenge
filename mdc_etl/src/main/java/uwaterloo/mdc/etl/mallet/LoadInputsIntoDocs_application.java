@@ -56,7 +56,7 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 				// In case of num > 1024, that's a stop word!
 				return null;
 			}
-			long lgEnc = MathUtil.lgSmoothing(encounters);
+			long lgEnc = MathUtil.tf(encounters);
 			
 			return Long.toString(lgEnc) + " aid" + Config.DELIMITER_COLNAME_VALUE + currValue.toString(); // The UID
 		} else {

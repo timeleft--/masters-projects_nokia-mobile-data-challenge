@@ -17,6 +17,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.math.stat.descriptive.rank.Percentile;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
@@ -26,6 +28,7 @@ import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.MathUtil;
 import weka.core.Attribute;
 import weka.core.FastVector;
+import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.converters.ArffSaver;
 
@@ -40,21 +43,23 @@ public class LoadCountsAsAttributes implements
 
 		public ArffSaverCallable(Instances insts) {
 			this.insts = insts;
-
+			outPath = FilenameUtils.concat(outPath, insts.relationName()
+					+ ".arff");
 		}
 
 		@Override
 		public Void call() throws Exception {
-			File dest = FileUtils.getFile(outPath,
-					insts.relationName()+".arff");
-			System.out.println((System.currentTimeMillis() - time) + ": Writing " + dest.getAbsolutePath());
+			File dest = FileUtils.getFile(outPath);
+			System.out.println((System.currentTimeMillis() - time)
+					+ ": Writing " + dest.getAbsolutePath());
 
 			ArffSaver arffsaver = new ArffSaver();
 			arffsaver.setInstances(insts);
 			arffsaver.setDestination(FileUtils.openOutputStream(dest));
-//			arffsaver.setCompressOutput(true);
+			// arffsaver.setCompressOutput(true);
 			arffsaver.writeBatch();
-			System.out.println((System.currentTimeMillis() - time) + ": Finished writing " + dest.getAbsolutePath());
+			System.out.println((System.currentTimeMillis() - time)
+					+ ": Finished writing " + dest.getAbsolutePath());
 
 			return null;
 		}
@@ -62,7 +67,7 @@ public class LoadCountsAsAttributes implements
 	}
 
 	private static long time = System.currentTimeMillis();
-	
+
 	private String shotColNamesPath = "C:\\mdc-datasets\\short-col-names.properties";
 	private String inputPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
 
@@ -76,6 +81,8 @@ public class LoadCountsAsAttributes implements
 	private FastVector allAttributes;
 	private Attribute labelAttribute;
 	private int countingJobs;
+
+	private HashMap<String, HashMap<String, HashMap<String, Integer>>> allUsersAppFreqMap = new HashMap<String, HashMap<String, HashMap<String, Integer>>>();
 
 	/**
 	 * @param args
@@ -114,6 +121,99 @@ public class LoadCountsAsAttributes implements
 					+ " ARFFs, you needed: " + app.countingJobs);
 		}
 
+		// Handle App counts
+		int maxAppUsageOccurs = Integer.MIN_VALUE;
+		HashMap<String, Integer> aggregateAppFreq = new HashMap<String, Integer>();
+		File dataDir = FileUtils.getFile(app.inputPath);
+		int userIx = 0;
+		for (File userDir : dataDir.listFiles()) {
+			if (userIx == Config.NUM_USERS_TO_PROCESS) {
+				break;
+			}
+			HashMap<String, HashMap<String, Integer>> appFreqMap = app.allUsersAppFreqMap
+					.get(userDir.getName());
+			for (File visit : userDir.listFiles()) {
+				HashMap<String, Integer> visitAppFreq = appFreqMap.get(visit
+						.getName());
+				for (String appUid : visitAppFreq.keySet()) {
+					Integer appCnt = aggregateAppFreq.get(appUid);
+					if (appCnt == null) {
+						appCnt = 0;
+					}
+					int newFreq = appCnt + visitAppFreq.get(appUid);
+					aggregateAppFreq.put(appUid, newFreq);
+					if (newFreq > maxAppUsageOccurs) {
+						maxAppUsageOccurs = newFreq;
+					}
+				}
+			}
+			++userIx;
+		}
+
+		System.out.println("\nAggregate App Counts:\n"
+				+ aggregateAppFreq.toString());
+
+		Percentile appUsagePct = new Percentile();
+		double[] aggregateAppFreqVals = new double[aggregateAppFreq.size()];
+		int d = 0;
+		for (Integer appUsage : aggregateAppFreq.values()) {
+			aggregateAppFreqVals[d++] = appUsage;
+		}
+
+		appUsagePct.setData(aggregateAppFreqVals);
+		long stopWordAppTh = Math.round(appUsagePct.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MAX));
+		System.out.println("Stop Word Apps Threshold (90 percentile): "
+				+ stopWordAppTh);
+		long rareWordAppTh = Math.round(appUsagePct.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MIN));
+		System.out.println("Rare Apps Threshold (25 percentile): "
+				+ rareWordAppTh);
+
+		HashMap<String, Attribute> appUsageAttrs = new HashMap<String, Attribute>();
+		FastVector appUsageAttrsFV = new FastVector();
+		for (String appUid : aggregateAppFreq.keySet()) {
+			Integer appUsageOccurs = aggregateAppFreq.get(appUid);
+			if (appUsageOccurs > stopWordAppTh ||
+					appUsageOccurs < rareWordAppTh) {
+				continue;
+			}
+			Attribute appAttr = new Attribute(appUid);
+			appUsageAttrs.put(appUid, appAttr);
+			appUsageAttrsFV.addElement(appAttr);
+		}
+
+		userIx = 0;
+		for (File userDir : dataDir.listFiles()) {
+			if (userIx == Config.NUM_USERS_TO_PROCESS) {
+				break;
+			}
+			HashMap<String, HashMap<String, Integer>> appFreqMap = app.allUsersAppFreqMap
+					.get(userDir.getName());
+			Instances userAppUsage = new Instances(userDir.getName(),
+					appUsageAttrsFV, 0);
+			for (File visit : userDir.listFiles()) {
+				Instance visitAppUsage = new Instance(appUsageAttrsFV.size());
+				visitAppUsage.setDataset(userAppUsage);
+
+				HashMap<String, Integer> visitAppFreq = appFreqMap.get(visit
+						.getName());
+				for (String appUid : visitAppFreq.keySet()) {
+					Attribute appAttr = appUsageAttrs.get(appUid);
+					if (appAttr == null) {
+						continue;
+					}
+					visitAppUsage.setValue(appAttr,
+							MathUtil.tf(visitAppFreq.get(appUid)));
+				}
+			}
+			ArffSaverCallable arffSaveCall = new ArffSaverCallable(userAppUsage);
+			arffSaveCall.outPath = FilenameUtils
+					.removeExtension(arffSaveCall.outPath);
+			arffSaveCall.outPath += ".app";
+			printExec.submit(arffSaveCall);
+			++userIx;
+		}
+		
+
 		// for (int i = 0; i < printingJobs; ++i) {
 		// printEcs.take();
 		// }
@@ -123,20 +223,14 @@ public class LoadCountsAsAttributes implements
 		// Wait until all threads are finish
 		while (!printExec.isTerminated()) {
 			Thread.sleep(5000);
-			System.out.println((System.currentTimeMillis() - time) + ": Shutting down");
+			System.out.println((System.currentTimeMillis() - time)
+					+ ": Shutting down");
 		}
-		
+
 		app.countExec.shutdown();
-		
-		System.out.println(new Date() + ": Done in " + (System.currentTimeMillis() - time) + " millis");
-		
-		
 
-	}
-
-	public ExecutorCompletionService<Instances> call() throws Exception {
-
-		return this.count();
+		System.out.println(new Date() + ": Done in "
+				+ (System.currentTimeMillis() - time) + " millis");
 
 	}
 
@@ -175,14 +269,15 @@ public class LoadCountsAsAttributes implements
 			} else {
 				// The numeric attributes
 
-				 // log smoothing adds 1
-				for (int i = 1; i <= MathUtil.pows2.length; ++i) {
+				// log smoothing adds 1
+				for (int i = 1; i <= MathUtil.POWS_OF_2.length; ++i) {
 					Attribute attribute = new Attribute(statKeyShort.toString()
 							+ (i));
 					valueDomain.put(Integer.toString(i), attribute);
 					allAttributes.addElement(attribute);
 				}
-
+				// System.out.println("Created numeric attribute for: " +
+				// statKeyShort);
 			}
 		}
 		FastVector labelsVector = new FastVector();
@@ -195,11 +290,17 @@ public class LoadCountsAsAttributes implements
 
 	}
 
-	public ExecutorCompletionService<Instances> count() throws Exception {
+	public ExecutorCompletionService<Instances> call() throws Exception {
 		File dataDir = FileUtils.getFile(inputPath);
 
 		for (File userDir : dataDir.listFiles()) {
-			CountingCallable countCall = new CountingCallable(userDir);
+			HashMap<String, HashMap<String, Integer>> appFreqMap = new HashMap<String, HashMap<String, Integer>>();
+			for (File visit : userDir.listFiles()) {
+				appFreqMap.put(visit.getName(), new HashMap<String, Integer>());
+			}
+			allUsersAppFreqMap.put(userDir.getName(), appFreqMap);
+			CountingCallable countCall = new CountingCallable(userDir,
+					appFreqMap);
 			countEcs.submit(countCall);
 			++countingJobs;
 			// Testing
@@ -211,10 +312,12 @@ public class LoadCountsAsAttributes implements
 
 	private class CountingCallable implements Callable<Instances> {
 		private final File userDir;
+		private final HashMap<String, HashMap<String, Integer>> appFreqMap;
 
 		public Instances call() throws Exception {
 
-			System.out.println((System.currentTimeMillis() - time) + ": Reading user " + userDir.getName());
+			System.out.println((System.currentTimeMillis() - time)
+					+ ": Reading user " + userDir.getName());
 
 			Collection<File> microLocsFiles = FileUtils.listFiles(userDir,
 					new String[] { "csv" }, true);
@@ -284,9 +387,10 @@ public class LoadCountsAsAttributes implements
 							token.setLength(0);
 
 							// /
-							
-							if(pfx.equals("si")){
-								// useless features??
+
+							if (pfx.equals("apu")) {
+								// redundant feature, because we now store use
+								// of every app
 								continue;
 							}
 
@@ -294,26 +398,44 @@ public class LoadCountsAsAttributes implements
 									.get(statKey);
 							Attribute attribute;
 							if (valueDomain != null) {
-								if (!Discretize.enumsMap.containsKey(statKey)
-										&& (pfx.startsWith("avg") || pfx
-												.startsWith("sdv"))) {
-									// numeric value that need smoothing
+								if (!Discretize.enumsMap.containsKey(statKey)) {
+									// numeric attribute.. it must be limited to
+									// range
 									double numVal = Double.parseDouble(value);
-									if (numVal < MathUtil.pows2[0]) {
-//										numVal = MathUtil.pows2[0];
-										// negative or zero.. discard!
-										continue;
-									} else if (numVal > MathUtil.pows2[MathUtil.pows2.length - 1]) {
-										numVal = MathUtil.pows2[MathUtil.pows2.length - 1];
-									}
-									value = Long.toString(MathUtil
-											.lgSmoothing(numVal));
 
+									if (pfx.startsWith("avg")
+											|| pfx.startsWith("sdv")) {
+										// numeric value that need smoothing
+										value = Long.toString(MathUtil
+												.tf(numVal));
+									}
+
+									if (numVal < 1) {
+
+										// negative or zero.. discard!
+										// System.err.println("INFO: Discarding nonposetive token "
+										// + pfx + " " + value);
+										continue;
+									} else if (numVal > MathUtil.POWS_OF_2.length - 1) {
+										value = Integer
+												.toString(MathUtil.POWS_OF_2.length - 1);
+									}
 								}
 								attribute = valueDomain.get(value);
-
+							} else if (pfx.equals("aid")) {
+								HashMap<String, Integer> appFreq = appFreqMap
+										.get(microLocF.getParentFile()
+												.getName());
+								Integer appCnt = appFreq.get(value);
+								if (appCnt == null) {
+									appCnt = 0;
+									// appFreq.put(value, appCnt);
+								}
+								++appCnt;
+								appFreq.put(value, appCnt);
+								continue;
 							} else {
-								if (!pfx.isEmpty() && !pfx.equals("aid")) {
+								if (!pfx.isEmpty()) {
 									System.err
 											.println("WARNING! You are loosing a token: "
 													+ pfx + " " + value);
@@ -356,13 +478,16 @@ public class LoadCountsAsAttributes implements
 
 				wekaDoc.add(wekaInst);
 			}
-			System.out.println((System.currentTimeMillis() - time) + ": Finished reading user " + userDir.getName());			
+			System.out.println((System.currentTimeMillis() - time)
+					+ ": Finished reading user " + userDir.getName());
 			return wekaDoc;
 		}
 
-		protected CountingCallable(File userDir) {
+		protected CountingCallable(File userDir,
+				HashMap<String, HashMap<String, Integer>> appFreqMap) {
 			// targetStats.clear();
 			this.userDir = userDir;
+			this.appFreqMap = appFreqMap;
 		}
 	}
 
