@@ -56,10 +56,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			ConsistencySubsetEval.class,
 			// FilteredAttributeEval.class, FilteredSubsetEval.class,
 			// GainRatioAttributeEval.class,
-			InfoGainAttributeEval.class, ReliefFAttributeEval.class,
-			// SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
-//			WrapperSubsetEval.class, 
-			};
+			InfoGainAttributeEval.class, ReliefFAttributeEval.class
+	// SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
+	// WrapperSubsetEval.class,
+	};
 
 	// TODO Attribute Transformers: PrincipalComponents and
 	// LatentSemanticAnalysis
@@ -110,10 +110,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				if (userIx == Config.NUM_USERS_TO_PROCESS) {
 					break;
 				}
-				if (userData.getName().startsWith("113")) {
-					continue; // too mcuh data, and might make us run out of
-								// memory
-				}
+//				if (userData.getName().startsWith("113")) {
+//					continue; // too mcuh data, and might make us run out of
+//								// memory
+//				}
 
 				File appData = FileUtils.getFile(FilenameUtils
 						.removeExtension(userData.getAbsolutePath()) + ".app");
@@ -191,9 +191,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					}
 				}
 
-//				System.out.println(baseClassifierClazz.getSimpleName() + " - "
-//						+ (System.currentTimeMillis() - startTime) + " (fold "
-//						+ v + "): Done reading user: " + userData.getName());
+				// System.out.println(baseClassifierClazz.getSimpleName() +
+				// " - "
+				// + (System.currentTimeMillis() - startTime) + " (fold "
+				// + v + "): Done reading user: " + userData.getName());
 				++userIx;
 			}
 
@@ -218,7 +219,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				classificationsWr
 						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
 
-				// TODO: user 113
+				// TODONOT: user 113
 				if (validationSet.numInstances() == 0) {
 					classificationsWr.append("No validation data for fold: "
 							+ v);
@@ -560,16 +561,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	}
 
 	public Void call() throws Exception {
-		this.acrossUsersClassify();
-
-		return null;
-	}
-
-	public void acrossUsersClassify() throws Exception {
 		SummaryStatistics accuracySummaryAllFeatures = new SummaryStatistics();
 		HashMap<String, SummaryStatistics> accuracySummaryFeatSelected = new HashMap<String, SummaryStatistics>();
 		try {
-			for (@SuppressWarnings("rawtypes") Class clazz : attrSelectEvaluationClazzes) {
+			for (@SuppressWarnings("rawtypes")
+			Class clazz : attrSelectEvaluationClazzes) {
 				accuracySummaryFeatSelected.put(clazz.getName(),
 						new SummaryStatistics());
 			}
@@ -590,10 +586,38 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			}
 			for (int i = 0; i < numClassifyTasks; ++i) {
 				HashMap<String, Double> accuracies = foldFutures.get(i).get();
-				accuracySummaryAllFeatures.addValue(accuracies.get(ALL_FEATS));
-				for (@SuppressWarnings("rawtypes") Class clazz : attrSelectEvaluationClazzes) {
-					accuracySummaryFeatSelected.get(clazz.getName()).addValue(
-							accuracies.get(clazz.getName()));
+				if (accuracies == null) {
+					System.err
+							.println("ERROR: Null accuracies map returned by fold: "
+									+ i
+									+ " for classifier "
+									+ this.baseClassifierClazz.getName());
+					continue;
+				}
+
+				Double accu = accuracies.get(ALL_FEATS);
+				if (accu == null) {
+					System.err
+							.println("ERROR: Null accuracy for feat selector "
+									+ ALL_FEATS + " for classifier "
+									+ this.baseClassifierClazz.getName());
+				} else {
+					accuracySummaryAllFeatures.addValue(accu);
+				}
+
+				for (@SuppressWarnings("rawtypes")
+				Class clazz : attrSelectEvaluationClazzes) {
+					accu = accuracies.get(clazz.getName());
+					if (accu == null) {
+						System.err
+								.println("ERROR: Null accuracy for feat selector "
+										+ clazz.getName()
+										+ " for classifier "
+										+ this.baseClassifierClazz.getName());
+					} else {
+						accuracySummaryFeatSelected.get(clazz.getName())
+								.addValue(accu);
+					}
 				}
 			}
 			foldExecutors.shutdown();
@@ -664,6 +688,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		System.out.println(baseClassifierClazz.getSimpleName() + " - "
 				+ new Date().toString() + " (total): Done in "
 				+ (System.currentTimeMillis() - startTime) + " millis");
+		return null;
 	}
 
 	public static void writeConfusionMatrix(Writer foldConfusionWr,

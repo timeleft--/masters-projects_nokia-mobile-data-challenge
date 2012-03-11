@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
@@ -67,6 +68,8 @@ public class LoadCountsAsAttributes implements
 
 	}
 
+	private static final String NOMINAL = "NOMINAL";
+
 	private static long time = System.currentTimeMillis();
 
 	private String shotColNamesPath = "C:\\mdc-datasets\\short-col-names.properties";
@@ -80,6 +83,7 @@ public class LoadCountsAsAttributes implements
 
 	private Map<String, HashMap<String, Attribute>> valueDomainMap;
 	private FastVector allAttributes;
+	private HashSet<String> nominalAttrs;
 	private Attribute labelAttribute;
 	private Attribute prevLabelAttribute;
 	private int countingJobs;
@@ -198,7 +202,8 @@ public class LoadCountsAsAttributes implements
 					appUsageAttrsFV, 0);
 			for (File visit : userDir.listFiles()) {
 				for (File microLoc : visit.listFiles()) {
-					Instance microLocAppUsage = new Instance(appUsageAttrsFV.size());
+					Instance microLocAppUsage = new Instance(
+							appUsageAttrsFV.size());
 					microLocAppUsage.setDataset(userAppUsage);
 					HashMap<String, Integer> visitAppFreq = appFreqMap
 							.get(microLoc.getName() + visit.getName());
@@ -256,6 +261,15 @@ public class LoadCountsAsAttributes implements
 					.substring(0, fileColname.indexOf('_'));
 			loadDataFactory.loadClass(LoadInputsIntoDocs.class, fileName);
 		}
+		// Set of features that appear only once per microloc. we can treat them
+		// as nominal
+		// rather than binary
+		nominalAttrs = new HashSet<String>();
+		nominalAttrs.add(Config.RESULT_KEY_DURATION_FREQ);
+		nominalAttrs.add(Config.RESULT_KEY_DAY_OF_WEEK_FREQ);
+		nominalAttrs.add(Config.RESULT_KEY_HOUR_OF_DAY_FREQ);
+		nominalAttrs.add(Config.RESULT_KEY_TEMPRATURE_FREQ);
+		nominalAttrs.add(Config.RESULT_KEY_SKY_FREQ);
 
 		allAttributes = new FastVector();
 		valueDomainMap = Collections
@@ -266,12 +280,29 @@ public class LoadCountsAsAttributes implements
 			HashMap<String, Attribute> valueDomain = new HashMap<String, Attribute>();
 			valueDomainMap.put(statKey, valueDomain);
 			if (Discretize.enumsMap.containsKey(statKey)) {
+				if (nominalAttrs.contains(statKey)) {
 
-				for (Enum<?> enumVal : Discretize.enumsMap.get(statKey)) {
-					Attribute attribute = new Attribute(statKeyShort.toString()
-							+ enumVal.toString());
-					valueDomain.put(enumVal.toString(), attribute);
+					FastVector nominalVals = new FastVector();
+					for (Enum<?> enumVal : Discretize.enumsMap.get(statKey)) {
+						String enumStr = enumVal.toString();
+						if (enumStr.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
+							continue;
+						}
+						nominalVals.addElement(enumStr);
+					}
+
+					Attribute attribute = new Attribute(
+							statKeyShort.toString(), nominalVals);
+
+					valueDomain.put(NOMINAL, attribute);
 					allAttributes.addElement(attribute);
+				} else {
+					for (Enum<?> enumVal : Discretize.enumsMap.get(statKey)) {
+						Attribute attribute = new Attribute(
+								statKeyShort.toString() + enumVal.toString());
+						valueDomain.put(enumVal.toString(), attribute);
+						allAttributes.addElement(attribute);
+					}
 				}
 			} else {
 				// The numeric attributes
@@ -336,12 +367,16 @@ public class LoadCountsAsAttributes implements
 			weka.core.Instances wekaDoc = new weka.core.Instances(
 					userDir.getName(), allAttributes, microLocsFiles.size());
 			wekaDoc.setClassIndex(labelAttribute.index());
-			
+
 			Long prevStartTime = null;
 			Long prevEndTime = null;
 			String prevLabel = null;
 			String instLabel = null;
 			for (File microLocF : microLocsFiles) {
+				weka.core.Instance wekaInst = new weka.core.Instance(
+						allAttributes.size());
+				wekaInst.setDataset(wekaDoc);
+
 				HashMap<Attribute, Integer> countMap = new HashMap<Attribute, Integer>();
 				for (int i = 0; i < allAttributes.size(); ++i) {
 					countMap.put((Attribute) allAttributes.elementAt(i), 0);
@@ -353,18 +388,24 @@ public class LoadCountsAsAttributes implements
 				int chInt;
 				int numTabs = 0;
 				StringBuffer header = new StringBuffer();
-				
-				long currStartTime = Long.parseLong(StringUtils.removeLastNChars(microLocF.getParentFile().getName(),1));
-				long currEndTime = Long.parseLong(StringUtils.removeLastNChars(microLocF.getName(),5));
+
+				long currStartTime = Long.parseLong(StringUtils
+						.removeLastNChars(microLocF.getParentFile().getName(),
+								1));
+				long currEndTime = Long.parseLong(StringUtils.removeLastNChars(
+						microLocF.getName(), 5));
 				while ((chInt = microLocR.read()) != -1) {
 					if ((char) chInt == '\t') {
 						if (numTabs == 0) {
 							// inst name.. not useful in weka
 						} else if (numTabs == 1) {
-							if(prevStartTime != null && prevStartTime.equals(currStartTime)){
-								// same visit, different micro loc.. nothing to do
-//								System.out.println("dummy!");
-							} else if(prevEndTime != null && currStartTime - prevEndTime < Config.INTERVAL_LABEL_CARRY_OVER){
+							if (prevStartTime != null
+									&& prevStartTime.equals(currStartTime)) {
+								// same visit, different micro loc.. nothing to
+								// do
+								// System.out.println("dummy!");
+							} else if (prevEndTime != null
+									&& currStartTime - prevEndTime < Config.INTERVAL_LABEL_CARRY_OVER) {
 								prevLabel = instLabel;
 							} else {
 								prevLabel = null;
@@ -384,7 +425,6 @@ public class LoadCountsAsAttributes implements
 				prevStartTime = currStartTime;
 				prevEndTime = currEndTime;
 				header = null;
-				
 
 				char[] dataChars = new char[Config.IO_BUFFER_SIZE];
 				StringBuilder token = new StringBuilder();
@@ -427,34 +467,48 @@ public class LoadCountsAsAttributes implements
 									.get(statKey);
 							Attribute attribute;
 							if (valueDomain != null) {
-								if (!Discretize.enumsMap.containsKey(statKey)) {
-									// numeric attribute.. it must be limited to
-									// range
-									double numVal = Double.parseDouble(value);
-
-									if (pfx.startsWith("avg")
-											|| pfx.startsWith("sdv")) {
-										// numeric value that need smoothing
-										value = Long.toString(MathUtil
-												.tf(numVal));
+								if (nominalAttrs.contains(statKey)) {
+									// one value per microloc.. no counting
+									attribute = valueDomain.get(NOMINAL);
+									if (!value
+											.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
+										wekaInst.setValue(attribute, value);
 									}
+									continue;
+								} else {
+									if (!Discretize.enumsMap
+											.containsKey(statKey)) {
+										// numeric attribute.. it must be
+										// limited to
+										// range
+										double numVal = Double
+												.parseDouble(value);
 
-									if (numVal < 1) {
+										if (pfx.startsWith("avg")
+												|| pfx.startsWith("sdv")) {
+											// numeric value that need smoothing
+											value = Long.toString(MathUtil
+													.tf(numVal));
+										}
 
-										// negative or zero.. discard!
-										// System.err.println("INFO: Discarding nonposetive token "
-										// + pfx + " " + value);
-										continue;
-									} else if (numVal > MathUtil.POWS_OF_2.length - 1) {
-										value = Integer
-												.toString(MathUtil.POWS_OF_2.length - 1);
+										if (numVal < 1) {
+
+											// negative or zero.. discard!
+											// System.err.println("INFO: Discarding nonposetive token "
+											// + pfx + " " + value);
+											continue;
+										} else if (numVal > MathUtil.POWS_OF_2.length - 1) {
+											value = Integer
+													.toString(MathUtil.POWS_OF_2.length - 1);
+										}
 									}
+									attribute = valueDomain.get(value);
 								}
-								attribute = valueDomain.get(value);
 							} else if (pfx.equals("aid")) {
 								HashMap<String, Integer> appFreq = appFreqMap
-										.get(microLocF.getName() + microLocF.getParentFile()
-												.getName());
+										.get(microLocF.getName()
+												+ microLocF.getParentFile()
+														.getName());
 								Integer appCnt = appFreq.get(value);
 								if (appCnt == null) {
 									appCnt = 0;
@@ -481,22 +535,19 @@ public class LoadCountsAsAttributes implements
 					}
 				}
 
-				weka.core.Instance wekaInst = new weka.core.Instance(
-						allAttributes.size());
-				wekaInst.setDataset(wekaDoc);
-
 				if (instLabel != null) {
 					wekaInst.setClassValue(instLabel);
 				} else {
 					wekaInst.setClassMissing();
 				}
-				
-				if(prevLabel != null){
+
+				if (prevLabel != null) {
 					wekaInst.setValue(prevLabelAttribute, prevLabel);
 				}
 
 				for (Attribute attrib : countMap.keySet()) {
-					if (attrib == labelAttribute || attrib == prevLabelAttribute) {
+					if (attrib == labelAttribute
+							|| attrib == prevLabelAttribute) {
 						continue;
 					}
 					int count = countMap.get(attrib);
