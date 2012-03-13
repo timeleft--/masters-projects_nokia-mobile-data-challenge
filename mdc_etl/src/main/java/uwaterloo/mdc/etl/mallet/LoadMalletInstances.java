@@ -32,7 +32,10 @@ public class LoadMalletInstances {
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-
+		Config.quantizedFields = new Properties();
+		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		
+		
 		LoadMalletInstances app = new LoadMalletInstances();
 		app.loadInstances();
 	}

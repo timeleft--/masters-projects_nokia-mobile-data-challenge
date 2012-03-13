@@ -54,9 +54,11 @@ public class PrintStatsCallable implements Callable<Void> {
 	private void writeStats(String userid, String statKey,
 			SummaryStatistics stat) throws Exception {
 
-		String filePath = FilenameUtils.concat(statsPath,  PERUSER_SUMMART_PREFX + statKey + ".csv");
+		String filePath = FilenameUtils.concat(statsPath, PERUSER_SUMMART_PREFX
+				+ statKey + ".csv");
 		Writer summaryWriter = ConcurrUtil
-				.acquireWriter(filePath,
+				.acquireWriter(
+						filePath,
 						statWriters,
 						StringUtils.quote(Config.USERID_COLNAME)
 								+ "\t\"n\"\t\"min\"\t\"max\"\t\"mean\"\t\"standard_deviation\"\t\"variance\"\t\"geometric_mean\"\t\"second_moment\"\n");
@@ -84,7 +86,16 @@ public class PrintStatsCallable implements Callable<Void> {
 
 		Comparable<?>[] valsArr;
 		synchronized (Discretize.enumsMap) {
-			valsArr = Discretize.enumsMap.get(statKey);
+			if (Config.QUANTIZE_NOT_DISCRETIZE) {
+				if (Discretize.enumsMap.containsKey(statKey)) {
+					valsArr = Discretize.QuantilesEnum.values();
+					assert Config.NUM_QUANTILES + 1 == valsArr.length : "Generalize this code.. but don't use digits only";
+				} else {
+					valsArr = null;
+				}
+			} else {
+				valsArr = Discretize.enumsMap.get(statKey);
+			}
 		}
 		if (valsArr == null) {
 			if (statKey.endsWith(Config.RESULT_KEY_READING_NOVISIT_FREQ)) {
@@ -95,15 +106,15 @@ public class PrintStatsCallable implements Callable<Void> {
 				// The user location has no preset value enumeration
 				// So use the values of user 14 who has 54 distinct ids
 				valsArr = new String[55];
-				for(int i = 0; i<valsArr.length; ++i){
-					valsArr[i] = userid + "_" + (i+1);
+				for (int i = 0; i < valsArr.length; ++i) {
+					valsArr[i] = userid + "_" + (i + 1);
 				}
 			} else if (statKey.endsWith(Config.RESULT_POSTFX_INTEGER)) {
 				valsArr = new Integer[55];
-				for(int i = 0; i<valsArr.length; ++i){
-					valsArr[i] = i+1;
+				for (int i = 0; i < valsArr.length; ++i) {
+					valsArr[i] = i + 1;
 				}
-			} 
+			}
 		}
 
 		StringBuilder headerBuilder = new StringBuilder();
@@ -117,15 +128,17 @@ public class PrintStatsCallable implements Callable<Void> {
 					.append('\t')
 					.append(StringUtils.quote(valLabel + PCTG_PSTFX));
 		}
-		
-		headerBuilder.append('\t').append(StringUtils.quote("total" + COUNT_PSTFX));
+
+		headerBuilder.append('\t').append(
+				StringUtils.quote("total" + COUNT_PSTFX));
 
 		headerBuilder.append('\n');
 
-		String filePath = FilenameUtils.concat(statsPath, PERUSER_FREQ_PREFX + statKey + ".csv");
-		
-		Writer freqWriter = ConcurrUtil.acquireWriter(filePath,
-				statWriters, headerBuilder.toString());
+		String filePath = FilenameUtils.concat(statsPath, PERUSER_FREQ_PREFX
+				+ statKey + ".csv");
+
+		Writer freqWriter = ConcurrUtil.acquireWriter(filePath, statWriters,
+				headerBuilder.toString());
 		try {
 			long delta = System.currentTimeMillis();
 
@@ -143,7 +156,7 @@ public class PrintStatsCallable implements Callable<Void> {
 			}
 
 			freqWriter.append('\t').append(Long.toString(stat.getSumFreq()));
-			
+
 			freqWriter.append('\n');
 
 			delta = System.currentTimeMillis() - delta;

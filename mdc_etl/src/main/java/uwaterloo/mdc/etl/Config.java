@@ -17,7 +17,7 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 16;
-	public static final int NUM_USERS_TO_PROCESS = 80;
+	public static final int NUM_USERS_TO_PROCESS = 3;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -70,7 +70,6 @@ public class Config {
 
 	public static final int NUM_FREQ_MAC_ADDRS_TO_KEEP = 3;
 
-	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
 
 	public static final int NUMBER_TESTING_USERS = 20;
 
@@ -92,12 +91,24 @@ public class Config {
 	// as long as the previous visit ended within these secs
 	public static final long INTERVAL_LABEL_CARRY_OVER = 7200;
 
+	public static final int NUM_QUANTILES = 4;
+
+	public static final boolean QUANTIZATION_PER_USER = false;
+
+	public static final boolean QUANTIZE_NOT_DISCRETIZE = true;
+
+	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
+	public static final String QUANTIZED_FIELDS_PROPERTIES = "C:\\mdc-datasets\\numeric_quantized.properties";
+
 	
 
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
 	public static Properties placeLabels;
+	public static Properties quantizedFields;
 	
 	public static String PATH_WEATHER= "D:\\datasets\\weather-underground";
+
+	
 	
 }

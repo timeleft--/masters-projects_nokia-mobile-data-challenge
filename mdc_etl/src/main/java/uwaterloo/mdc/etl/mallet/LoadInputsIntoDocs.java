@@ -1,8 +1,10 @@
 package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -28,8 +30,10 @@ import uwaterloo.mdc.etl.util.StringUtils;
 public abstract class LoadInputsIntoDocs
 		extends
 		CallableOperation<KeyValuePair<String, HashMap<String, Object>>, StringBuilder> {
-
+	protected Pattern tabSplit = Pattern.compile("\\t");
 	private static final String CONTINUOUS_POSTFIX = "C";
+
+	private String quantizationPath = "P:\\mdc-datasets\\quantization";
 
 	protected Long prevTimeColReading = null;
 
@@ -48,6 +52,8 @@ public abstract class LoadInputsIntoDocs
 	protected long currTime = 0;
 
 	private StringBuilder prevDocBuilder;
+
+	protected HashMap<String, double[]> colQuantizationMap = new HashMap<String, double[]>();
 
 	@SuppressWarnings("deprecation")
 	public LoadInputsIntoDocs(Object master, char delimiter, String eol,
@@ -82,6 +88,38 @@ public abstract class LoadInputsIntoDocs
 						new SummaryStatistics());
 			}
 		}
+		if (Config.QUANTIZE_NOT_DISCRETIZE
+				&& !getColsToSkip().contains(currValue)) {
+			double[] quants = new double[Config.NUM_QUANTILES];
+
+			String quantFName = FilenameUtils.removeExtension(dataFile
+					.getName()) + "_" + currValue;
+			quantFName = Config.quantizedFields.getProperty(quantFName);
+			if (quantFName != null) {
+				if (Config.QUANTIZATION_PER_USER) {
+					quantFName = "mean_" + quantFName;
+				} else {
+					quantFName = userid + "_" + quantFName;
+				}
+				File quantFile = FileUtils
+						.getFile(quantizationPath, quantFName);
+				if (quantFile.exists()) {
+					try {
+						String quantStr = FileUtils.readFileToString(quantFile);
+						if (quantStr != null && !quantStr.isEmpty()) {
+							String[] boundaryArr = tabSplit.split(quantStr);
+							for (int b = 0; b < boundaryArr.length; ++b) {
+								String boundary = boundaryArr[b];
+								quants[b] = Double.parseDouble(boundary);
+							}
+							colQuantizationMap.put(currValue, quants);
+						}
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
 	}
 
 	protected void delimiterProcedure() {
@@ -92,9 +130,9 @@ public abstract class LoadInputsIntoDocs
 		if (currKey.equals(getTimeColumnName())) {
 			currTime = Long.parseLong(currValue);
 
-//		} else if ("tz".equals(currKey)) {
-//			// We keep times in GMT..
-//			currTime += Long.parseLong(currValue);
+			// } else if ("tz".equals(currKey)) {
+			// // We keep times in GMT..
+			// currTime += Long.parseLong(currValue);
 
 			if (prevTimeColReading != null) {
 				long deltaTime = currTime - prevTimeColReading;
@@ -108,7 +146,28 @@ public abstract class LoadInputsIntoDocs
 		} else if ("tz".equals(currKey)) {
 			// just skipping this column
 		} else {
-			Comparable<?> discreteVal = getValueToWrite();
+			Comparable<?> discreteVal;
+			double[] boundaries = colQuantizationMap.get(currKey);
+			discreteVal = getValueToWrite();
+			if (Config.QUANTIZE_NOT_DISCRETIZE && boundaries != null
+					// override the value only if there is one
+					&& discreteVal != null
+					&& !discreteVal.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
+
+				Double contVal = new Double(currValue);
+				if (contVal.isNaN() || contVal.isInfinite()) {
+					discreteVal = null;
+				} else {
+					int d = 0;
+					for (; d < boundaries.length; ++d) {
+						if (boundaries[d] > contVal) {
+							break;
+						}
+					}
+					discreteVal = Discretize.QuantilesEnum.values()[d];
+				}
+			}
+
 			appendCurrValToCol(discreteVal);
 			addCurrValToStats(discreteVal);
 		}
@@ -132,7 +191,7 @@ public abstract class LoadInputsIntoDocs
 	protected void addCurrValToStats(Comparable<?> discreteVal) {
 		Object statsObj = statsMap.get(prependFileName(currKey));
 		if (statsObj == null
-				// comment for debugging new discretizers
+		// comment for debugging new discretizers
 				|| discreteVal == null) {
 			// In case of values that are not enums
 			return;
@@ -169,10 +228,10 @@ public abstract class LoadInputsIntoDocs
 	}
 
 	protected void writeResults() throws Exception {
-//		if (userid == null) {
-//			// this file is empty
-//			return;
-//		}
+		// if (userid == null) {
+		// // this file is empty
+		// return;
+		// }
 		// We do a check on all the files for stats gathering
 		File userDir = FileUtils.getFile(outPath, userid);
 

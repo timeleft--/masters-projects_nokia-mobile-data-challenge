@@ -24,7 +24,6 @@ import uwaterloo.mdc.etl.PerfMon.TimeMetrics;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.operations.PrintStatsCallable;
 import uwaterloo.mdc.etl.util.KeyValuePair;
-import uwaterloo.mdc.mallet.NaiveBayesClassify;
 
 public class ImportIntoMallet {
 
@@ -61,35 +60,38 @@ public class ImportIntoMallet {
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-
+		Config.quantizedFields = new Properties();
+		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		
+		
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
 
-		CountConditionalFreqs countCond = new CountConditionalFreqs();
-		ExecutorService countExec = Executors.newSingleThreadExecutor();
-		countExec.submit(countCond);
-
-		NaiveBayesClassify nb = new NaiveBayesClassify();
-		ExecutorService nbExec = Executors.newSingleThreadExecutor();
-		nbExec.submit(nb);
-
-		nbExec.shutdown();
-		while (!nbExec.isTerminated()) {
-			Thread.sleep(5000);
-		}
-		// AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
-		// ExecutorService ldaExec = Executors.newSingleThreadExecutor();
-		// ldaExec.submit(lda);
-		//
-		// ldaExec.shutdown();
-		// while (!ldaExec.isTerminated()) {
-		// Thread.sleep(5000);
-		// }
-
-		countExec.shutdown();
-		while (!countExec.isTerminated()) {
-			Thread.sleep(5000);
-		}
+//		CountConditionalFreqs countCond = new CountConditionalFreqs();
+//		ExecutorService countExec = Executors.newSingleThreadExecutor();
+//		countExec.submit(countCond);
+////
+////		NaiveBayesClassify nb = new NaiveBayesClassify();
+////		ExecutorService nbExec = Executors.newSingleThreadExecutor();
+////		nbExec.submit(nb);
+////
+////		nbExec.shutdown();
+////		while (!nbExec.isTerminated()) {
+////			Thread.sleep(5000);
+////		}
+//		// AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
+//		// ExecutorService ldaExec = Executors.newSingleThreadExecutor();
+//		// ldaExec.submit(lda);
+//		//
+//		// ldaExec.shutdown();
+//		// while (!ldaExec.isTerminated()) {
+//		// Thread.sleep(5000);
+//		// }
+//
+//		countExec.shutdown();
+//		while (!countExec.isTerminated()) {
+//			Thread.sleep(5000);
+//		}
 	}
 
 	public ImportIntoMallet() throws IOException {

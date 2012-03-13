@@ -98,7 +98,9 @@ public class LoadCountsAsAttributes implements
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-
+		Config.quantizedFields = new Properties();
+		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		
 		printExec = Executors.newFixedThreadPool(Config.NUM_THREADS / 2);
 
 		LoadCountsAsAttributes app = new LoadCountsAsAttributes();
@@ -297,12 +299,18 @@ public class LoadCountsAsAttributes implements
 					valueDomain.put(NOMINAL, attribute);
 					allAttributes.addElement(attribute);
 				} else {
-					for (Enum<?> enumVal : Discretize.enumsMap.get(statKey)) {
+					Enum<?>[] valueArray;
+					if(Config.QUANTIZE_NOT_DISCRETIZE && Config.quantizedFields.containsKey(statKey)){
+						valueArray = Discretize.QuantilesEnum.values();
+					} else {
+						valueArray = Discretize.enumsMap.get(statKey);
+					}
+					for (Enum<?> enumVal : valueArray) {
 						Attribute attribute = new Attribute(
 								statKeyShort.toString() + enumVal.toString());
 						valueDomain.put(enumVal.toString(), attribute);
 						allAttributes.addElement(attribute);
-					}
+					}					
 				}
 			} else {
 				// The numeric attributes

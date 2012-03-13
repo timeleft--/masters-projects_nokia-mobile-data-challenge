@@ -82,249 +82,139 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		@Override
 		public HashMap<String, Double> call() throws Exception {
 			HashMap<String, Double> accuracyMap = new HashMap<String, Double>();
-
-			Frequency[] foldConfusionMatrix;
-			foldConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
-			for (int i = 0; i < foldConfusionMatrix.length; ++i) {
-				foldConfusionMatrix[i] = new Frequency();
-			}
-
-			Frequency[] foldFeactSelectCM;
-			foldFeactSelectCM = new Frequency[Config.NUM_LABELS_CONSIDERED];
-			for (int i = 0; i < foldFeactSelectCM.length; ++i) {
-				foldFeactSelectCM[i] = new Frequency();
-			}
-
-			int foldStart = v * Config.VALIDATION_FOLD_WIDTH;
-
-			Collection<File> inputArrfs = FileUtils.listFiles(
-					FileUtils.getFile(inPath), new String[] { "arff" }, true);
-
-			Instances validationSet = null;
-			Instances trainingSet = null;
-
-			// train Classifier
-			boolean firstUser = true;
-			int userIx = 0;
-			for (File userData : inputArrfs) {
-				if (userIx == Config.NUM_USERS_TO_PROCESS) {
-					break;
-				}
-//				if (userData.getName().startsWith("113")) {
-//					continue; // too mcuh data, and might make us run out of
-//								// memory
-//				}
-
-				File appData = FileUtils.getFile(FilenameUtils
-						.removeExtension(userData.getAbsolutePath()) + ".app");
-
-				if (userIx == (foldStart + inFoldTestIx)) {
-					validationSet = new Instances(Channels.newReader(FileUtils
-							.openInputStream(userData).getChannel(),
-							Config.OUT_CHARSET));
-					Reader appReader = Channels.newReader(FileUtils
-							.openInputStream(appData).getChannel(),
-							Config.OUT_CHARSET);
-					validationSet = Instances.mergeInstances(new Instances(
-							appReader), validationSet);
-					validationSet
-							.setClassIndex(validationSet.numAttributes() - 1);
-					validationSet.setRelationName(FilenameUtils
-							.removeExtension(userData.getName()));
-				} else {
-					ArffLoader dataLoader = new ArffLoader();
-					dataLoader.setFile(userData);
-
-					ArffLoader appLoader = new ArffLoader();
-					appLoader.setFile(appData);
-
-					// load structure
-					Instances dataStruct = dataLoader.getStructure();
-					Instances appStruct = appLoader.getStructure();
-					Instances joinedStruct = Instances.mergeInstances(
-							appStruct, dataStruct);
-					joinedStruct
-							.setClassIndex(joinedStruct.numAttributes() - 1);
-					joinedStruct.setRelationName(FilenameUtils
-							.removeExtension(userData.getName()));
-
-					if (firstUser) {
-						if (baseClassifier instanceof UpdateableClassifier) {
-							baseClassifier.buildClassifier(joinedStruct);
-						} else {
-							trainingSet = new Instances(joinedStruct);
-						}
-					}
-
-					// load data
-					Instance dataInst;
-					Instance appInst;
-					int instIx = 0;
-					while ((dataInst = dataLoader.getNextInstance(dataStruct)) != null) {
-						appInst = appLoader.getNextInstance(appStruct);
-
-						if (appInst == null) {
-							throw new Exception(
-									"App Insances fewer than data instances: "
-											+ instIx);
-						}
-						// isClassMissing but without haveing to set the clas
-						if (dataInst.isMissing(dataInst.numAttributes() - 1)) {
-							continue;
-						}
-
-						Instance joinedInst = dataInst.mergeInstance(appInst);
-						joinedInst.setDataset(joinedStruct);
-
-						if (baseClassifier instanceof UpdateableClassifier) {
-							((UpdateableClassifier) baseClassifier)
-									.updateClassifier(joinedInst);
-						} else {
-							trainingSet.add(joinedInst);
-						}
-						++instIx;
-					}
-					if (appLoader.getNextInstance(appStruct) != null) {
-						throw new Exception(
-								"App Insances more than data instances: "
-										+ instIx);
-					}
-				}
-
-				// System.out.println(baseClassifierClazz.getSimpleName() +
-				// " - "
-				// + (System.currentTimeMillis() - startTime) + " (fold "
-				// + v + "): Done reading user: " + userData.getName());
-				++userIx;
-			}
-
-			if (baseClassifier instanceof UpdateableClassifier) {
-				// already trained
-			} else {
-				baseClassifier.buildClassifier(trainingSet);
-				trainingSet = null;
-			}
-
-			System.out.println(baseClassifierClazz.getSimpleName() + " - "
-					+ (System.currentTimeMillis() - startTime) + " (fold " + v
-					+ "): Finished training for fold: " + v);
-			Writer classificationsWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath, baseClassifier
-									.getClass().getName(), "v" + v
-									+ "_classifications.txt")).getChannel(),
-					Config.OUT_CHARSET);
-
 			try {
-				classificationsWr
-						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+				Frequency[] foldConfusionMatrix;
+				foldConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+				for (int i = 0; i < foldConfusionMatrix.length; ++i) {
+					foldConfusionMatrix[i] = new Frequency();
+				}
 
-				// TODONOT: user 113
-				if (validationSet.numInstances() == 0) {
-					classificationsWr.append("No validation data for fold: "
-							+ v);
+				Frequency[] foldFeactSelectCM;
+				foldFeactSelectCM = new Frequency[Config.NUM_LABELS_CONSIDERED];
+				for (int i = 0; i < foldFeactSelectCM.length; ++i) {
+					foldFeactSelectCM[i] = new Frequency();
+				}
 
-				} else {
-					int trueClassificationsCount = 0;
+				int foldStart = v * Config.VALIDATION_FOLD_WIDTH;
 
-					for (int i = 0; i < validationSet.numInstances(); ++i) {
-						Instance vInst = validationSet.instance(i);
+				Collection<File> inputArrfs = FileUtils.listFiles(
+						FileUtils.getFile(inPath), new String[] { "arff" },
+						true);
 
-						if (vInst.classIsMissing()) {
-							continue;
-						}
+				Instances validationSet = null;
+				Instances trainingSet = null;
 
-						Instance classMissing = (Instance) vInst.copy();
-						classMissing.setDataset(vInst.dataset());
-						classMissing.setClassMissing();
+				// train Classifier
+				boolean firstUser = true;
+				int userIx = 0;
+				for (File userData : inputArrfs) {
+					if (userIx == Config.NUM_USERS_TO_PROCESS) {
+						break;
+					}
+					// if (userData.getName().startsWith("113")) {
+					// continue; // too mcuh data, and might make us run out of
+					// // memory
+					// }
 
-						double[] vClassDist = baseClassifier
-								.distributionForInstance(classMissing);
-						classificationsWr.append(vInst.dataset().relationName()
-								+ "[" + i + "]");
-						double vClassMaxProb = Double.NEGATIVE_INFINITY;
-						double vClass = -1;
-						for (int j = 0; j < vClassDist.length; ++j) {
-							classificationsWr.append("\t" + vClassDist[j]);
-							if (vClassDist[j] > vClassMaxProb) {
-								vClassMaxProb = vClassDist[j];
-								vClass = j + 1;
+					File appData = FileUtils.getFile(FilenameUtils
+							.removeExtension(userData.getAbsolutePath())
+							+ ".app");
+
+					if (userIx == (foldStart + inFoldTestIx)) {
+						validationSet = new Instances(Channels.newReader(
+								FileUtils.openInputStream(userData)
+										.getChannel(), Config.OUT_CHARSET));
+						Reader appReader = Channels.newReader(FileUtils
+								.openInputStream(appData).getChannel(),
+								Config.OUT_CHARSET);
+						validationSet = Instances.mergeInstances(new Instances(
+								appReader), validationSet);
+						validationSet.setClassIndex(validationSet
+								.numAttributes() - 1);
+						validationSet.setRelationName(FilenameUtils
+								.removeExtension(userData.getName()));
+					} else {
+						ArffLoader dataLoader = new ArffLoader();
+						dataLoader.setFile(userData);
+
+						ArffLoader appLoader = new ArffLoader();
+						appLoader.setFile(appData);
+
+						// load structure
+						Instances dataStruct = dataLoader.getStructure();
+						Instances appStruct = appLoader.getStructure();
+						Instances joinedStruct = Instances.mergeInstances(
+								appStruct, dataStruct);
+						joinedStruct
+								.setClassIndex(joinedStruct.numAttributes() - 1);
+						joinedStruct.setRelationName(FilenameUtils
+								.removeExtension(userData.getName()));
+
+						if (firstUser) {
+							if (baseClassifier instanceof UpdateableClassifier) {
+								baseClassifier.buildClassifier(joinedStruct);
+							} else {
+								trainingSet = new Instances(joinedStruct);
 							}
 						}
-						classificationsWr.append('\n');
-						// The class "Value" is actually its index!!!!!!
-						if (vClass == vInst.classValue() + 1) {
-							++trueClassificationsCount;
+
+						// load data
+						Instance dataInst;
+						Instance appInst;
+						int instIx = 0;
+						while ((dataInst = dataLoader
+								.getNextInstance(dataStruct)) != null) {
+							appInst = appLoader.getNextInstance(appStruct);
+
+							if (appInst == null) {
+								throw new Exception(
+										"App Insances fewer than data instances: "
+												+ instIx);
+							}
+							// isClassMissing but without haveing to set the
+							// clas
+							if (dataInst
+									.isMissing(dataInst.numAttributes() - 1)) {
+								continue;
+							}
+
+							Instance joinedInst = dataInst
+									.mergeInstance(appInst);
+							joinedInst.setDataset(joinedStruct);
+
+							if (baseClassifier instanceof UpdateableClassifier) {
+								((UpdateableClassifier) baseClassifier)
+										.updateClassifier(joinedInst);
+							} else {
+								trainingSet.add(joinedInst);
+							}
+							++instIx;
 						}
-						long trueLabelCfMIx = Math.round(vInst.classValue());
-						long bestLabelInt = Math.round(vClass);
-						foldFeactSelectCM[(int) trueLabelCfMIx]
-								.addValue(bestLabelInt);
-						synchronized (totalConfusionMatrix) {
-							totalConfusionMatrix[(int) trueLabelCfMIx]
-									.addValue(bestLabelInt);
+						if (appLoader.getNextInstance(appStruct) != null) {
+							throw new Exception(
+									"App Insances more than data instances: "
+											+ instIx);
 						}
 					}
-					accuracyMap.put(ALL_FEATS, trueClassificationsCount * 1.0
-							/ validationSet.numInstances());
-					synchronized (cvClassificationAccuracyWr) {
 
-						cvClassificationAccuracyWr
-								.append(Integer.toString(v))
-								.append('\t')
-								.append(Integer
-										.toString(trueClassificationsCount))
-								.append('\t')
-								.append(Integer.toString(validationSet
-										.numInstances()))
-								.append('\t')
-								.append(Double.toString(accuracyMap
-										.get(ALL_FEATS))).append('\n');
-					}
-
+					// System.out.println(baseClassifierClazz.getSimpleName() +
+					// " - "
+					// + (System.currentTimeMillis() - startTime) + " (fold "
+					// + v + "): Done reading user: " + userData.getName());
+					++userIx;
 				}
-			} finally {
-				classificationsWr.flush();
-				classificationsWr.close();
-			}
-			Writer foldConfusionWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath, baseClassifier
-									.getClass().getName(), "v" + v
-									+ "_confusion-matrix.txt")).getChannel(),
-					Config.OUT_CHARSET);
-			try {
-				writeConfusionMatrix(foldConfusionWr, foldFeactSelectCM);
-			} finally {
-				foldConfusionWr.flush();
-				foldConfusionWr.close();
-			}
-			System.out.println(baseClassifierClazz.getSimpleName() + " - "
-					+ (System.currentTimeMillis() - startTime) + " (fold " + v
-					+ "): Finished validation for fold: " + v);
 
-			// //////////////////////////////////////
-
-			for (@SuppressWarnings("rawtypes")
-			Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
-
-				AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
-				@SuppressWarnings("unchecked")
-				ASEvaluation eval = (ASEvaluation) attrSelectEvalClazz
-						.getConstructor().newInstance();
-				ASSearch search;
-				if (eval instanceof SubsetEvaluator) {
-					search = new GreedyStepwise();
-					((GreedyStepwise) search).setSearchBackwards(true);
+				if (baseClassifier instanceof UpdateableClassifier) {
+					// already trained
 				} else {
-					search = new Ranker();
+					baseClassifier.buildClassifier(trainingSet);
+					trainingSet = null;
 				}
 
-				featSelector.setClassifier(baseClassifier);
-				featSelector.setEvaluator(eval);
-				featSelector.setSearch(search);
-
-				Writer featSelectWr = Channels
+				System.out.println(baseClassifierClazz.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime) + " (fold "
+						+ v + "): Finished training for fold: " + v);
+				Writer classificationsWr = Channels
 						.newWriter(
 								FileUtils
 										.openOutputStream(
@@ -334,23 +224,22 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 																baseClassifier
 																		.getClass()
 																		.getName(),
-																attrSelectEvalClazz
-																		.getName(),
 																"v"
 																		+ v
-																		+ "_feat-selected-classifications.txt"))
+																		+ "_classifications.txt"))
 										.getChannel(), Config.OUT_CHARSET);
-				try {
-					featSelector.buildClassifier(validationSet);
 
-					featSelectWr
+				try {
+					classificationsWr
 							.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+
+					// TODONOT: user 113
 					if (validationSet.numInstances() == 0) {
-						featSelectWr.append("Not validation data for fold: "
-								+ v);
+						classificationsWr
+								.append("No validation data for fold: " + v);
 
 					} else {
-						int featSelectCorrectCount = 0;
+						int trueClassificationsCount = 0;
 
 						for (int i = 0; i < validationSet.numInstances(); ++i) {
 							Instance vInst = validationSet.instance(i);
@@ -363,92 +252,223 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							classMissing.setDataset(vInst.dataset());
 							classMissing.setClassMissing();
 
-							double[] vClassDist = featSelector
+							double[] vClassDist = baseClassifier
 									.distributionForInstance(classMissing);
-							featSelectWr.append(vInst.dataset().relationName()
-									+ "[" + i + "]");
+							classificationsWr.append(vInst.dataset()
+									.relationName() + "[" + i + "]");
 							double vClassMaxProb = Double.NEGATIVE_INFINITY;
 							double vClass = -1;
 							for (int j = 0; j < vClassDist.length; ++j) {
-								featSelectWr.append("\t" + vClassDist[j]);
+								classificationsWr.append("\t" + vClassDist[j]);
 								if (vClassDist[j] > vClassMaxProb) {
 									vClassMaxProb = vClassDist[j];
 									vClass = j + 1;
 								}
 							}
-							featSelectWr.append('\n');
+							classificationsWr.append('\n');
 							// The class "Value" is actually its index!!!!!!
 							if (vClass == vInst.classValue() + 1) {
-								++featSelectCorrectCount;
+								++trueClassificationsCount;
 							}
 							long trueLabelCfMIx = Math
 									.round(vInst.classValue());
 							long bestLabelInt = Math.round(vClass);
 							foldFeactSelectCM[(int) trueLabelCfMIx]
 									.addValue(bestLabelInt);
-							synchronized (totalFeatSelectCM) {
-								totalFeatSelectCM.get(attrSelectEvalClazz
-										.getName() /*
-													 * + searchClazz . getName
-													 */)[(int) trueLabelCfMIx]
+							synchronized (totalConfusionMatrix) {
+								totalConfusionMatrix[(int) trueLabelCfMIx]
 										.addValue(bestLabelInt);
 							}
 						}
-						// a map of accuracies for different algot
-						accuracyMap.put(
-								attrSelectEvalClazz.getName(),
-								featSelectCorrectCount * 1.0
-										/ validationSet.numInstances());
-						synchronized (cvFeatSelectAccuracyWr) {
+						accuracyMap.put(ALL_FEATS, trueClassificationsCount
+								* 1.0 / validationSet.numInstances());
+						synchronized (cvClassificationAccuracyWr) {
 
-							cvFeatSelectAccuracyWr
-									.get(attrSelectEvalClazz.getName() /*
-																		 * +
-																		 * searchClazz
-																		 * .
-																		 * getName
-																		 */)
+							cvClassificationAccuracyWr
 									.append(Integer.toString(v))
 									.append('\t')
 									.append(Integer
-											.toString(featSelectCorrectCount))
+											.toString(trueClassificationsCount))
 									.append('\t')
 									.append(Integer.toString(validationSet
 											.numInstances()))
 									.append('\t')
 									.append(Double.toString(accuracyMap
-											.get(attrSelectEvalClazz.getName())))
-									.append('\n');
+											.get(ALL_FEATS))).append('\n');
 						}
 
 					}
-				} catch (WekaException e) {
-					if (e.getMessage().startsWith(
-							"Not enough training instances")) {
-						featSelectWr.append(e.getMessage());
-						continue;
-					}
-				} catch (Exception ignored) {
-					ignored.printStackTrace(System.err);
-					continue;
 				} finally {
-					featSelectWr.flush();
-					featSelectWr.close();
+					classificationsWr.flush();
+					classificationsWr.close();
 				}
-
-				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-						baseClassifier.getClass().getName(),
-						attrSelectEvalClazz.getName(), "v" + v
-								+ "_feat-selection.txt"), featSelector
-						.toString());
-				// algo name
-				System.out.println(baseClassifierClazz.getSimpleName() + "/"
-						+ attrSelectEvalClazz.getSimpleName() + " - "
+				Writer foldConfusionWr = Channels.newWriter(
+						FileUtils.openOutputStream(
+								FileUtils.getFile(outputPath, baseClassifier
+										.getClass().getName(), "v" + v
+										+ "_confusion-matrix.txt"))
+								.getChannel(), Config.OUT_CHARSET);
+				try {
+					writeConfusionMatrix(foldConfusionWr, foldFeactSelectCM);
+				} finally {
+					foldConfusionWr.flush();
+					foldConfusionWr.close();
+				}
+				System.out.println(baseClassifierClazz.getSimpleName() + " - "
 						+ (System.currentTimeMillis() - startTime) + " (fold "
-						+ v + "): Finished feature selection for fold: " + v);
-			}
-			// //////////////////////////////////////
+						+ v + "): Finished validation for fold: " + v);
 
+				// //////////////////////////////////////
+
+				for (@SuppressWarnings("rawtypes")
+				Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
+
+					AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
+					@SuppressWarnings("unchecked")
+					ASEvaluation eval = (ASEvaluation) attrSelectEvalClazz
+							.getConstructor().newInstance();
+					ASSearch search;
+					if (eval instanceof SubsetEvaluator) {
+						search = new GreedyStepwise();
+						((GreedyStepwise) search).setSearchBackwards(true);
+					} else {
+						search = new Ranker();
+					}
+
+					featSelector.setClassifier(baseClassifier);
+					featSelector.setEvaluator(eval);
+					featSelector.setSearch(search);
+
+					Writer featSelectWr = Channels
+							.newWriter(
+									FileUtils
+											.openOutputStream(
+													FileUtils
+															.getFile(
+																	outputPath,
+																	baseClassifier
+																			.getClass()
+																			.getName(),
+																	attrSelectEvalClazz
+																			.getName(),
+																	"v"
+																			+ v
+																			+ "_feat-selected-classifications.txt"))
+											.getChannel(), Config.OUT_CHARSET);
+					try {
+						featSelector.buildClassifier(validationSet);
+
+						featSelectWr
+								.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+						if (validationSet.numInstances() == 0) {
+							featSelectWr
+									.append("Not validation data for fold: "
+											+ v);
+
+						} else {
+							int featSelectCorrectCount = 0;
+
+							for (int i = 0; i < validationSet.numInstances(); ++i) {
+								Instance vInst = validationSet.instance(i);
+
+								if (vInst.classIsMissing()) {
+									continue;
+								}
+
+								Instance classMissing = (Instance) vInst.copy();
+								classMissing.setDataset(vInst.dataset());
+								classMissing.setClassMissing();
+
+								double[] vClassDist = featSelector
+										.distributionForInstance(classMissing);
+								featSelectWr.append(vInst.dataset()
+										.relationName() + "[" + i + "]");
+								double vClassMaxProb = Double.NEGATIVE_INFINITY;
+								double vClass = -1;
+								for (int j = 0; j < vClassDist.length; ++j) {
+									featSelectWr.append("\t" + vClassDist[j]);
+									if (vClassDist[j] > vClassMaxProb) {
+										vClassMaxProb = vClassDist[j];
+										vClass = j + 1;
+									}
+								}
+								featSelectWr.append('\n');
+								// The class "Value" is actually its index!!!!!!
+								if (vClass == vInst.classValue() + 1) {
+									++featSelectCorrectCount;
+								}
+								long trueLabelCfMIx = Math.round(vInst
+										.classValue());
+								long bestLabelInt = Math.round(vClass);
+								foldFeactSelectCM[(int) trueLabelCfMIx]
+										.addValue(bestLabelInt);
+								synchronized (totalFeatSelectCM) {
+									totalFeatSelectCM.get(attrSelectEvalClazz
+											.getName() /*
+														 * + searchClazz .
+														 * getName
+														 */)[(int) trueLabelCfMIx]
+											.addValue(bestLabelInt);
+								}
+							}
+							// a map of accuracies for different algot
+							accuracyMap.put(attrSelectEvalClazz.getName(),
+									featSelectCorrectCount * 1.0
+											/ validationSet.numInstances());
+							synchronized (cvFeatSelectAccuracyWr) {
+
+								cvFeatSelectAccuracyWr
+										.get(attrSelectEvalClazz.getName() /*
+																			 * +
+																			 * searchClazz
+																			 * .
+																			 * getName
+																			 */)
+										.append(Integer.toString(v))
+										.append('\t')
+										.append(Integer
+												.toString(featSelectCorrectCount))
+										.append('\t')
+										.append(Integer.toString(validationSet
+												.numInstances()))
+										.append('\t')
+										.append(Double.toString(accuracyMap
+												.get(attrSelectEvalClazz
+														.getName())))
+										.append('\n');
+							}
+
+						}
+					} catch (WekaException ignored) {
+						if (ignored.getMessage().startsWith(
+								"Not enough training instances")) {
+							featSelectWr.append(ignored.getMessage());
+							continue;
+						}
+					} catch (Exception ignored) {
+						ignored.printStackTrace(System.err);
+						continue;
+					} finally {
+						featSelectWr.flush();
+						featSelectWr.close();
+					}
+
+					FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+							baseClassifier.getClass().getName(),
+							attrSelectEvalClazz.getName(), "v" + v
+									+ "_feat-selection.txt"), featSelector
+							.toString());
+					// algo name
+					System.out.println(baseClassifierClazz.getSimpleName()
+							+ "/" + attrSelectEvalClazz.getSimpleName() + " - "
+							+ (System.currentTimeMillis() - startTime)
+							+ " (fold " + v
+							+ "): Finished feature selection for fold: " + v);
+				}
+				// //////////////////////////////////////
+			} catch (Exception ignored) {
+				ignored.printStackTrace(System.err);
+			}
 			return accuracyMap;
 		}
 
@@ -528,35 +548,43 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		Config.placeLabels = new Properties();
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-
+		Config.quantizedFields = new Properties();
+		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		
+		ClassifyAndFeatSelect app;
+		
 		// Naive Bayes
-		ClassifyAndFeatSelect app = new ClassifyAndFeatSelect(
-				NaiveBayesUpdateable.class);
+		app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
 		app.call();
 
-		// C4.5 decision tree
-		app = new ClassifyAndFeatSelect(J48.class);
-		app.call();
+		 // C4.5 decision tree
+		 app = new ClassifyAndFeatSelect(J48.class);
+		 app.call();
 
-		// Bayesian Logisitc Regression
-		app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
-		app.call();
+		// Cannot handle multinomial attrs
+		// // Bayesian Logisitc Regression
+		// app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
+		// app.call();
 
-		// Bayes Net
-		app = new ClassifyAndFeatSelect(BayesNet.class);
-		app.call();
+		 // Bayes Net
+		 app = new ClassifyAndFeatSelect(BayesNet.class);
+		 app.call();
 
+		// Exception: weka.classifiers.functions.Logistic: Not enough training
+		// instances with class labels (required: 1, provided: 0)!
 		// Logistic Regression
-		app = new ClassifyAndFeatSelect(Logistic.class);
-		app.call();
+//		app = new ClassifyAndFeatSelect(Logistic.class);
+//		app.call();
+		
+		// Exception: weka.classifiers.functions.Logistic: Not enough training
+//		 // SVM
+//		 app = new ClassifyAndFeatSelect(LibSVM.class);
+//		 app.call();
 
-		// SVM
-		app = new ClassifyAndFeatSelect(LibSVM.class);
-		app.call();
-
-		// By clustering
-		app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
-		app.call();
+		// weka.clusterers.SimpleKMeans: Cannot handle missing class values!
+		// // By clustering
+		// app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
+		// app.call();
 
 	}
 

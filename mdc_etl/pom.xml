@@ -47,6 +47,11 @@
 			<version>4.10</version>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>mdc2012-deps</groupId>
+			<artifactId>LibSVM</artifactId>
+			<version>3.11</version>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>

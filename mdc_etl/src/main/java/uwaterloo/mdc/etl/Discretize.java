@@ -18,6 +18,14 @@ public class Discretize {
 		// prevents init
 	}
 
+	public static enum QuantilesEnum {
+		E, //Empty
+		L, //Low
+		M, //Medium
+		H, //High
+		F; //Full
+	}
+	
 	// Trading memory for performance: removed and (incomplete) synchronization
 	// But we need a global place for storing all labels, to avoid duplocates
 	public static final Map<String, String> shortColLabelsMap = Collections
