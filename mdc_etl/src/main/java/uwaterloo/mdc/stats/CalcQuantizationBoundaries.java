@@ -226,12 +226,39 @@ class CalcQuantizationBoundaries {
 
 			Percentile qt = quantileMap.getValue().get(fnamePfx);
 			
+			double p25 = qt.evaluate(25);
+			double p60 = qt.evaluate(60);
+			double p80 = qt.evaluate(80);
+			double p95 = qt.evaluate(95);
+
+			
+			String filePath = FilenameUtils.concat(outPath,
+					quantileMap.getKey() + "_" + fnamePfx + "_quantiles.csv");
+
+			Writer quantileWr = ConcurrUtil.acquireWriter(filePath,
+					quantileWriterMap, "");
+//					// "userid\t" +
+//					"25-ptile\t60-ptile\t80-ptile\t95-ptile\n");
+			try {
+				quantileWr
+						.
+						// append(quantileMap.getKey()).append('\t')
+						append(Double.toString(p25)).append('\t')
+						.append(Double.toString(p60)).append('\t')
+						.append(Double.toString(p80)).append('\t')
+						.append(Double.toString(p95)).append('\n');
+			} finally {
+				ConcurrUtil.releaseWriter(quantileWr, filePath,
+						quantileWriterMap, true); //false
+				
+			}
+			
 			int readingCount = qt.getData().length;
 			
-			double p25 = qt.evaluate(25) * readingCount;
-			double p60 = qt.evaluate(60) * readingCount;
-			double p80 = qt.evaluate(80) * readingCount;
-			double p95 = qt.evaluate(95) * readingCount;
+			p25 *= readingCount;
+			p60 *= readingCount;
+			p80 *= readingCount;
+			p95 *= readingCount;
 			
 			synchronized (countSummaryMap) {
 				SummaryStatistics countSummary = countSummaryMap.get(fnamePfx);
@@ -277,26 +304,7 @@ class CalcQuantizationBoundaries {
 				p95Summary.addValue(p95);
 			}
 
-			String filePath = FilenameUtils.concat(outPath,
-					quantileMap.getKey() + "_" + fnamePfx + "_quantiles.csv");
-
-			Writer quantileWr = ConcurrUtil.acquireWriter(filePath,
-					quantileWriterMap, "");
-//					// "userid\t" +
-//					"25-ptile\t60-ptile\t80-ptile\t95-ptile\n");
-			try {
-				quantileWr
-						.
-						// append(quantileMap.getKey()).append('\t')
-						append(Double.toString(p25)).append('\t')
-						.append(Double.toString(p60)).append('\t')
-						.append(Double.toString(p80)).append('\t')
-						.append(Double.toString(p95)).append('\n');
-			} finally {
-				ConcurrUtil.releaseWriter(quantileWr, filePath,
-						quantileWriterMap, true); //false
-				
-			}
+			
 
 			return null;
 		}

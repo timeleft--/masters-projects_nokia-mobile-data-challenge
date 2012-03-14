@@ -90,6 +90,8 @@ public class RefineDocumentsFromWlan
 
 	protected final UserVisitHierarchy userVisitHier;
 
+	private HashMap<Long, Integer> nummlMap = new HashMap<Long, Integer>();
+
 	@SuppressWarnings({ "deprecation" })
 	public RefineDocumentsFromWlan(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
@@ -119,14 +121,14 @@ public class RefineDocumentsFromWlan
 
 	@Override
 	protected void delimiterProcedure() throws Exception {
-		if("tz".equals(currKey)){
+		if ("tz".equals(currKey)) {
 			prevTimeZone = currValue;
-		} else	if ("time".equals(currKey)) {
+		} else if ("time".equals(currKey)) {
 			// We'd better let the errors propagate: try {
 			currTime = Long.parseLong(currValue);
-//		} else if ("tz".equals(currKey)) {
-//			// Act on time in GMT
-//			currTime += Long.parseLong(currValue);
+			// } else if ("tz".equals(currKey)) {
+			// // Act on time in GMT
+			// currTime += Long.parseLong(currValue);
 			if (currTime != prevTime) {
 				// A new set of AP sightings (record)
 				if (prevTime != -1 && !prevAccessPointsHistory.isEmpty()) {
@@ -148,7 +150,7 @@ public class RefineDocumentsFromWlan
 				// Make the current ones be the prev.s
 				prevprevtime = prevTime;
 				prevTime = currTime;
-//				prevTimeZone = currValue;
+				// prevTimeZone = currValue;
 				prevVisit = currVisit;
 				prevStartDir = currStartDir;
 				currVisit = userVisitHier.searchInVisit(currTime, false);
@@ -298,17 +300,27 @@ public class RefineDocumentsFromWlan
 			forceStatsWrite();
 		}
 
+		String visitStartDirName = prevStartDir.getName();
+		Long visitStartTime = Long.valueOf(StringUtils.removeLastNChars(
+				visitStartDirName, 1));
+		Integer visitNumMl = nummlMap.get(visitStartTime);
+		if (visitNumMl == null) {
+			visitNumMl = 1;
+			// nummlMap.put(visitStartTime, visitNumMl);
+		}
+		++visitNumMl;
+		nummlMap.put(visitStartTime, visitNumMl);
+
 		// Do not split if the reading is towards the end of the
 		// visit, because this will result in a fragmented
 		// document whose WLAN readings are not specified
-		if ((visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)) {
+		if (Config.MICROLOC_SPLITS_DOCS
+				&& (visitEndTime - prevTime >= Config.WLAN_DELTAT_MIN)) {
 
 			long microlocStartTime = prevprevtime;
 			if (microlocStartTime == -1) {
 				// This prev time is the first
-				String visitStartDirName = prevStartDir.getName();
-				microlocStartTime = Long.parseLong(StringUtils
-						.removeLastNChars(visitStartDirName, 1));
+				microlocStartTime = visitStartTime;
 			}
 
 			String placeId = microLocFile.getValue();
@@ -544,20 +556,21 @@ public class RefineDocumentsFromWlan
 	}
 
 	private String consumeFrequentlySeenMacAddrs() {
-		if(Config.USER_SPECIFIC_FEATURES){
-		StringBuilder result = new StringBuilder();
+		if (Config.USER_SPECIFIC_FEATURES) {
+			StringBuilder result = new StringBuilder();
 
-		Iterator<Comparable<?>> macIter = frequentlySeenAps.valuesIterator();
-		int m = 0;
-		while (macIter.hasNext() && m < Config.NUM_FREQ_MAC_ADDRS_TO_KEEP) {
-			++m;
-			result.append(" ap").append(macIter.next().toString());
-		}
+			Iterator<Comparable<?>> macIter = frequentlySeenAps
+					.valuesIterator();
+			int m = 0;
+			while (macIter.hasNext() && m < Config.NUM_FREQ_MAC_ADDRS_TO_KEEP) {
+				++m;
+				result.append(" ap").append(macIter.next().toString());
+			}
 
-		// reducing side effects...the caller is responsible
-		// frequentlySeenAps = new Frequency();
+			// reducing side effects...the caller is responsible
+			// frequentlySeenAps = new Frequency();
 
-		return result.toString();
+			return result.toString();
 		} else {
 			return "";
 		}
@@ -696,9 +709,15 @@ public class RefineDocumentsFromWlan
 				locationId = instFields[0];
 				String visitName = Long.toString(visit.getKey())
 						+ ((Visit<FileStringPair>) visit).trust;
+				Integer numml = nummlMap.get(visit.getKey());
+				if (numml == null) {
+					numml = 0; // 0 not 1 so that it is not included as a
+								// feature, later when loading 
+				}
 				writeMallet(startTime, endTime, malletInst, FileUtils.getFile(
 						malletDir, visitName, microLocDoc.getKey().getName()),
-						microLocList.size());
+						numml);
+				// microLocList.size());
 
 				locationsPerUser.addValue(locationId);
 
@@ -716,15 +735,15 @@ public class RefineDocumentsFromWlan
 		}
 	}
 
-//	protected Enum<?>[] getRelTimeAndWeather(String startTimeStr,
-//			String timeZoneStr) throws NumberFormatException, IOException {
-//		return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
-//	}
+	// protected Enum<?>[] getRelTimeAndWeather(String startTimeStr,
+	// String timeZoneStr) throws NumberFormatException, IOException {
+	// return getRelTimeAndWeather(Long.parseLong(startTimeStr), timeZoneStr);
+	// }
 
 	protected Enum<?>[] getRelTimeAndWeather(long startTime, String timeZoneStr)
 			throws IOException {
-		Enum<?>[] result = Discretize.relTimeNWeather(startTime,timeZoneStr);
-//				Config.DEFAULT_TIME_ZONE);
+		Enum<?>[] result = Discretize.relTimeNWeather(startTime, timeZoneStr);
+		// Config.DEFAULT_TIME_ZONE);
 
 		for (RelTimeNWeatherElts ix : RelTimeNWeatherElts.values()) {
 			relTimeWStats[ix.ordinal()].addValue(result[ix.ordinal()]);

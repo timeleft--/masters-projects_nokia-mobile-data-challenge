@@ -70,5 +70,12 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 		return false;
 	}
 
+	@Override
+	protected void eolProcedure() throws Exception {
+		if("Application.Closed".equals(tuple.get(3))){
+			Config.appUidDictionary.setProperty(tuple.get(4),tuple.get(5));
+		}
+		super.eolProcedure();
+	}
 
 }

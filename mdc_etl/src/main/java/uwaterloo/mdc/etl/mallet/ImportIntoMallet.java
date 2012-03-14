@@ -63,10 +63,15 @@ public class ImportIntoMallet {
 		Config.quantizedFields = new Properties();
 		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 		
+		Config.appUidDictionary = new Properties();
+//		Config.appUidDictionary.load(FileUtils.openInputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE)));
+		
 		
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
 
+		Config.appUidDictionary.store(FileUtils.openOutputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE)), null);
+		
 //		CountConditionalFreqs countCond = new CountConditionalFreqs();
 //		ExecutorService countExec = Executors.newSingleThreadExecutor();
 //		countExec.submit(countCond);
