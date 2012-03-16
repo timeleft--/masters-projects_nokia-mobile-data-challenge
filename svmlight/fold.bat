@@ -1,0 +1,1 @@
+FOR /F %%V IN ('dir /b input') DO train-test.bat %%V %1 %2 
