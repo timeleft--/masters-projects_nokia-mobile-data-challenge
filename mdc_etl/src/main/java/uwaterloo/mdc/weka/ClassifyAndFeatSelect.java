@@ -35,12 +35,8 @@ import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
 import weka.classifiers.bayes.BayesNet;
-import weka.classifiers.bayes.BayesianLogisticRegression;
 import weka.classifiers.bayes.NaiveBayesUpdateable;
-import weka.classifiers.functions.LibSVM;
-import weka.classifiers.functions.Logistic;
 import weka.classifiers.meta.AttributeSelectedClassifier;
-import weka.classifiers.meta.ClassificationViaClustering;
 import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -96,13 +92,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 
 				int foldStart = v * Config.VALIDATION_FOLD_WIDTH;
-
+				
+				Instances validationSet = null;
+				Instances trainingSet = null;
+				
 				Collection<File> inputArrfs = FileUtils.listFiles(
 						FileUtils.getFile(inPath), new String[] { "arff" },
 						true);
-
-				Instances validationSet = null;
-				Instances trainingSet = null;
 
 				// train Classifier
 				boolean firstUser = true;
@@ -203,7 +199,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					// + v + "): Done reading user: " + userData.getName());
 					++userIx;
 				}
-
+				
 				if (baseClassifier instanceof UpdateableClassifier) {
 					// already trained
 				} else {
@@ -550,6 +546,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
 		Config.quantizedFields = new Properties();
 		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		
+		LoadCountsAsAttributes.main(args);
 		
 		ClassifyAndFeatSelect app;
 		

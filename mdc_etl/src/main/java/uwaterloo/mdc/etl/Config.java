@@ -16,8 +16,8 @@ public class Config {
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 32;
-	public static final int NUM_USERS_TO_PROCESS = 80;
+	public static final int NUM_THREADS = 2;
+	public static final int NUM_USERS_TO_PROCESS = 8;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -93,13 +93,29 @@ public class Config {
 
 	public static final int NUM_QUANTILES = 4;
 
-	public static final boolean QUANTIZATION_PER_USER = true;
+	public static final boolean QUANTIZATION_PER_USER = false;
 
 	public static final boolean QUANTIZE_NOT_DISCRETIZE = true;
 
 	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
 	public static final String QUANTIZED_FIELDS_PROPERTIES = "C:\\mdc-datasets\\numeric_quantized.properties";
 	public static final String APPUID_PROPERTIES_FILE = "C:\\mdc-datasets\\app-uid_name.properties";
+
+	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
+
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT = true;
+	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
+	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
+//	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
+
+	public static /*final*/ boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
+
+	public enum NORMALIZE_BY_ENUM {NONE, MAXIMUM, SUM};
+	public static /*final*/ NORMALIZE_BY_ENUM NORMALIZE_BY = NORMALIZE_BY_ENUM.MAXIMUM;
+
+	public static /*final*/ boolean DROP_LOWEST_QUANTILE = false;
+
+	public static /*final*/ boolean DROP_HIGHEST_QUANTILE = false;
 
 	public static /*final*/ boolean MICROLOC_SPLITS_DOCS = false;
 	

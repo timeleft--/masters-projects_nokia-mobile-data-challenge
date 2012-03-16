@@ -9,12 +9,12 @@ import uwaterloo.mdc.etl.Discretize;
 
 public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 
-	private HashMap<String,Comparable<?>> prevVal = new HashMap<String,Comparable<?>>();
+	private HashMap<String, Comparable<?>> prevVal = new HashMap<String, Comparable<?>>();
 
 	public LoadInputsIntoDocs_sys(Object master, char delimiter, String eol,
 			int bufferSize, File dataFile, String outPath) throws Exception {
 		super(master, delimiter, eol, bufferSize, dataFile, outPath);
-		//  Auto-generated constructor stub
+		// Auto-generated constructor stub
 	}
 
 	private static HashSet<String> colsToSkip = new HashSet<String>();
@@ -32,7 +32,7 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 	public HashSet<String> getColsToSkip() {
 		return colsToSkip;
 	}
-	
+
 	public enum BatteryLevels {
 		E, // empty (almost)
 		L, // low
@@ -47,24 +47,28 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 			}
 		};
 	}
+
 	public enum ChargingState {
 		N, // 0: charger not connected/uninitialized,
-        C, // 1: device is charging
-        F, // 4: charging completed
-        B; // 5: charging continued after brief interruption
+		C, // 1: device is charging
+		F, // 4: charging completed
+		B; // 5: charging continued after brief interruption
 	}
+
 	public enum UsageRate {
-		A, //Actively using
+		A, // Actively using
 		F, // Frequent usage
 		I, // Intermittent usage
 		S, // Spaced usage
 		R; // Rare usage
 	}
-	public enum RingOrSilence{
+
+	public enum RingOrSilence {
 		R, // Significant Audible sound produce
 		S; // Silence or beep
 	}
-	static{
+
+	static {
 		Discretize.enumsMap.put("sys_battery", BatteryLevels.values());
 		Discretize.enumsMap.put("sys_charging", ChargingState.values());
 		Discretize.enumsMap.put("sys_inactive", UsageRate.values());
@@ -74,32 +78,32 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 	@Override
 	protected Comparable<?> getValueToWrite() {
 		Comparable<?> result = null;
-		if("battery".equals(currKey)){
+		if ("battery".equals(currKey)) {
 			int batPcg = Integer.parseInt(currValue);
-			if(batPcg > 100){
+			if (batPcg > 100) {
 				result = BatteryLevels.Missing;
-			} else if(batPcg > 80){
+			} else if (batPcg > 80) {
 				result = BatteryLevels.F;
-			} else if(batPcg > 30){
+			} else if (batPcg > 30) {
 				result = BatteryLevels.G;
-			} else if(batPcg > 10){
+			} else if (batPcg > 10) {
 				result = BatteryLevels.L;
 			} else {
 				result = BatteryLevels.E;
 			}
-		} else if("charging".equals(currKey)) {
-			if("0".equals(currValue)){
+		} else if ("charging".equals(currKey)) {
+			if ("0".equals(currValue)) {
 				result = ChargingState.N;
-			} else if("1".equals(currValue)){
+			} else if ("1".equals(currValue)) {
 				result = ChargingState.C;
-			} else if("4".equals(currValue)){
+			} else if ("4".equals(currValue)) {
 				result = ChargingState.F;
-			} else if("5".equals(currValue)){
+			} else if ("5".equals(currValue)) {
 				result = ChargingState.B;
-			} 
-		} else if("inactive".equals(currKey)) {
+			}
+		} else if ("inactive".equals(currKey)) {
 			int period = Integer.parseInt(currValue);
-			if(period < 20){
+			if (period < 20) {
 				result = UsageRate.A;
 			} else if (period < 120) {
 				result = UsageRate.F;
@@ -110,27 +114,28 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 			} else {
 				result = UsageRate.R;
 			}
-		} else if("ring".equals(currKey)) {
-			if("normal".equals(currValue)
-				|| "ascending".equals(currValue)
-				|| "ring_once".equals(currValue)){
+		} else if ("ring".equals(currKey)) {
+			if ("normal".equals(currValue) || "ascending".equals(currValue)
+					|| "ring_once".equals(currValue)) {
 				result = RingOrSilence.R;
-			} else if("beep".equals(currValue)
-					|| "silent".equals(currValue)) {
+			} else if ("beep".equals(currValue) || "silent".equals(currValue)) {
 				result = RingOrSilence.S;
 			}
 		}
 		if (prevVal.containsKey(currKey) && result.equals(prevVal.get(currKey))) {
 			// prevent repeating the values of high granuality files
-			//TODO: how will this affect stats?
+			// TODO: how will this affect stats?
+			// FIXME: Actually this doesn't work! Maybe onMicroLocChanged is
+			// called more than it should be, or maybe any other crazy reason..
+			// I ignored it since I started to Normalize, but for counting!!??
 			result = null;
 		} else {
 			prevVal.put(currKey, result);
 		}
-		
+
 		return result;
 	}
-	
+
 	@Override
 	protected void onMicroLocChange() {
 		prevVal.clear();
@@ -138,8 +143,7 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 
 	@Override
 	protected boolean keepContinuousStatsForColumn(String colName) {
-		return "battery".equals(colName)
-			|| "inactive".equals(colName);
+		return "battery".equals(colName) || "inactive".equals(colName);
 	}
 
 }

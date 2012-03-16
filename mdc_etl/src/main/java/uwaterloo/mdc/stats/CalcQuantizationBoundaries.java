@@ -51,8 +51,6 @@ class CalcQuantizationBoundaries {
 		
 		LoadCountsAsAttributes.main(args);
 		
-		ClassifyAndFeatSelect.main(args);
-		
 		CountConditionalFreqs countCond = new CountConditionalFreqs();
 		ExecutorService countExec = Executors.newSingleThreadExecutor();
 		countExec.submit(countCond);
@@ -62,6 +60,7 @@ class CalcQuantizationBoundaries {
 			Thread.sleep(5000);
 		}
 		
+		ClassifyAndFeatSelect.main(args);		
 	}
 
 	private Map<String, Writer> quantileWriterMap = Collections
