@@ -16,8 +16,8 @@ public class Config {
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 2;
-	public static final int NUM_USERS_TO_PROCESS = 8;
+	public static final int NUM_THREADS = 32;
+	public static final int NUM_USERS_TO_PROCESS = 80;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -103,10 +103,15 @@ public class Config {
 
 	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 
-	public static final boolean LOADCOUNTS_FOR_SVMLIGHT = true;
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT = false;
 	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
 //	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
+
+	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
+
+	public static final boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
+	public static final boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
 
 	public static /*final*/ boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
 
@@ -117,7 +122,7 @@ public class Config {
 
 	public static /*final*/ boolean DROP_HIGHEST_QUANTILE = false;
 
-	public static /*final*/ boolean MICROLOC_SPLITS_DOCS = false;
+	public static /*final*/ boolean MICROLOC_SPLITS_DOCS = true;
 	
 	
 

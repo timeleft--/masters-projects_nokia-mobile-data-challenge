@@ -122,15 +122,20 @@ public class LoadInputsIntoDocs_sys extends LoadInputsIntoDocs {
 				result = RingOrSilence.S;
 			}
 		}
-		if (prevVal.containsKey(currKey) && result.equals(prevVal.get(currKey))) {
-			// prevent repeating the values of high granuality files
-			// TODO: how will this affect stats?
-			// FIXME: Actually this doesn't work! Maybe onMicroLocChanged is
-			// called more than it should be, or maybe any other crazy reason..
-			// I ignored it since I started to Normalize, but for counting!!??
-			result = null;
-		} else {
-			prevVal.put(currKey, result);
+		if (Config.RECORD_ONLY_USAGEFREQ_CHANGES) {
+			if (prevVal.containsKey(currKey)
+					&& result.equals(prevVal.get(currKey))) {
+				// prevent repeating the values of high granuality files
+				// TODO: how will this affect stats?
+				// FIXME: Actually this doesn't work! Maybe onMicroLocChanged is
+				// called more than it should be, or maybe any other crazy
+				// reason..
+				// I ignored it since I started to Normalize, but for
+				// counting!!??
+				result = null;
+			} else {
+				prevVal.put(currKey, result);
+			}
 		}
 
 		return result;

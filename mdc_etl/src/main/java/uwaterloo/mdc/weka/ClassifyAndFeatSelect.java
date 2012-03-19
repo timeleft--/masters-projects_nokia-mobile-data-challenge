@@ -23,6 +23,7 @@ import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.mallet.ImportIntoMallet;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.CfsSubsetEval;
@@ -34,7 +35,6 @@ import weka.attributeSelection.ReliefFAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
-import weka.classifiers.bayes.BayesNet;
 import weka.classifiers.bayes.NaiveBayesUpdateable;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.trees.J48;
@@ -327,6 +327,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					if (eval instanceof SubsetEvaluator) {
 						search = new GreedyStepwise();
 						((GreedyStepwise) search).setSearchBackwards(true);
+//						((GreedyStepwise) search).setNumToSelect(this.baseClassifier.)
+//						((GreedyStepwise) search).setGenerateRanking(true);
 					} else {
 						search = new Ranker();
 					}
@@ -547,7 +549,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		Config.quantizedFields = new Properties();
 		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 		
+		ImportIntoMallet.main(args);
+
+		// Still cannot handle quantized vals
+//		CountConditionalFreqs countCond = new CountConditionalFreqs();
+//		ExecutorService countExec = Executors.newSingleThreadExecutor();
+//		countExec.submit(countCond);
+
 		LoadCountsAsAttributes.main(args);
+		
 		
 		ClassifyAndFeatSelect app;
 		
@@ -559,14 +569,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		 app = new ClassifyAndFeatSelect(J48.class);
 		 app.call();
 
-		// Cannot handle multinomial attrs
-		// // Bayesian Logisitc Regression
-		// app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
-		// app.call();
-
-		 // Bayes Net
-		 app = new ClassifyAndFeatSelect(BayesNet.class);
-		 app.call();
+//		 // Bayes Net
+//		 app = new ClassifyAndFeatSelect(BayesNet.class);
+//		 app.call();
 
 		// Exception: weka.classifiers.functions.Logistic: Not enough training
 		// instances with class labels (required: 1, provided: 0)!
@@ -579,11 +584,21 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 //		 app = new ClassifyAndFeatSelect(LibSVM.class);
 //		 app.call();
 
-		// weka.clusterers.SimpleKMeans: Cannot handle missing class values!
-		// // By clustering
-		// app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
-		// app.call();
-
+//			// Cannot handle multinomial attrs
+//		 // Bayesian Logisitc Regression
+//		 app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
+//		 app.call();
+		 
+//		// weka.clusterers.SimpleKMeans: Cannot handle missing class values!
+//		 // By clustering
+//		 app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
+//		 app.call();
+//		 
+		 
+//		 countExec.shutdown();
+//			while (!countExec.isTerminated()) {
+//				Thread.sleep(5000);
+//			}
 	}
 
 	public Void call() throws Exception {

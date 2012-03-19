@@ -89,7 +89,11 @@ public abstract class LoadInputsIntoDocs
 			}
 		}
 		if (Config.QUANTIZE_NOT_DISCRETIZE
-				&& !getColsToSkip().contains(currValue)) {
+				&& !getColsToSkip().contains(currValue)
+				// Force it not to quantize the nominal values
+				&& !"in_phonebook".equals(currValue)
+				&& !"charging".equals(currValue)) {
+			
 			double[] quants = new double[Config.NUM_QUANTILES];
 
 			String quantFName = FilenameUtils.removeExtension(dataFile
@@ -147,12 +151,14 @@ public abstract class LoadInputsIntoDocs
 			// just skipping this column
 		} else {
 			Comparable<?> discreteVal;
-			double[] boundaries = colQuantizationMap.get(currKey);
 			discreteVal = getValueToWrite();
+
+			double[] boundaries = colQuantizationMap.get(currKey);
 			if (Config.QUANTIZE_NOT_DISCRETIZE && boundaries != null
 					// override the value only if there is one
 					&& discreteVal != null
-					&& !discreteVal.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
+					&& !discreteVal.toString().equals(
+							Config.MISSING_VALUE_PLACEHOLDER)) {
 
 				Double contVal = new Double(currValue);
 				if (contVal.isNaN() || contVal.isInfinite()) {
@@ -168,20 +174,29 @@ public abstract class LoadInputsIntoDocs
 				}
 			}
 
-			appendCurrValToCol(discreteVal);
-			addCurrValToStats(discreteVal);
+			// Don't put place holder values (like 0) in the continuous stat
+			if (discreteVal != null && // comment below when adding new
+										// discritizers
+										// (to allow null pointer exc)
+					!Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal
+							.toString())) {
+				appendCurrValToCol(discreteVal);
+				addCurrValToStats(discreteVal);
+			}
 		}
 	}
 
 	public abstract HashSet<String> getColsToSkip();
 
 	protected void appendCurrValToCol(Comparable<?> discreteVal) {
-		// Don't put place holder values (like 0) in the continuous stat
-		if (discreteVal == null || // comment below when adding new discritizers
-									// (to allow null pointer exc)
-				Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
-			return;
-		}
+		// Moved to caller
+		// // Don't put place holder values (like 0) in the continuous stat
+		// if (discreteVal == null || // comment below when adding new
+		// discritizers
+		// // (to allow null pointer exc)
+		// Config.MISSING_VALUE_PLACEHOLDER.equals(discreteVal.toString())) {
+		// return;
+		// }
 
 		colOpResult.get(currKey).append(" ").append(shortKey())
 				.append(Config.DELIMITER_COLNAME_VALUE)
@@ -190,10 +205,10 @@ public abstract class LoadInputsIntoDocs
 
 	protected void addCurrValToStats(Comparable<?> discreteVal) {
 		Object statsObj = statsMap.get(prependFileName(currKey));
-		if (statsObj == null
-		// comment for debugging new discretizers
-				|| discreteVal == null) {
-			// In case of values that are not enums
+		if (statsObj == null) {
+			// // comment for debugging new discretizers
+			// || discreteVal == null) {
+			// // In case of values that are not enums
 			return;
 		}
 		((Frequency) statsObj).addValue(discreteVal);

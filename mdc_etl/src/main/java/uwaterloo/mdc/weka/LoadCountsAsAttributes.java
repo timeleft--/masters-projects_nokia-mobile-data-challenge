@@ -250,10 +250,10 @@ public class LoadCountsAsAttributes implements
 			}
 
 			String result = rd.readLine();
-//			if (result == null) {
-//				throw new IndexOutOfBoundsException(
-//						"The files of the apps and the other input should be the same length");
-//			}
+			// if (result == null) {
+			// throw new IndexOutOfBoundsException(
+			// "The files of the apps and the other input should be the same length");
+			// }
 			return result;
 		}
 	}
@@ -300,6 +300,8 @@ public class LoadCountsAsAttributes implements
 	private static ExecutorService printExec;
 	// private static ExecutorCompletionService<Void> printEcs;
 
+	private static Properties featSelectedApps;
+
 	private Map<String, HashMap<String, Attribute>> valueDomainMap;
 	private FastVector allAttributes;
 	private HashSet<String> nominalAttrs;
@@ -321,6 +323,9 @@ public class LoadCountsAsAttributes implements
 		Config.quantizedFields = new Properties();
 		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		
+		featSelectedApps = new Properties();
+		featSelectedApps.load(FileUtils.openInputStream(FileUtils.getFile(Config.FEAT_SELECTED_APPS_PATH)));
 
 		LoadCountsAsAttributes app = new LoadCountsAsAttributes();
 
@@ -435,6 +440,7 @@ public class LoadCountsAsAttributes implements
 					|| appUsageOccurs < rareWordAppTh) {
 				continue;
 			}
+
 			Attribute appAttr = new Attribute(appUid);
 			appUsageAttrs.put(appUid, appAttr);
 			appUsageAttrsFV.addElement(appAttr);
@@ -537,7 +543,8 @@ public class LoadCountsAsAttributes implements
 						Writer destWr = Channels.newWriter(
 								FileUtils.openOutputStream(
 										FileUtils.getFile(srcDir, "c"
-												+ positiveClass, srcFile.getName()))
+												+ positiveClass,
+												srcFile.getName()))
 										.getChannel(), Config.OUT_CHARSET);
 						try {
 							BufferedReader srcRead = new BufferedReader(
@@ -547,16 +554,21 @@ public class LoadCountsAsAttributes implements
 							String line;
 							while ((line = srcRead.readLine()) != null) {
 								if (line.startsWith(positiveClass)) {
-									destWr.append("+1").append(
-											line.substring(positiveClass
-													.length())).append(System.lineSeparator());
+									destWr.append("+1")
+											.append(line
+													.substring(positiveClass
+															.length()))
+											.append(System.lineSeparator());
 								} else if (line.startsWith("0")) {
-									if(Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE){
-										destWr.append(line).append(System.lineSeparator());
+									if (Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
+										destWr.append(line).append(
+												System.lineSeparator());
 									}
 								} else {
-									destWr.append("-1").append(
-											line.substring(line.indexOf(' '))).append(System.lineSeparator());
+									destWr.append("-1")
+											.append(line.substring(line
+													.indexOf(' ')))
+											.append(System.lineSeparator());
 								}
 							}
 						} finally {
@@ -722,7 +734,7 @@ public class LoadCountsAsAttributes implements
 				allAttributes.addElement(prevLabelAttributeArr[i]);
 			}
 		} else {
-			prevLabelAttribute = new Attribute("prevLabel", labelsVector);
+			prevLabelAttribute = new Attribute("prev-label", labelsVector);
 			allAttributes.addElement(prevLabelAttribute);
 		}
 		labelAttribute = new Attribute("label", labelsVector);
@@ -833,8 +845,9 @@ public class LoadCountsAsAttributes implements
 
 				char[] dataChars = new char[Config.IO_BUFFER_SIZE];
 				StringBuilder token = new StringBuilder();
-				while (microLocR.read(dataChars) > 0) {
-					for (int i = 0; i < dataChars.length; ++i) {
+				int len;
+				while ((len = microLocR.read(dataChars)) > 0) {
+					for (int i = 0; i < len; ++i) {
 						if (Character.isLowerCase(dataChars[i])
 						// Make sure this is not an integer valued feature
 								|| (Character.isDigit(dataChars[i])
@@ -861,10 +874,28 @@ public class LoadCountsAsAttributes implements
 							token.setLength(0);
 
 							// /
+							if (value
+									.endsWith(Config.MISSING_VALUE_PLACEHOLDER)) {
+								// However this made it here, but it does for
+								// cgd and cgd2!!
+								continue;
+							}
 
 							if (pfx.equals("apu")) {
 								// redundant feature, because we now store use
 								// of every app
+								continue;
+							}
+							
+							if(pfx.equals("si") && (value.equals("E") || value.equals("A"))){
+								// This is like a stop word that always happens.. 
+								// sure the user is actively using the mobile!
+								continue;
+							}
+							
+							if(pfx.equals("aca") && (value.equals("E") || value.equals("S"))){
+								// This is like a stop word that always happens.. 
+								// sure the mobile is left laying down!
 								continue;
 							}
 
@@ -928,6 +959,10 @@ public class LoadCountsAsAttributes implements
 									}
 								}
 							} else if (pfx.equals("aid")) {
+								String appName = featSelectedApps.getProperty(value);
+								if(appName == null){
+									continue;
+								}
 								HashMap<String, Integer> appFreq = appFreqMap
 										.get(microLocF.getName()
 												+ microLocF.getParentFile()
@@ -950,6 +985,11 @@ public class LoadCountsAsAttributes implements
 								continue;
 							}
 
+							if(attribute == null){
+								System.err.println("Couldn't find attribute for pfx: " + pfx +" and value: " + value + " from file " + microLocF.getAbsolutePath());
+								continue;
+							}
+							
 							Integer count = countMap.get(attribute);
 							count = count + 1;
 							countMap.put(attribute, count);
