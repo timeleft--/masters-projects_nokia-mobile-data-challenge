@@ -17,7 +17,7 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 32;
-	public static final int NUM_USERS_TO_PROCESS = 8;
+	public static final int NUM_USERS_TO_PROCESS = 80;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -122,7 +122,7 @@ public class Config {
 
 	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_CORRELATION = false;
 
-	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_MUTUALINFO = true;
+	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_MUTUALINFO = false;
 
 	public static /*final*/ boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
 	public static /*final*/ boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;

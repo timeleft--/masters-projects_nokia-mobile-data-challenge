@@ -1,2 +1,10 @@
-C:\Programs\svm_light\svm_learn.exe -t %3 -x 1 -l output\%1\%2\t%3\trans.txt -a output\%1\%2\t%3\alpha.txt input\%1\%2\input.csv output\%1\%2\t%3\model.txt 1>%1-%2-t%3_train-out.txt 2>%1-%2-t%3_train-error.txt
-C:\Programs\svm_light\svm_classify.exe input\%1\%2\validate.csv output\%1\%2\t%3\model.txt output\%1\%2\t%3\predictions.txt  1>%1-c%2-t%3_test-out.txt 2>%1-%2-t%3_test-error.txt
+set OUT_DIR=output
+set IN_DIR=input
+date /T
+time /T
+C:\Programs\svm_light\svm_learn.exe -t %3 -x 1 -l %OUT_DIR%\%1\%2\t%3\trans.txt -a %OUT_DIR%\%1\%2\t%3\alpha.txt %IN_DIR%\%1\%2\input.csv %OUT_DIR%\%1\%2\t%3\model.txt 1>svmlight_%1-%2-t%3_train-out.txt 2>svmlight_%1-%2-t%3_train-error.txt
+date /T
+time /T
+C:\Programs\svm_light\svm_classify.exe %IN_DIR%\%1\%2\validate.csv %OUT_DIR%\%1\%2\t%3\model.txt %OUT_DIR%\%1\%2\t%3\predictions.txt  1>svmlight_%1-%2-t%3_test-out.txt 2>svmlight_%1-%2-t%3_test-error.txt
+date /T
+time /T
