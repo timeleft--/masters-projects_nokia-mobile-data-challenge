@@ -43,13 +43,13 @@ public class NaiveBayesClassify implements Callable<Void> {
 			Double[] accuracy = {0.0,0.0};
 
 			Frequency[] foldConfusionMatrix;
-			foldConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+			foldConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
 			for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 				foldConfusionMatrix[i] = new Frequency();
 			}
 
 			Frequency[] foldFeactSelectCM;
-			foldFeactSelectCM = new Frequency[Config.NUM_LABELS_CONSIDERED];
+			foldFeactSelectCM = new Frequency[Config.LABELS_SINGLES.length];
 			for (int i = 0; i < foldFeactSelectCM.length; ++i) {
 				foldFeactSelectCM[i] = new Frequency();
 			}
@@ -309,11 +309,11 @@ public class NaiveBayesClassify implements Callable<Void> {
 	private final Writer cvFeatSelectAccuracyWr;
 
 	public NaiveBayesClassify() throws IOException {
-		totalConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+		totalConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
 		for (int i = 0; i < totalConfusionMatrix.length; ++i) {
 			totalConfusionMatrix[i] = new Frequency();
 		}
-		totalFeatSelectCM = new Frequency[Config.NUM_LABELS_CONSIDERED];
+		totalFeatSelectCM = new Frequency[Config.LABELS_SINGLES.length];
 		for (int i = 0; i < totalFeatSelectCM.length; ++i) {
 			totalFeatSelectCM[i] = new Frequency();
 		}
@@ -440,7 +440,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i + 1));
 			long totalCount = 0;
-			for (int j = 1; j <= Config.NUM_LABELS_CONSIDERED; ++j) {
+			for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
 				long cnt = foldConfusionMatrix[i].getCount(j);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -23,23 +24,21 @@ import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
-import uwaterloo.mdc.etl.mallet.ImportIntoMallet;
+import uwaterloo.mdc.etl.util.MathUtil;
+import uwaterloo.mdc.etl.util.StringUtils;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
-import weka.attributeSelection.CfsSubsetEval;
-import weka.attributeSelection.ConsistencySubsetEval;
+import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
-import weka.attributeSelection.InfoGainAttributeEval;
 import weka.attributeSelection.Ranker;
-import weka.attributeSelection.ReliefFAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
-import weka.classifiers.bayes.NaiveBayesUpdateable;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.core.Utils;
 import weka.core.WekaException;
 import weka.core.converters.ArffLoader;
 
@@ -47,18 +46,22 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	// Commented out are Dimensionality reductions that failed
 	// Class<? extends ASEvaluation>[] cannot create!
 	@SuppressWarnings("rawtypes")
-	public static Class[] attrSelectEvaluationClazzes = { CfsSubsetEval.class,
-			// ChiSquaredAttributeEval.class,
-			ConsistencySubsetEval.class,
-			// FilteredAttributeEval.class, FilteredSubsetEval.class,
-			// GainRatioAttributeEval.class,
-			InfoGainAttributeEval.class, ReliefFAttributeEval.class
+	public static Class[] attrSelectEvaluationClazzes = {
+	// CfsSubsetEval.class,
+	// // ChiSquaredAttributeEval.class,
+	// ConsistencySubsetEval.class,
+	// // FilteredAttributeEval.class, FilteredSubsetEval.class,
+	// GainRatioAttributeEval.class,
+	// // InfoGainAttributeEval.class,
+	// ReliefFAttributeEval.class
 	// SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
 	// WrapperSubsetEval.class,
+//		LatentSemanticAnalysis.class,
 	};
-
-	// TODO Attribute Transformers: PrincipalComponents and
-	// LatentSemanticAnalysis
+//	// Attribute Transformers
+//	public static Class[] attrTransEvaluationClazzes = {
+//	// PrincipalComponents and
+//		LatentSemanticAnalysis.class, };
 	public static final String ALL_FEATS = "all-features";
 
 	private class FoldCallable implements Callable<HashMap<String, Double>> {
@@ -75,27 +78,181 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			baseClassifier = baseClassifierClazz.getConstructor().newInstance();
 		}
 
+		public void correlation(Instances trainInstances) throws IOException {
+			Writer corrWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outputPath, baseClassifier
+									.getClass().getName(), "v" + v
+									+ "_feat-correlation.txt")).getChannel(),
+					Config.OUT_CHARSET);
+			try {
+				int numAttribs = trainInstances.numAttributes();
+				int numInstances = trainInstances.numInstances();
+				// double[][] correlation = new double[numAttribs][numAttribs];
+				double[] att1 = new double[numInstances];
+				double[] att2 = new double[numInstances];
+
+				corrWr.append("\"attrib\"");
+				for (int j = 0; j < numAttribs; ++j) {
+					corrWr.append('\t').append(
+							StringUtils.quote(trainInstances.attribute(j)
+									.name()));
+				}
+				corrWr.append('\n');
+
+				double corr;
+				for (int i = 0; i < numAttribs; i++) {
+					corrWr.append(StringUtils.quote(trainInstances.attribute(i)
+							.name()));
+					for (int j = 0; j < i; j++) {
+						int n = 0;
+						for (int k = 0; k < numInstances; k++) {
+							double temp1 = trainInstances.instance(k).value(i);
+							double temp2 = trainInstances.instance(k).value(j);
+							if (Double.isNaN(temp1) || Double.isNaN(temp2)) {
+								continue;
+							}
+							att1[n] = temp1;
+							att2[n] = temp2;
+							++n;
+						}
+						if (i == j) {
+							// correlation[i][j] = 1.0;
+							// // store the standard deviation
+							// stdDevs[i] = Math.sqrt(Utils.variance(att1));
+							corr = 1.0;
+						} else {
+							if (n <= 1) {
+								corr = Double.NaN;
+							} else {
+								corr = Utils.correlation(att1, att2, n);
+								// corr = new
+								// PearsonsCorrelation().correlation(att1,
+								// att2);
+							}
+						}
+						corrWr.append('\t').append(Double.toString(corr));
+
+						synchronized (correlationSummary[i][j]) {
+							correlationSummary[i][j].addValue(corr);
+						}
+
+					}
+					corrWr.append('\n');
+				}
+			} finally {
+				corrWr.flush();
+				corrWr.close();
+			}
+		}
+		
+		public void mutualInfo(Instances trainInstances) throws IOException {
+			Writer infoWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outputPath, baseClassifier
+									.getClass().getName(), "v" + v
+									+ "_feat-mutual-info.txt")).getChannel(),
+									Config.OUT_CHARSET);
+			try {
+				int numAttribs = trainInstances.numAttributes();
+				int numInstances = trainInstances.numInstances();
+				// double[][] infoelation = new double[numAttribs][numAttribs];
+				double[] att1 = new double[numInstances];
+				double[] att2 = new double[numInstances];
+				
+				infoWr.append("\"attrib\"");
+				for (int j = 0; j < numAttribs; ++j) {
+					infoWr.append('\t').append(
+							StringUtils.quote(trainInstances.attribute(j)
+									.name()));
+				}
+				infoWr.append('\n');
+				
+				double info;
+				for (int i = 0; i < numAttribs; i++) {
+					infoWr.append(StringUtils.quote(trainInstances.attribute(i)
+							.name()));
+					for (int j = 0; j < i; j++) {
+						int n = 0;
+						for (int k = 0; k < numInstances; k++) {
+							double temp1 = trainInstances.instance(k).value(i);
+							double temp2 = trainInstances.instance(k).value(j);
+//							if (Double.isNaN(temp1) || Double.isNaN(temp2)) {
+//								continue;
+//							}
+							att1[n] = temp1;
+							att2[n] = temp2;
+							++n;
+						}
+						if (i == j) {
+							// Should never happen
+							
+							info = Double.POSITIVE_INFINITY; //1.0;
+						} else {
+							if (n <= 1) {
+								info = Double.NaN;
+							} else {
+								Frequency xFreq = new Frequency();
+								Frequency yFreq = new Frequency();
+								Frequency xyFreq = new Frequency();
+								for(int i1=0; i1<n; ++i1){
+									xFreq.addValue(att1[i1]);
+									yFreq.addValue(att2[i1]);
+									
+									for(int i2=0; i2<n; ++i2){
+										String xyVal = Double.toString(att1[i1]) + "," + Double.toString(att2[i2]);
+										xyFreq.addValue(xyVal);
+									}
+								}
+								
+								info = 0;
+								Iterator<Comparable<?>> xIter = xFreq.valuesIterator();
+								while(xIter.hasNext()){
+									Comparable<?> x = xIter.next();
+									Iterator<Comparable<?>> yIter = yFreq.valuesIterator();
+									while(yIter.hasNext()){
+										Comparable<?> y = yIter.next();
+										String xyVal = x.toString() + ","+y.toString();
+										double term = xyFreq.getPct(xyVal) / xFreq.getPct(x) * yFreq.getPct(y);
+										term = MathUtil.lg2(term);
+										term = xyFreq.getPct(xyVal) * term;
+										info += term;
+									}
+								}
+					
+							}
+						}
+						infoWr.append('\t').append(Double.toString(info));
+					}
+					infoWr.append('\n');
+				}
+			} finally {
+				infoWr.flush();
+				infoWr.close();
+			}
+		}
+
 		@Override
 		public HashMap<String, Double> call() throws Exception {
 			HashMap<String, Double> accuracyMap = new HashMap<String, Double>();
 			try {
 				Frequency[] foldConfusionMatrix;
-				foldConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+				foldConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
 				for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 					foldConfusionMatrix[i] = new Frequency();
 				}
 
 				Frequency[] foldFeactSelectCM;
-				foldFeactSelectCM = new Frequency[Config.NUM_LABELS_CONSIDERED];
+				foldFeactSelectCM = new Frequency[Config.LABELS_SINGLES.length];
 				for (int i = 0; i < foldFeactSelectCM.length; ++i) {
 					foldFeactSelectCM[i] = new Frequency();
 				}
 
 				int foldStart = v * Config.VALIDATION_FOLD_WIDTH;
-				
+
 				Instances validationSet = null;
 				Instances trainingSet = null;
-				
+
 				Collection<File> inputArrfs = FileUtils.listFiles(
 						FileUtils.getFile(inPath), new String[] { "arff" },
 						true);
@@ -199,10 +356,26 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					// + v + "): Done reading user: " + userData.getName());
 					++userIx;
 				}
-				
+
 				if (baseClassifier instanceof UpdateableClassifier) {
 					// already trained
 				} else {
+					if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION) {
+						if (correlationSummary == null) {
+							correlationSummary = new SummaryStatistics[trainingSet
+									.numAttributes()][];
+							for (int i = 0; i < trainingSet.numAttributes(); ++i) {
+								correlationSummary[i] = new SummaryStatistics[i];
+								for (int j = 0; j < i; ++j) {
+									correlationSummary[i][j] = new SummaryStatistics();
+								}
+							}
+						}
+						correlation(trainingSet);
+					}
+					if(Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO) {
+						mutualInfo(trainingSet);
+					}
 					baseClassifier.buildClassifier(trainingSet);
 					trainingSet = null;
 				}
@@ -319,158 +492,175 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				for (@SuppressWarnings("rawtypes")
 				Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
 
-					AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
 					@SuppressWarnings("unchecked")
 					ASEvaluation eval = (ASEvaluation) attrSelectEvalClazz
 							.getConstructor().newInstance();
+
+					if (eval instanceof GainRatioAttributeEval) {
+						((GainRatioAttributeEval) eval).setMissingMerge(false);
+					}
+
 					ASSearch search;
 					if (eval instanceof SubsetEvaluator) {
 						search = new GreedyStepwise();
-						((GreedyStepwise) search).setSearchBackwards(true);
-//						((GreedyStepwise) search).setNumToSelect(this.baseClassifier.)
-//						((GreedyStepwise) search).setGenerateRanking(true);
+						// ((GreedyStepwise) search).setSearchBackwards(true);
+						// ((GreedyStepwise)
+						// search).setNumToSelect(this.baseClassifier.)
+						((GreedyStepwise) search).setGenerateRanking(true);
 					} else {
 						search = new Ranker();
 					}
 
-					featSelector.setClassifier(baseClassifier);
-					featSelector.setEvaluator(eval);
-					featSelector.setSearch(search);
+					featSel(validationSet, foldFeactSelectCM, eval, search,
+							accuracyMap);
 
-					Writer featSelectWr = Channels
-							.newWriter(
-									FileUtils
-											.openOutputStream(
-													FileUtils
-															.getFile(
-																	outputPath,
-																	baseClassifier
-																			.getClass()
-																			.getName(),
-																	attrSelectEvalClazz
-																			.getName(),
-																	"v"
-																			+ v
-																			+ "_feat-selected-classifications.txt"))
-											.getChannel(), Config.OUT_CHARSET);
-					try {
-						featSelector.buildClassifier(validationSet);
-
-						featSelectWr
-								.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
-						if (validationSet.numInstances() == 0) {
-							featSelectWr
-									.append("Not validation data for fold: "
-											+ v);
-
-						} else {
-							int featSelectCorrectCount = 0;
-
-							for (int i = 0; i < validationSet.numInstances(); ++i) {
-								Instance vInst = validationSet.instance(i);
-
-								if (vInst.classIsMissing()) {
-									continue;
-								}
-
-								Instance classMissing = (Instance) vInst.copy();
-								classMissing.setDataset(vInst.dataset());
-								classMissing.setClassMissing();
-
-								double[] vClassDist = featSelector
-										.distributionForInstance(classMissing);
-								featSelectWr.append(vInst.dataset()
-										.relationName() + "[" + i + "]");
-								double vClassMaxProb = Double.NEGATIVE_INFINITY;
-								double vClass = -1;
-								for (int j = 0; j < vClassDist.length; ++j) {
-									featSelectWr.append("\t" + vClassDist[j]);
-									if (vClassDist[j] > vClassMaxProb) {
-										vClassMaxProb = vClassDist[j];
-										vClass = j + 1;
-									}
-								}
-								featSelectWr.append('\n');
-								// The class "Value" is actually its index!!!!!!
-								if (vClass == vInst.classValue() + 1) {
-									++featSelectCorrectCount;
-								}
-								long trueLabelCfMIx = Math.round(vInst
-										.classValue());
-								long bestLabelInt = Math.round(vClass);
-								foldFeactSelectCM[(int) trueLabelCfMIx]
-										.addValue(bestLabelInt);
-								synchronized (totalFeatSelectCM) {
-									totalFeatSelectCM.get(attrSelectEvalClazz
-											.getName() /*
-														 * + searchClazz .
-														 * getName
-														 */)[(int) trueLabelCfMIx]
-											.addValue(bestLabelInt);
-								}
-							}
-							// a map of accuracies for different algot
-							accuracyMap.put(attrSelectEvalClazz.getName(),
-									featSelectCorrectCount * 1.0
-											/ validationSet.numInstances());
-							synchronized (cvFeatSelectAccuracyWr) {
-
-								cvFeatSelectAccuracyWr
-										.get(attrSelectEvalClazz.getName() /*
-																			 * +
-																			 * searchClazz
-																			 * .
-																			 * getName
-																			 */)
-										.append(Integer.toString(v))
-										.append('\t')
-										.append(Integer
-												.toString(featSelectCorrectCount))
-										.append('\t')
-										.append(Integer.toString(validationSet
-												.numInstances()))
-										.append('\t')
-										.append(Double.toString(accuracyMap
-												.get(attrSelectEvalClazz
-														.getName())))
-										.append('\n');
-							}
-
-						}
-					} catch (WekaException ignored) {
-						if (ignored.getMessage().startsWith(
-								"Not enough training instances")) {
-							featSelectWr.append(ignored.getMessage());
-							continue;
-						}
-					} catch (Exception ignored) {
-						ignored.printStackTrace(System.err);
-						continue;
-					} finally {
-						featSelectWr.flush();
-						featSelectWr.close();
-					}
-
-					FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-							baseClassifier.getClass().getName(),
-							attrSelectEvalClazz.getName(), "v" + v
-									+ "_feat-selection.txt"), featSelector
-							.toString());
-					// algo name
-					System.out.println(baseClassifierClazz.getSimpleName()
-							+ "/" + attrSelectEvalClazz.getSimpleName() + " - "
-							+ (System.currentTimeMillis() - startTime)
-							+ " (fold " + v
-							+ "): Finished feature selection for fold: " + v);
 				}
+//				// //////////////////////////////////////
+//				// //////////////////////////////////////
+//
+//				for (@SuppressWarnings("rawtypes")
+//				Class attrTransEvalClazz : attrTransEvaluationClazzes) {
+//
+//					@SuppressWarnings("unchecked")
+//					ASEvaluation eval = (ASEvaluation) attrTransEvalClazz
+//							.getConstructor().newInstance();
+//
+//					ASSearch search;
+//					search = new Ranker();
+//
+//					featSel(validationSet, foldFeactSelectCM, eval, search,
+//							accuracyMap);
+//
+//				}
 				// //////////////////////////////////////
+
 			} catch (Exception ignored) {
 				ignored.printStackTrace(System.err);
 			}
 			return accuracyMap;
 		}
 
+		void featSel(Instances validationSet, Frequency[] foldFeactSelectCM,
+				ASEvaluation eval, ASSearch search,
+				HashMap<String, Double> accuracyMap) throws IOException {
+			AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
+			featSelector.setClassifier(baseClassifier);
+			featSelector.setEvaluator(eval);
+			featSelector.setSearch(search);
+
+			Writer featSelectWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outputPath, baseClassifier
+									.getClass().getName(), eval.getClass() // attrSelectEvalClazz
+									.getName(), "v" + v
+									+ "_feat-selected-classifications.txt"))
+							.getChannel(), Config.OUT_CHARSET);
+			try {
+				featSelector.buildClassifier(validationSet);
+
+				featSelectWr
+						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+				if (validationSet.numInstances() == 0) {
+					featSelectWr.append("Not validation data for fold: " + v);
+
+				} else {
+					int featSelectCorrectCount = 0;
+
+					for (int i = 0; i < validationSet.numInstances(); ++i) {
+						Instance vInst = validationSet.instance(i);
+
+						if (vInst.classIsMissing()) {
+							continue;
+						}
+
+						Instance classMissing = (Instance) vInst.copy();
+						classMissing.setDataset(vInst.dataset());
+						classMissing.setClassMissing();
+
+						double[] vClassDist = featSelector
+								.distributionForInstance(classMissing);
+						featSelectWr.append(vInst.dataset().relationName()
+								+ "[" + i + "]");
+						double vClassMaxProb = Double.NEGATIVE_INFINITY;
+						double vClass = -1;
+						for (int j = 0; j < vClassDist.length; ++j) {
+							featSelectWr.append("\t" + vClassDist[j]);
+							if (vClassDist[j] > vClassMaxProb) {
+								vClassMaxProb = vClassDist[j];
+								vClass = j + 1;
+							}
+						}
+						featSelectWr.append('\n');
+						// The class "Value" is actually its index!!!!!!
+						if (vClass == vInst.classValue() + 1) {
+							++featSelectCorrectCount;
+						}
+						long trueLabelCfMIx = Math.round(vInst.classValue());
+						long bestLabelInt = Math.round(vClass);
+						foldFeactSelectCM[(int) trueLabelCfMIx]
+								.addValue(bestLabelInt);
+						synchronized (totalFeatSelectCM) {
+							totalFeatSelectCM.get(eval.getClass() // attrSelectEvalClazz
+									.getName() /*
+												 * + searchClazz . getName
+												 */)[(int) trueLabelCfMIx]
+									.addValue(bestLabelInt);
+						}
+					}
+					// a map of accuracies for different algot
+					accuracyMap.put(eval.getClass() // attrSelectEvalClazz
+							.getName(), featSelectCorrectCount * 1.0
+							/ validationSet.numInstances());
+					synchronized (cvFeatSelectAccuracyWr) {
+
+						cvFeatSelectAccuracyWr
+								.get(eval.getClass() // attrSelectEvalClazz
+										.getName() /*
+													 * + searchClazz . getName
+													 */)
+								.append(Integer.toString(v))
+								.append('\t')
+								.append(Integer
+										.toString(featSelectCorrectCount))
+								.append('\t')
+								.append(Integer.toString(validationSet
+										.numInstances()))
+								.append('\t')
+								.append(Double.toString(accuracyMap.get(eval
+										.getClass() // attrSelectEvalClazz
+										.getName()))).append('\n');
+					}
+
+				}
+			} catch (WekaException ignored) {
+				if (ignored.getMessage().startsWith(
+						"Not enough training instances")) {
+					featSelectWr.append(ignored.getMessage());
+					return; // continue;
+				}
+			} catch (Exception ignored) {
+				ignored.printStackTrace(System.err);
+				return; // continue;
+			} finally {
+				featSelectWr.flush();
+				featSelectWr.close();
+			}
+
+			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+					baseClassifier.getClass().getName(), eval.getClass() // attrSelectEvalClazz
+							.getName(), "v" + v + "_feat-selection.txt"),
+					featSelector.toString());
+			// algo name
+			System.out.println(baseClassifierClazz.getSimpleName() + "/"
+					+ eval.getClass() // attrSelectEvalClazz
+							.getSimpleName() + " - "
+					+ (System.currentTimeMillis() - startTime) + " (fold " + v
+					+ "): Finished feature selection for fold: " + v);
+		}
 	}
+
+	// juust one for all threads
+	static SummaryStatistics[][] correlationSummary;
 
 	private String outputPath = "C:\\mdc-datasets\\weka\\validation";
 	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user";
@@ -491,7 +681,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			throws IOException {
 		this.baseClassifierClazz = baseClassifierClazz;
 
-		totalConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+		totalConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
 		for (int i = 0; i < totalConfusionMatrix.length; ++i) {
 			totalConfusionMatrix[i] = new Frequency();
 		}
@@ -510,7 +700,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		cvFeatSelectAccuracyWr = new HashMap<String, Writer>();
 		for (@SuppressWarnings("rawtypes")
 		Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
-			Frequency[] freqArr = new Frequency[Config.NUM_LABELS_CONSIDERED];
+			Frequency[] freqArr = new Frequency[Config.LABELS_SINGLES.length];
 			for (int i = 0; i < freqArr.length; ++i) {
 				freqArr[i] = new Frequency();
 			}
@@ -547,58 +737,59 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
 		Config.quantizedFields = new Properties();
-		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
-		
-		ImportIntoMallet.main(args);
+		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
+				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 
-		// Still cannot handle quantized vals
-//		CountConditionalFreqs countCond = new CountConditionalFreqs();
-//		ExecutorService countExec = Executors.newSingleThreadExecutor();
-//		countExec.submit(countCond);
+		// ImportIntoMallet.main(args);
+		//
+		// // Still cannot handle quantized vals
+		// // CountConditionalFreqs countCond = new CountConditionalFreqs();
+		// // ExecutorService countExec = Executors.newSingleThreadExecutor();
+		// // countExec.submit(countCond);
+		//
+		// LoadCountsAsAttributes.main(args);
 
-		LoadCountsAsAttributes.main(args);
-		
-		
 		ClassifyAndFeatSelect app;
-		
-		// Naive Bayes
-		app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
+
+		// // Naive Bayes
+		// app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
+		// app.call();
+
+		// C4.5 decision tree
+		app = new ClassifyAndFeatSelect(J48.class);
 		app.call();
 
-		 // C4.5 decision tree
-		 app = new ClassifyAndFeatSelect(J48.class);
-		 app.call();
-
-//		 // Bayes Net
-//		 app = new ClassifyAndFeatSelect(BayesNet.class);
-//		 app.call();
+		// // Bayes Net
+		// app = new ClassifyAndFeatSelect(BayesNet.class);
+		// app.call();
 
 		// Exception: weka.classifiers.functions.Logistic: Not enough training
 		// instances with class labels (required: 1, provided: 0)!
 		// Logistic Regression
-//		app = new ClassifyAndFeatSelect(Logistic.class);
-//		app.call();
-		
-		// Exception: weka.classifiers.functions.Logistic: Not enough training
-//		 // SVM
-//		 app = new ClassifyAndFeatSelect(LibSVM.class);
-//		 app.call();
+		// app = new ClassifyAndFeatSelect(Logistic.class);
+		// app.call();
 
-//			// Cannot handle multinomial attrs
-//		 // Bayesian Logisitc Regression
-//		 app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
-//		 app.call();
-		 
-//		// weka.clusterers.SimpleKMeans: Cannot handle missing class values!
-//		 // By clustering
-//		 app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
-//		 app.call();
-//		 
-		 
-//		 countExec.shutdown();
-//			while (!countExec.isTerminated()) {
-//				Thread.sleep(5000);
-//			}
+		// Exception: weka.classifiers.functions.Logistic: Not enough training
+		// // SVM
+		// app = new ClassifyAndFeatSelect(LibSVM.class);
+		// app.call();
+
+		// // Cannot handle multinomial attrs
+		// // Bayesian Logisitc Regression
+		// app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
+		// app.call();
+
+		// // weka.clusterers.SimpleKMeans: Cannot handle missing class values!
+		// // By clustering
+		// app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
+		// app.call();
+		//
+
+		// countExec.shutdown();
+		// while (!countExec.isTerminated()) {
+		// Thread.sleep(5000);
+		// }
+
 	}
 
 	public Void call() throws Exception {
@@ -726,6 +917,30 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				featSelectedConfusionWr.close();
 			}
 		}
+
+		if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION
+				&& correlationSummary != null) {
+			Writer corrWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outputPath,
+									baseClassifierClazz.getName(),
+									"feat-correlation_summary.txt"))
+							.getChannel(), Config.OUT_CHARSET);
+			try {
+				for (int i = 0; i < correlationSummary.length; ++i) {
+					for (int j = 0; j < correlationSummary[i].length; ++j) {
+						corrWr.append(
+								Double.toString(correlationSummary[i][j]
+										.getGeometricMean())).append('\t');
+					}
+					corrWr.append('\n');
+				}
+			} finally {
+				corrWr.flush();
+				corrWr.close();
+			}
+		}
+
 		System.out.println(baseClassifierClazz.getSimpleName() + " - "
 				+ new Date().toString() + " (total): Done in "
 				+ (System.currentTimeMillis() - startTime) + " millis");
@@ -738,7 +953,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i + 1));
 			long totalCount = 0;
-			for (int j = 1; j <= Config.NUM_LABELS_CONSIDERED; ++j) {
+			for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
 				long cnt = foldConfusionMatrix[i].getCount(j);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));

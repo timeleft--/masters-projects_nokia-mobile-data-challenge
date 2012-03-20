@@ -31,15 +31,16 @@ public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
 	
 	public enum PlayerState {
 		Missing, //just a place holder
-		S1,
-		S2,
-		S3,
-		S4,
-		S5,
-		S6,
-		S7,
-		S8,
-		S9;
+		P //assuming all states are Playing
+//		S1,
+//		S2,
+//		S3,
+//		S4,
+//		S5,
+//		S6,
+//		S7,
+//		S8,
+//		S9;
 	
 	};
 	
@@ -50,7 +51,8 @@ public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
 	@Override
 	protected Comparable<?> getValueToWrite() {
 		// state
-		return PlayerState.values()[Integer.parseInt(currValue)];
+//		return PlayerState.values()[Integer.parseInt(currValue)];
+		return PlayerState.P;
 	}
 
 	@Override

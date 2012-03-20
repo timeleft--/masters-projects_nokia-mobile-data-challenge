@@ -323,9 +323,10 @@ public class LoadCountsAsAttributes implements
 		Config.quantizedFields = new Properties();
 		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
-		
+
 		featSelectedApps = new Properties();
-		featSelectedApps.load(FileUtils.openInputStream(FileUtils.getFile(Config.FEAT_SELECTED_APPS_PATH)));
+		featSelectedApps.load(FileUtils.openInputStream(FileUtils
+				.getFile(Config.FEAT_SELECTED_APPS_PATH)));
 
 		LoadCountsAsAttributes app = new LoadCountsAsAttributes();
 
@@ -538,12 +539,14 @@ public class LoadCountsAsAttributes implements
 			for (File srcDir : outputDir.listFiles()) {
 				for (File srcFile : FileUtils.listFiles(srcDir,
 						new String[] { "csv" }, false)) {
-					for (int i = 1; i <= 10; ++i) { // classes
-						String positiveClass = Integer.toString(i);
+					for (String positiveClass : Config.LABEL_HIERARCHY) { // classes
+						int positiveExamples = 0;
+						File inputDir = FileUtils.getFile(
+								srcDir.getParentFile(), "c" + positiveClass,
+								srcDir.getName());
 						Writer destWr = Channels.newWriter(
 								FileUtils.openOutputStream(
-										FileUtils.getFile(srcDir, "c"
-												+ positiveClass,
+										FileUtils.getFile(inputDir,
 												srcFile.getName()))
 										.getChannel(), Config.OUT_CHARSET);
 						try {
@@ -553,21 +556,32 @@ public class LoadCountsAsAttributes implements
 											.getChannel(), Config.OUT_CHARSET));
 							String line;
 							while ((line = srcRead.readLine()) != null) {
-								if (line.startsWith(positiveClass)) {
+								int spaceIx = line.indexOf(' ');
+								String cls = line.substring(0, spaceIx);
+
+								if (positiveClass.contains("+" + cls + "+")) {
 									destWr.append("+1")
-											.append(line
-													.substring(positiveClass
-															.length()))
+											.append(line.substring(spaceIx))
 											.append(System.lineSeparator());
+									if (positiveExamples == 0) {
+										System.out
+												.println("The first positive example for "
+														+ positiveClass
+														+ " in "
+														+ srcFile
+																.getAbsolutePath());
+									}
+									++positiveExamples;
+
 								} else if (line.startsWith("0")) {
 									if (Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
 										destWr.append(line).append(
 												System.lineSeparator());
 									}
-								} else {
+								} else if (positiveClass.contains("-" + cls
+										+ "-")) {
 									destWr.append("-1")
-											.append(line.substring(line
-													.indexOf(' ')))
+											.append(line.substring(spaceIx))
 											.append(System.lineSeparator());
 								}
 							}
@@ -576,30 +590,60 @@ public class LoadCountsAsAttributes implements
 							destWr.close();
 						}
 
-						// Also prepare files for SVMlight output.. it needs a
-						// file
-						// to overwrite!
-						for (int t = 0; t < 4; ++t) {
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											srcDir.getName(), "c" + i, "t" + t,
-											"alpha.txt")).close();
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											srcDir.getName(), "c" + i, "t" + t,
-											"model.txt")).close();
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											srcDir.getName(), "c" + i, "t" + t,
-											"trans.txt")).close();
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											srcDir.getName(), "c" + i, "t" + t,
-											"predictions.txt")).close();
+						if (positiveExamples > 0) {
+
+							// Also prepare files for SVMlight output.. it needs
+							// a
+							// file
+							// to overwrite!
+
+							String outDirPathPfx = 
+									 "c" + positiveClass
+									+ File.separator
+									+ srcDir.getName()
+									+ File.separator 
+									+ "t";
+
+							for (int t = 0; t < 4; ++t) {
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																Config.SVMLIGHT_OUTPUTPATH,
+																outDirPathPfx
+																		+ t,
+																"alpha.txt"))
+										.close();
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																Config.SVMLIGHT_OUTPUTPATH,
+																outDirPathPfx
+																		+ t,
+																"model.txt"))
+										.close();
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																Config.SVMLIGHT_OUTPUTPATH,
+																outDirPathPfx
+																		+ t,
+																"trans.txt"))
+										.close();
+								FileUtils.openOutputStream(
+										FileUtils.getFile(
+												Config.SVMLIGHT_OUTPUTPATH,
+												outDirPathPfx + t,
+												"predictions.txt")).close();
+							}
+						} else {
+							System.out.println("No positive examples for "
+									+ positiveClass + " in "
+									+ srcFile.getAbsolutePath() + ". Deleting "
+									+ inputDir.getAbsolutePath());
+							FileUtils.deleteDirectory(inputDir);
 						}
 					}
 				}
@@ -723,14 +767,14 @@ public class LoadCountsAsAttributes implements
 			}
 		}
 		FastVector labelsVector = new FastVector();
-		for (String label : Config.LABELS) {
+		for (String label : Config.LABELS_SINGLES) {
 			labelsVector.addElement(label);
 		}
 		if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
-			prevLabelAttributeArr = new Attribute[Config.LABELS.length];
-			for (int i = 0; i < Config.LABELS.length; ++i) {
+			prevLabelAttributeArr = new Attribute[Config.LABELS_SINGLES.length];
+			for (int i = 0; i < Config.LABELS_SINGLES.length; ++i) {
 				prevLabelAttributeArr[i] = new Attribute("prevLabel"
-						+ Config.LABELS[i]);
+						+ Config.LABELS_SINGLES[i]);
 				allAttributes.addElement(prevLabelAttributeArr[i]);
 			}
 		} else {
@@ -886,15 +930,19 @@ public class LoadCountsAsAttributes implements
 								// of every app
 								continue;
 							}
-							
-							if(pfx.equals("si") && (value.equals("E") || value.equals("A"))){
-								// This is like a stop word that always happens.. 
+
+							if (pfx.equals("si")
+									&& (value.equals("E") || value.equals("A"))) {
+								// This is like a stop word that always
+								// happens..
 								// sure the user is actively using the mobile!
 								continue;
 							}
-							
-							if(pfx.equals("aca") && (value.equals("E") || value.equals("S"))){
-								// This is like a stop word that always happens.. 
+
+							if (pfx.equals("aca")
+									&& (value.equals("E") || value.equals("S"))) {
+								// This is like a stop word that always
+								// happens..
 								// sure the mobile is left laying down!
 								continue;
 							}
@@ -959,8 +1007,9 @@ public class LoadCountsAsAttributes implements
 									}
 								}
 							} else if (pfx.equals("aid")) {
-								String appName = featSelectedApps.getProperty(value);
-								if(appName == null){
+								String appName = featSelectedApps
+										.getProperty(value);
+								if (appName == null) {
 									continue;
 								}
 								HashMap<String, Integer> appFreq = appFreqMap
@@ -985,11 +1034,17 @@ public class LoadCountsAsAttributes implements
 								continue;
 							}
 
-							if(attribute == null){
-								System.err.println("Couldn't find attribute for pfx: " + pfx +" and value: " + value + " from file " + microLocF.getAbsolutePath());
+							if (attribute == null) {
+								System.err
+										.println("Couldn't find attribute for pfx: "
+												+ pfx
+												+ " and value: "
+												+ value
+												+ " from file "
+												+ microLocF.getAbsolutePath());
 								continue;
 							}
-							
+
 							Integer count = countMap.get(attribute);
 							count = count + 1;
 							countMap.put(attribute, count);
@@ -1029,8 +1084,8 @@ public class LoadCountsAsAttributes implements
 				if (prevLabel != null) {
 					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
 						int i = 0;
-						for (; i < Config.LABELS.length; ++i) {
-							if (Config.LABELS[i].equals(prevLabel)) {
+						for (; i < Config.LABELS_SINGLES.length; ++i) {
+							if (Config.LABELS_SINGLES[i].equals(prevLabel)) {
 								break;
 							}
 						}
@@ -1046,12 +1101,12 @@ public class LoadCountsAsAttributes implements
 					}
 					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
 						int i = 0;
-						for (; i < Config.LABELS.length; ++i) {
+						for (; i < Config.LABELS_SINGLES.length; ++i) {
 							if (prevLabelAttributeArr[i] == attrib) {
 								break;
 							}
 						}
-						if (i != Config.LABELS.length) {
+						if (i != Config.LABELS_SINGLES.length) {
 							continue;
 						}
 					} else {

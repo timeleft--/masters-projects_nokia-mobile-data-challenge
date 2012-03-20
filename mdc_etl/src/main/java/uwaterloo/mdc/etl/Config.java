@@ -17,7 +17,7 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 32;
-	public static final int NUM_USERS_TO_PROCESS = 80;
+	public static final int NUM_USERS_TO_PROCESS = 8;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -76,11 +76,21 @@ public class Config {
 	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
-	public static final boolean USER_SPECIFIC_FEATURES = false;
+	public static /*final*/ boolean USER_SPECIFIC_FEATURES = false;
 
-	public static final int NUM_LABELS_CONSIDERED = 10;
-
-	public static final String[] LABELS = {"1","2","3","4","5","6","7","8","9","10"};
+	public static final String[] LABELS_SINGLES = {"1","2","3","4","5","6","7","8","9","10"};
+	public static final String[] LABEL_HIERARCHY = {"+1+2+3+-4-5-6-7-8-9-10-","-1-2-3-+4+5+6+7+8+9+10+",
+		"+1+-2-","+1+-3-","+2+-1-","+2+-3-","+3+-1-","+3+-2-",
+		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
+		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
+		"+10+-1-2-3-4-5-6-7-8-9-",
+		"+1+2+-3-", //Homes vs Work
+		"+4+5+-1-2-3-6-7-8-9-10-", //On the way vs rest
+		"+6+7+-1-2-3-4-5-8-9-10-", // Sports vs rest
+		"+8+9+-1-2-3-4-5-6-7-10-", // Commercial vs rest
+		};
+	
+//	private static final String[] LABELS_CONSIDERED = LABEL_HIERARCHY;
 
 	public static final int IO_BUFFER_SIZE = 64 * 1024;
 
@@ -93,25 +103,29 @@ public class Config {
 
 	public static final int NUM_QUANTILES = 4;
 
-	public static final boolean QUANTIZATION_PER_USER = false;
+	public static /*final*/ boolean QUANTIZATION_PER_USER = false;
 
-	public static final boolean QUANTIZE_NOT_DISCRETIZE = true;
+	public static /*final*/ boolean QUANTIZE_NOT_DISCRETIZE = false;
 
 	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
 	public static final String QUANTIZED_FIELDS_PROPERTIES = "C:\\mdc-datasets\\numeric_quantized.properties";
 	public static final String APPUID_PROPERTIES_FILE = "C:\\mdc-datasets\\app-uid_name.properties";
 
-	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
+	public static /*final*/ boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 
-	public static final boolean LOADCOUNTS_FOR_SVMLIGHT = false;
+	public static /*final*/ boolean LOADCOUNTS_FOR_SVMLIGHT = true;
 	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
-//	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
+//	public static /*final*/ boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
 
 	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
 
-	public static final boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
-	public static final boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
+	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_CORRELATION = false;
+
+	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_MUTUALINFO = true;
+
+	public static /*final*/ boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
+	public static /*final*/ boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
 
 	public static /*final*/ boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
 

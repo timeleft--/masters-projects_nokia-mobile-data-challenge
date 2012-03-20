@@ -7,6 +7,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.regex.Pattern;
@@ -77,16 +78,18 @@ public class RefineDocumentsFromWlan
 	protected LinkedList<HashMap<String, Integer>> prevAccessPointsHistory = new LinkedList<HashMap<String, Integer>>();
 	protected HashMap<String, Integer> currAccessPoints;
 	protected String currMacAddr = null;
+	protected HashSet<String> currSSIDs;
 
 	// This is temporary, not part of the result
 	protected SummaryStatistics apsStat = new SummaryStatistics();
 	protected Frequency frequentlySeenAps = new Frequency();
-
+	protected SummaryStatistics ssidStats = new SummaryStatistics();
+	
 	protected Pattern tabSplit = Pattern.compile("\\t");
 	protected long pendingEndTims = -1;
 
 	protected Visit<FileStringPair> pendingVisit;
-	protected SummaryStatistics pendingStats;
+//	protected SummaryStatistics pendingStats;
 
 	protected final UserVisitHierarchy userVisitHier;
 
@@ -144,6 +147,7 @@ public class RefineDocumentsFromWlan
 						for (String macAddr : currAccessPoints.keySet()) {
 							frequentlySeenAps.addValue(macAddr);
 						}
+						ssidStats.addValue(currSSIDs.size());
 					}
 				}
 
@@ -164,7 +168,7 @@ public class RefineDocumentsFromWlan
 					prevAccessPointsHistory.addLast(currAccessPoints);
 				}
 				currAccessPoints = new HashMap<String, Integer>();
-
+				currSSIDs = new HashSet<String>();
 			}
 			// } catch (NumberFormatException ignored) {
 			// // ok!
@@ -172,7 +176,9 @@ public class RefineDocumentsFromWlan
 
 		} else if ("mac_address".equals(currKey)) {
 			currMacAddr = currValue;
-
+		} else if ("ssid".equals(currKey)) {
+			currSSIDs.add(currValue);
+			
 		} else if ("rx".equals(currKey)) {
 			if (currStartDir == null) {
 				// store the reading only if it is within some visit
@@ -207,6 +213,7 @@ public class RefineDocumentsFromWlan
 			apsStat = new SummaryStatistics();
 			prevAccessPointsHistory.clear();
 			pendingEndTims = -1;
+			ssidStats = new SummaryStatistics();
 			return false;
 		}
 
@@ -228,6 +235,7 @@ public class RefineDocumentsFromWlan
 			// //We are now tracking a new microlocation
 			// apsStat = new SummaryStatistics();
 			// prevAccessPointsHistory.clear();
+//			ssidStats = new SummaryStatistics();
 			return true;
 		} // else {
 			// Try to refine from WiFi
@@ -285,6 +293,7 @@ public class RefineDocumentsFromWlan
 			apsStat = new SummaryStatistics();
 			pendingEndTims = -1;
 			prevAccessPointsHistory.clear();
+			ssidStats = new SummaryStatistics();
 			// Don't even add this reading to stats
 			return false;
 		} // else {
@@ -372,9 +381,9 @@ public class RefineDocumentsFromWlan
 					.append('\t')
 					.append(doc1EndTime)
 					.append('\t')
-					.append(Long.toString(Math.round(apsStat.getMean())))
+					.append(Long.toString(Math.round(ssidStats.getMean()))) //apsStat.getMean())))
 					.append('\t')
-					.append(Long.toString(Math.round(apsStat
+					.append(Long.toString(Math.round(ssidStats //apsStat
 							.getStandardDeviation())));
 
 			doc1.append('\t').append(consumeFrequentlySeenMacAddrs());
@@ -429,6 +438,7 @@ public class RefineDocumentsFromWlan
 			apsStat = new SummaryStatistics();
 			frequentlySeenAps = new Frequency();
 			prevAccessPointsHistory.clear();
+			ssidStats = new SummaryStatistics();
 		}
 		// There is always something pending.. that's right!
 		// In case this is the last microlocation
@@ -441,7 +451,7 @@ public class RefineDocumentsFromWlan
 		// iteration force will be called if needed.
 		pendingEndTims = visitEndTime;
 		pendingVisit = prevVisit;
-		pendingStats = apsStat;
+//		pendingStats = apsStat;
 
 		return true;
 	}
@@ -451,8 +461,12 @@ public class RefineDocumentsFromWlan
 			// in case this call is extra
 			return;
 		}
-		if (pendingStats == null
-				|| (/* pendingStats == apsStat && */pendingStats.getN() == 0)) {
+//		if (pendingStats == null
+//				|| (/* pendingStats == apsStat && */pendingStats.getN() == 0)) {
+//			if (apsStat == null
+//					|| (/* pendingStats == apsStat && */apsStat.getN() == 0)) {
+				if (ssidStats == null
+						|| (/* pendingStats == apsStat && */ssidStats.getN() == 0)) {
 			// log("\tDEBUG\tCalling force for a stat with no datapoints, supposedly pending: "
 			// + visitHierarchy.get(0));
 			pendingEndTims = -1;
@@ -467,8 +481,8 @@ public class RefineDocumentsFromWlan
 				lastTimeSlot.getKey().getName(), 5));
 
 		// stats
-		String mean = Long.toString(Math.round(pendingStats.getMean()));
-		String stder = Long.toString(Math.round(pendingStats
+		String mean = Long.toString(Math.round(ssidStats.getMean())); //apsStat//pendingStats.getMean()));
+		String stder = Long.toString(Math.round(ssidStats //apsStat//pendingStats
 				.getStandardDeviation()));
 
 		StringBuilder doc = new StringBuilder();
@@ -495,18 +509,19 @@ public class RefineDocumentsFromWlan
 						+ " but the values belong to "
 						+ pendingEndTims);
 			}
-			if (apsStat != pendingStats) {
-				double avg = apsStat.getMean() * apsStat.getN()
-						+ pendingStats.getMean() * pendingStats.getN();
-				avg /= (apsStat.getN() + pendingStats.getN());
-
-				mean = Long.toString(Math.round(avg));
-
-				// We use the avg of the two, even though that's not right
-				double var = (pendingStats.getStandardDeviation() + apsStat
-						.getStandardDeviation()) / 2;
-				stder = Long.toString(Math.round(var));
-			}
+			// This doesn't happen any more anyway
+//			if (apsStat != pendingStats) {
+//				double avg = apsStat.getMean() * apsStat.getN()
+//						+ pendingStats.getMean() * pendingStats.getN();
+//				avg /= (apsStat.getN() + pendingStats.getN());
+//
+//				mean = Long.toString(Math.round(avg));
+//
+//				// We use the avg of the two, even though that's not right
+//				double var = (pendingStats.getStandardDeviation() + apsStat
+//						.getStandardDeviation()) / 2;
+//				stder = Long.toString(Math.round(var));
+//			}
 			doc.append(docFields[0]).append('\t').append(docFields[1])
 					.append('\t').append(docFields[2]).append('\t')
 					.append(mean).append('\t').append(stder);
@@ -526,6 +541,7 @@ public class RefineDocumentsFromWlan
 			apsStat = new SummaryStatistics();
 			pendingEndTims = -1;
 			prevAccessPointsHistory.clear();
+			ssidStats = new SummaryStatistics();
 
 			return;
 		}

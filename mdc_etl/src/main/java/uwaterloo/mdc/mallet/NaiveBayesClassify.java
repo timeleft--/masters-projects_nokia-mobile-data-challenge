@@ -59,7 +59,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 			double accuracy = 0;
 			Frequency[] foldConfusionMatrix;
 
-			foldConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+			foldConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
 			for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 				foldConfusionMatrix[i] = new Frequency();
 			}
@@ -201,7 +201,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 	private final Writer cvAccuracyWr;
 
 	public NaiveBayesClassify() throws IOException {
-		totalConfusionMatrix = new Frequency[Config.NUM_LABELS_CONSIDERED];
+		totalConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
 		for (int i = 0; i < totalConfusionMatrix.length; ++i) {
 			totalConfusionMatrix[i] = new Frequency();
 		}
@@ -297,7 +297,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i+1));
 			long totalCount = 0;
-			for (int j = 1; j <= Config.NUM_LABELS_CONSIDERED; ++j) {
+			for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
 				long cnt = foldConfusionMatrix[i].getCount(j);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));
