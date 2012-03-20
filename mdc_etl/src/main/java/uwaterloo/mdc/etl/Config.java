@@ -76,7 +76,7 @@ public class Config {
 	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
-	public static /*final*/ boolean USER_SPECIFIC_FEATURES = false;
+	public static final boolean USER_SPECIFIC_FEATURES = false;
 
 	public static final String[] LABELS_SINGLES = {"1","2","3","4","5","6","7","8","9","10"};
 	public static final String[] LABEL_HIERARCHY = {"+1+2+3+-4-5-6-7-8-9-10-","-1-2-3-+4+5+6+7+8+9+10+",
@@ -103,40 +103,42 @@ public class Config {
 
 	public static final int NUM_QUANTILES = 4;
 
-	public static /*final*/ boolean QUANTIZATION_PER_USER = false;
+	public static final boolean QUANTIZATION_PER_USER = false;
 
-	public static /*final*/ boolean QUANTIZE_NOT_DISCRETIZE = false;
+	public static final boolean QUANTIZE_NOT_DISCRETIZE = false;
+
+	public static final boolean WEKA_DISCRETIZE = true;
 
 	public static final String PATH_PLACE_LABELS_PROPERTIES_FILE = "C:\\mdc-datasets\\place-labels.properties";
 	public static final String QUANTIZED_FIELDS_PROPERTIES = "C:\\mdc-datasets\\numeric_quantized.properties";
 	public static final String APPUID_PROPERTIES_FILE = "C:\\mdc-datasets\\app-uid_name.properties";
 
-	public static /*final*/ boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
+	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 
-	public static /*final*/ boolean LOADCOUNTS_FOR_SVMLIGHT = true;
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT = false;
 	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
-//	public static /*final*/ boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
+//	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
 
 	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
 
-	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_CORRELATION = false;
+	public static final boolean CALSSIFYFEATSELECT_CALC_CORRELATION = false;
 
-	public static /*final*/ boolean CALSSIFYFEATSELECT_CALC_MUTUALINFO = false;
+	public static final boolean CALSSIFYFEATSELECT_CALC_MUTUALINFO = false;
 
-	public static /*final*/ boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
-	public static /*final*/ boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
+	public static final boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
+	public static final boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
 
-	public static /*final*/ boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
 
 	public enum NORMALIZE_BY_ENUM {NONE, MAXIMUM, SUM};
-	public static /*final*/ NORMALIZE_BY_ENUM NORMALIZE_BY = NORMALIZE_BY_ENUM.MAXIMUM;
+	public static final NORMALIZE_BY_ENUM NORMALIZE_BY = NORMALIZE_BY_ENUM.MAXIMUM;
 
-	public static /*final*/ boolean DROP_LOWEST_QUANTILE = false;
+	public static final boolean DROP_LOWEST_QUANTILE = false;
 
-	public static /*final*/ boolean DROP_HIGHEST_QUANTILE = false;
+	public static final boolean DROP_HIGHEST_QUANTILE = false;
 
-	public static /*final*/ boolean MICROLOC_SPLITS_DOCS = true;
+	public static final boolean MICROLOC_SPLITS_DOCS = true;
 	
 	
 

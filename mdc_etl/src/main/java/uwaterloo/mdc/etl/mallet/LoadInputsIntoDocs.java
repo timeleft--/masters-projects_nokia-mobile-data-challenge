@@ -33,7 +33,8 @@ public abstract class LoadInputsIntoDocs
 	protected Pattern tabSplit = Pattern.compile("\\t");
 	private static final String CONTINUOUS_POSTFIX = "C";
 
-	private String quantizationPath = "P:\\mdc-datasets\\quantization";
+	private String quantizationPath = (Config.WEKA_DISCRETIZE ? "C:\\mdc-datasets\\weka\\cutpoints"
+			: "P:\\mdc-datasets\\quantization");
 
 	protected Long prevTimeColReading = null;
 
@@ -88,28 +89,36 @@ public abstract class LoadInputsIntoDocs
 						new SummaryStatistics());
 			}
 		}
-		if (Config.QUANTIZE_NOT_DISCRETIZE
+		if ((Config.QUANTIZE_NOT_DISCRETIZE || Config.WEKA_DISCRETIZE)
 				&& !getColsToSkip().contains(currValue)
 				// Force it not to quantize the nominal values
 				&& !"in_phonebook".equals(currValue)
 				&& !"charging".equals(currValue)) {
-			
+
 			double[] quants = new double[Config.NUM_QUANTILES];
 
 			String quantFName = FilenameUtils.removeExtension(dataFile
 					.getName()) + "_" + currValue;
-			quantFName = Config.quantizedFields.getProperty(quantFName);
+			if (Config.WEKA_DISCRETIZE) {
+				quantFName += "_quantiles.csv";
+			} else {
+				quantFName = Config.quantizedFields.getProperty(quantFName);
+			}
 			if (quantFName != null) {
-				if (Config.QUANTIZATION_PER_USER) {
-					quantFName = "mean_" + quantFName;
+				if (Config.WEKA_DISCRETIZE) {
+					quantFName = "weka_" + quantFName;
 				} else {
-					quantFName = userid + "_" + quantFName;
+					if (Config.QUANTIZATION_PER_USER) {
+						quantFName = "mean_" + quantFName;
+					} else {
+						quantFName = userid + "_" + quantFName;
+					}
 				}
 				File quantFile = FileUtils
 						.getFile(quantizationPath, quantFName);
 				if (quantFile.exists()) {
 					try {
-						String quantStr = FileUtils.readFileToString(quantFile);
+						String quantStr = FileUtils.readFileToString(quantFile).trim();
 						if (quantStr != null && !quantStr.isEmpty()) {
 							String[] boundaryArr = tabSplit.split(quantStr);
 							for (int b = 0; b < boundaryArr.length; ++b) {
@@ -154,7 +163,8 @@ public abstract class LoadInputsIntoDocs
 			discreteVal = getValueToWrite();
 
 			double[] boundaries = colQuantizationMap.get(currKey);
-			if (Config.QUANTIZE_NOT_DISCRETIZE && boundaries != null
+			if ((Config.QUANTIZE_NOT_DISCRETIZE || Config.WEKA_DISCRETIZE)
+					&& boundaries != null
 					// override the value only if there is one
 					&& discreteVal != null
 					&& !discreteVal.toString().equals(

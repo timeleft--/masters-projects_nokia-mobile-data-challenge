@@ -29,7 +29,7 @@ import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.weka.ClassifyAndFeatSelect;
 import uwaterloo.mdc.weka.LoadCountsAsAttributes;
 
-class CalcQuantizationBoundaries {
+public class CalcQuantizationBoundaries {
 
 	// private static final String EMPTY_COUNTS_LINE =
 	// "\t"+Config.MISSING_VALUE_PLACEHOLDER+"\t"+Config.MISSING_VALUE_PLACEHOLDER+"\t"+Config.MISSING_VALUE_PLACEHOLDER;
@@ -47,20 +47,20 @@ class CalcQuantizationBoundaries {
 		CalcQuantizationBoundaries app = new CalcQuantizationBoundaries();
 		app.quantize();
 
-		ImportIntoMallet.main(args);
-		
-		LoadCountsAsAttributes.main(args);
-		
-		CountConditionalFreqs countCond = new CountConditionalFreqs();
-		ExecutorService countExec = Executors.newSingleThreadExecutor();
-		countExec.submit(countCond);
-
-		countExec.shutdown();
-		while (!countExec.isTerminated()) {
-			Thread.sleep(5000);
-		}
-		
-		ClassifyAndFeatSelect.main(args);		
+		// ImportIntoMallet.main(args);
+		//
+		// LoadCountsAsAttributes.main(args);
+		//
+		// CountConditionalFreqs countCond = new CountConditionalFreqs();
+		// ExecutorService countExec = Executors.newSingleThreadExecutor();
+		// countExec.submit(countCond);
+		//
+		// countExec.shutdown();
+		// while (!countExec.isTerminated()) {
+		// Thread.sleep(5000);
+		// }
+		//
+		// ClassifyAndFeatSelect.main(args);
 	}
 
 	private Map<String, Writer> quantileWriterMap = Collections
@@ -75,7 +75,6 @@ class CalcQuantizationBoundaries {
 			.synchronizedMap(new HashMap<String, SummaryStatistics>());
 	private Map<String, SummaryStatistics> countSummaryMap = Collections
 			.synchronizedMap(new HashMap<String, SummaryStatistics>());
-	
 
 	private void quantize() throws Exception {
 		try {
@@ -94,7 +93,8 @@ class CalcQuantizationBoundaries {
 				if (userIx == Config.NUM_USERS_TO_PROCESS) {
 					break;
 				}
-				for (File dataFile : userDir.listFiles(new MalletImportedFiles())) { 
+				for (File dataFile : userDir
+						.listFiles(new MalletImportedFiles())) {
 
 					PerUserQuantiles quantilesCall = (PerUserQuantiles) factory
 							.createOperation(PerUserQuantiles.class, this,
@@ -125,13 +125,27 @@ class CalcQuantizationBoundaries {
 
 			}
 
+			// This will make the executor accept no new threads
+			// and finish all existing threads in the queue
+			exec.shutdown();
+			// Wait until all threads are finish
+			while (!exec.isTerminated()) {
+				Thread.sleep(5000);
+				System.out.println(PerfMon.asString());
+			}
 			for (Future<Void> pf : printFutures) {
 				pf.get();
 			}
 
-		
+			printExec.shutdown();
+			// Wait until all threads are finish
+			while (!printExec.isTerminated()) {
+				Thread.sleep(5000);
+				System.out.println("Shutting down!");
+			}
+
 			Properties quantizedProps = new Properties();
-			
+
 			for (String summaryKey : p25SummaryMap.keySet()) {
 				String fnameSuffix = summaryKey + "_quantiles.csv";
 				quantizedProps.setProperty(summaryKey, fnameSuffix);
@@ -147,15 +161,18 @@ class CalcQuantizationBoundaries {
 				double avgCount = countSummaryMap.get(summaryKey).getMean();
 				try {
 					summaryWr
-//							.append("25-ptile\t60-ptile\t80-ptile\t95-ptile\n")
-							.append(Double.toString(summary25.getMean()/avgCount))
+							// .append("25-ptile\t60-ptile\t80-ptile\t95-ptile\n")
+							.append(Double.toString(summary25.getMean()
+									/ avgCount))
 							.append('\t')
-							.append(Double.toString(summary60.getMean()/avgCount))
+							.append(Double.toString(summary60.getMean()
+									/ avgCount))
 							.append('\t')
-							.append(Double.toString(summary80.getMean()/avgCount))
+							.append(Double.toString(summary80.getMean()
+									/ avgCount))
 							.append('\t')
-							.append(Double.toString(summary95.getMean()/avgCount))
-							.append('\n');
+							.append(Double.toString(summary95.getMean()
+									/ avgCount)).append('\n');
 				} finally {
 					summaryWr.flush();
 					summaryWr.close();
@@ -174,34 +191,31 @@ class CalcQuantizationBoundaries {
 						FileUtils.getFile(outPath, "summary95_" + summaryKey
 								+ "_quantiles.csv"), summary95.toString());
 			}
-			Writer quantizedPropsWr = Channels.newWriter(FileUtils
-					.openOutputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES))
-					.getChannel(), Config.OUT_CHARSET);
-			try{
-			quantizedProps.store(quantizedPropsWr, null);
-		}finally{
-			quantizedPropsWr.flush();
-			quantizedPropsWr.close();
-		}
-			// This will make the executor accept no new threads
-			// and finish all existing threads in the queue
-			exec.shutdown();
-			// Wait until all threads are finish
-			while (!exec.isTerminated()) {
-				Thread.sleep(5000);
-				System.out.println(PerfMon.asString());
+			Writer quantizedPropsWr = Channels
+					.newWriter(
+							FileUtils
+									.openOutputStream(
+											FileUtils
+													.getFile(Config.QUANTIZED_FIELDS_PROPERTIES))
+									.getChannel(), Config.OUT_CHARSET);
+			try {
+				quantizedProps.store(quantizedPropsWr, null);
+			} finally {
+				quantizedPropsWr.flush();
+				quantizedPropsWr.close();
 			}
+
 		} finally {
-//			long delta = System.currentTimeMillis();
-//			for (Writer wr : quantileWriterMap.values()) {
-//				// This is just in case the program crashed
-//				if (wr != null) {
-//					wr.flush();
-//					wr.close();
-//				}
-//			}
-//			delta = System.currentTimeMillis() - delta;
-//			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
+			// long delta = System.currentTimeMillis();
+			// for (Writer wr : quantileWriterMap.values()) {
+			// // This is just in case the program crashed
+			// if (wr != null) {
+			// wr.flush();
+			// wr.close();
+			// }
+			// }
+			// delta = System.currentTimeMillis() - delta;
+			// PerfMon.increment(TimeMetrics.IO_WRITE, delta);
 
 			System.out.println(PerfMon.asString());
 			System.out.println("Done!");
@@ -224,20 +238,19 @@ class CalcQuantizationBoundaries {
 		public Void call() throws Exception {
 
 			Percentile qt = quantileMap.getValue().get(fnamePfx);
-			
+
 			double p25 = qt.evaluate(25);
 			double p60 = qt.evaluate(60);
 			double p80 = qt.evaluate(80);
 			double p95 = qt.evaluate(95);
 
-			
 			String filePath = FilenameUtils.concat(outPath,
 					quantileMap.getKey() + "_" + fnamePfx + "_quantiles.csv");
 
 			Writer quantileWr = ConcurrUtil.acquireWriter(filePath,
 					quantileWriterMap, "");
-//					// "userid\t" +
-//					"25-ptile\t60-ptile\t80-ptile\t95-ptile\n");
+			// // "userid\t" +
+			// "25-ptile\t60-ptile\t80-ptile\t95-ptile\n");
 			try {
 				quantileWr
 						.
@@ -248,17 +261,17 @@ class CalcQuantizationBoundaries {
 						.append(Double.toString(p95)).append('\n');
 			} finally {
 				ConcurrUtil.releaseWriter(quantileWr, filePath,
-						quantileWriterMap, true); //false
-				
+						quantileWriterMap, true); // false
+
 			}
-			
+
 			int readingCount = qt.getData().length;
-			
+
 			p25 *= readingCount;
 			p60 *= readingCount;
 			p80 *= readingCount;
 			p95 *= readingCount;
-			
+
 			synchronized (countSummaryMap) {
 				SummaryStatistics countSummary = countSummaryMap.get(fnamePfx);
 				if (countSummary == null) {
@@ -267,7 +280,7 @@ class CalcQuantizationBoundaries {
 				}
 				countSummary.addValue(readingCount);
 			}
-			
+
 			synchronized (p25SummaryMap) {
 				SummaryStatistics p25Summary = p25SummaryMap.get(fnamePfx);
 				if (p25Summary == null) {
@@ -302,8 +315,6 @@ class CalcQuantizationBoundaries {
 				}
 				p95Summary.addValue(p95);
 			}
-
-			
 
 			return null;
 		}

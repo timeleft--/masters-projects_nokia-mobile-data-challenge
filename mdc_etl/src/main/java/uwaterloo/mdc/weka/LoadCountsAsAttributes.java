@@ -722,7 +722,7 @@ public class LoadCountsAsAttributes implements
 					allAttributes.addElement(attribute);
 				} else {
 					Enum<?>[] valueArray;
-					if (Config.QUANTIZE_NOT_DISCRETIZE
+					if ((Config.QUANTIZE_NOT_DISCRETIZE || Config.WEKA_DISCRETIZE)
 							&& Config.quantizedFields.containsKey(statKey)) {
 						int end = Discretize.QuantilesEnum.values().length; // -
 																			// 1;

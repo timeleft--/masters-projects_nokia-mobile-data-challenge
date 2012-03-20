@@ -36,6 +36,12 @@ public class PerUserQuantiles extends
 		}
 		try{
 			Double currNum = Double.parseDouble(currValue);
+			if(currNum == 0){
+				// 0 is not a numeric reading
+				// just a placeholder
+				// TODO: right? ;)
+				return;
+			}
 			colOpResult.get(currKey).add(currNum);
 		}catch(NumberFormatException ignored){
 			// ok.. not a numeric col!

@@ -25,6 +25,8 @@ public class PerUserQuantiles_calllog extends PerUserQuantiles {
 		colsToSkip.add("number_prefix");
 		// We also don't track repeated numbers (TODO: yet??)
 		colsToSkip.add("number");
+		//Don't quantize nominals
+		colsToSkip.add("in_phonebook");
 
 	}
 

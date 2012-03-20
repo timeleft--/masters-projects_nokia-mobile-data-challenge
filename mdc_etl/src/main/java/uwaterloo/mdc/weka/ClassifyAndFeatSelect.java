@@ -9,6 +9,7 @@ import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Properties;
@@ -24,6 +25,7 @@ import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.mallet.ImportIntoMallet;
 import uwaterloo.mdc.etl.util.MathUtil;
 import uwaterloo.mdc.etl.util.StringUtils;
 import weka.attributeSelection.ASEvaluation;
@@ -31,6 +33,7 @@ import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
 import weka.attributeSelection.Ranker;
+import weka.attributeSelection.SVMAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
@@ -41,6 +44,9 @@ import weka.core.Instances;
 import weka.core.Utils;
 import weka.core.WekaException;
 import weka.core.converters.ArffLoader;
+import weka.filters.Filter;
+import weka.filters.unsupervised.attribute.Add;
+import weka.filters.unsupervised.attribute.Remove;
 
 public class ClassifyAndFeatSelect implements Callable<Void> {
 	// Commented out are Dimensionality reductions that failed
@@ -53,15 +59,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	// // FilteredAttributeEval.class, FilteredSubsetEval.class,
 	// GainRatioAttributeEval.class,
 	// // InfoGainAttributeEval.class,
-	// ReliefFAttributeEval.class
-	// SVMAttributeEval.class, SymmetricalUncertAttributeEval.class,
+	// ReliefFAttributeEval.class,
+	SVMAttributeEval.class,
+	// SymmetricalUncertAttributeEval.class,
 	// WrapperSubsetEval.class,
-//		LatentSemanticAnalysis.class,
+
 	};
-//	// Attribute Transformers
-//	public static Class[] attrTransEvaluationClazzes = {
-//	// PrincipalComponents and
-//		LatentSemanticAnalysis.class, };
+	// // Attribute Transformers
+	// public static Class[] attrTransEvaluationClazzes = {
+	// // PrincipalComponents and
+	// LatentSemanticAnalysis.class, };
 	public static final String ALL_FEATS = "all-features";
 
 	private class FoldCallable implements Callable<HashMap<String, Double>> {
@@ -145,21 +152,21 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				corrWr.close();
 			}
 		}
-		
+
 		public void mutualInfo(Instances trainInstances) throws IOException {
 			Writer infoWr = Channels.newWriter(
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outputPath, baseClassifier
 									.getClass().getName(), "v" + v
 									+ "_feat-mutual-info.txt")).getChannel(),
-									Config.OUT_CHARSET);
+					Config.OUT_CHARSET);
 			try {
 				int numAttribs = trainInstances.numAttributes();
 				int numInstances = trainInstances.numInstances();
 				// double[][] infoelation = new double[numAttribs][numAttribs];
 				double[] att1 = new double[numInstances];
 				double[] att2 = new double[numInstances];
-				
+
 				infoWr.append("\"attrib\"");
 				for (int j = 0; j < numAttribs; ++j) {
 					infoWr.append('\t').append(
@@ -167,7 +174,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									.name()));
 				}
 				infoWr.append('\n');
-				
+
 				double info;
 				for (int i = 0; i < numAttribs; i++) {
 					infoWr.append(StringUtils.quote(trainInstances.attribute(i)
@@ -177,17 +184,17 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						for (int k = 0; k < numInstances; k++) {
 							double temp1 = trainInstances.instance(k).value(i);
 							double temp2 = trainInstances.instance(k).value(j);
-//							if (Double.isNaN(temp1) || Double.isNaN(temp2)) {
-//								continue;
-//							}
+							// if (Double.isNaN(temp1) || Double.isNaN(temp2)) {
+							// continue;
+							// }
 							att1[n] = temp1;
 							att2[n] = temp2;
 							++n;
 						}
 						if (i == j) {
 							// Should never happen
-							
-							info = Double.POSITIVE_INFINITY; //1.0;
+
+							info = Double.POSITIVE_INFINITY; // 1.0;
 						} else {
 							if (n <= 1) {
 								info = Double.NaN;
@@ -195,31 +202,39 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								Frequency xFreq = new Frequency();
 								Frequency yFreq = new Frequency();
 								Frequency xyFreq = new Frequency();
-								for(int i1=0; i1<n; ++i1){
+								for (int i1 = 0; i1 < n; ++i1) {
 									xFreq.addValue(att1[i1]);
 									yFreq.addValue(att2[i1]);
-									
-									for(int i2=0; i2<n; ++i2){
-										String xyVal = Double.toString(att1[i1]) + "," + Double.toString(att2[i2]);
+
+									for (int i2 = 0; i2 < n; ++i2) {
+										String xyVal = Double
+												.toString(att1[i1])
+												+ ","
+												+ Double.toString(att2[i2]);
 										xyFreq.addValue(xyVal);
 									}
 								}
-								
+
 								info = 0;
-								Iterator<Comparable<?>> xIter = xFreq.valuesIterator();
-								while(xIter.hasNext()){
+								Iterator<Comparable<?>> xIter = xFreq
+										.valuesIterator();
+								while (xIter.hasNext()) {
 									Comparable<?> x = xIter.next();
-									Iterator<Comparable<?>> yIter = yFreq.valuesIterator();
-									while(yIter.hasNext()){
+									Iterator<Comparable<?>> yIter = yFreq
+											.valuesIterator();
+									while (yIter.hasNext()) {
 										Comparable<?> y = yIter.next();
-										String xyVal = x.toString() + ","+y.toString();
-										double term = xyFreq.getPct(xyVal) / xFreq.getPct(x) * yFreq.getPct(y);
+										String xyVal = x.toString() + ","
+												+ y.toString();
+										double term = xyFreq.getPct(xyVal)
+												/ xFreq.getPct(x)
+												* yFreq.getPct(y);
 										term = MathUtil.lg2(term);
 										term = xyFreq.getPct(xyVal) * term;
 										info += term;
 									}
 								}
-					
+
 							}
 						}
 						infoWr.append('\t').append(Double.toString(info));
@@ -373,7 +388,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						}
 						correlation(trainingSet);
 					}
-					if(Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO) {
+					if (Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO) {
 						mutualInfo(trainingSet);
 					}
 					baseClassifier.buildClassifier(trainingSet);
@@ -511,27 +526,136 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						search = new Ranker();
 					}
 
-					featSel(validationSet, foldFeactSelectCM, eval, search,
-							accuracyMap);
+					if (eval instanceof SVMAttributeEval) {
 
+						Add add = new Add();
+						add.setAttributeIndex("last");
+						add.setAttributeName("binary-label");
+						add.setNominalLabels("+1,-1");
+						add.setInputFormat(validationSet);
+
+						for (String positiveClass : Config.LABEL_HIERARCHY) { // classes
+
+							Instances copyValidation = new Instances(
+									validationSet);
+							
+							// Should have done this earlier actually
+							copyValidation.deleteWithMissingClass();
+
+							copyValidation = Filter.useFilter(copyValidation,
+									add);
+
+							@SuppressWarnings("rawtypes")
+							Enumeration instEnum = copyValidation
+									.enumerateInstances();
+							int positiveExamples = 0;
+							while (instEnum.hasMoreElements()) {
+								Instance copyInst = (Instance) instEnum
+										.nextElement();
+
+								String cls = Long.toString(Math.round(copyInst
+										.classValue()) + 1);
+
+								String binaryLabel = null;
+								if (positiveClass.contains("+" + cls + "+")) {
+									binaryLabel = "+1";
+									++positiveExamples;
+
+								} else if (positiveClass.contains("-" + cls
+										+ "-")) {
+									binaryLabel = "-1";
+								}
+
+								if (binaryLabel != null) {
+									copyInst.setValue(
+											copyInst.numAttributes() - 1,
+											binaryLabel);
+								} else {
+									copyInst.setMissing(copyInst
+											.numAttributes() - 1);
+								}
+
+								copyInst.setDataset(copyValidation);
+
+							}
+
+							Remove rem = new Remove();
+							// The index range starts from 1 when it is text
+							rem.setAttributeIndices(Integer
+									.toString(copyValidation.numAttributes() - 1));
+							rem.setInputFormat(copyValidation);
+							copyValidation = Filter.useFilter(copyValidation,
+									rem);
+
+							copyValidation.setClassIndex(copyValidation
+									.numAttributes() - 1);
+							copyValidation.deleteWithMissingClass();
+							
+							copyValidation.setRelationName(validationSet
+									.getRevision() + positiveClass);
+
+							if (positiveExamples > 0) {
+								HashMap<String, Double> tempAccuracy = new HashMap<String, Double>();
+								Frequency[] tempCM;
+								tempCM = new Frequency[Config.LABEL_HIERARCHY.length];
+								for (int c = 0; c < tempCM.length; ++c) {
+									tempCM[c] = new Frequency();
+								}
+								featSel(copyValidation, tempCM, eval, search,
+										tempAccuracy,"v" + v + "_" + positiveClass);
+								for (String accuKeys : tempAccuracy.keySet()) {
+									accuracyMap.put(accuKeys + positiveClass,
+											tempAccuracy.get(accuKeys));
+								}
+								// The confusion matrix needs some tweeking,
+								// lest it throws exceptions (Null or o bound)
+								// Writer tempCmWr = Channels
+								// .newWriter(
+								// FileUtils
+								// .openOutputStream(
+								// FileUtils
+								// .getFile(
+								// outputPath,
+								// baseClassifier
+								// .getClass()
+								// .getName(),
+								// "v"
+								// + v
+								// + "svm"
+								// + positiveClass
+								// + "_confusion-matrix.txt"))
+								// .getChannel(),
+								// Config.OUT_CHARSET);
+								// try {
+								// writeConfusionMatrix(tempCmWr, tempCM);
+								// } finally {
+								// tempCmWr.flush();
+								// tempCmWr.close();
+								// }
+							}
+						}
+					} else {
+						featSel(validationSet, foldFeactSelectCM, eval, search,
+								accuracyMap,"v" + v );
+					}
 				}
-//				// //////////////////////////////////////
-//				// //////////////////////////////////////
-//
-//				for (@SuppressWarnings("rawtypes")
-//				Class attrTransEvalClazz : attrTransEvaluationClazzes) {
-//
-//					@SuppressWarnings("unchecked")
-//					ASEvaluation eval = (ASEvaluation) attrTransEvalClazz
-//							.getConstructor().newInstance();
-//
-//					ASSearch search;
-//					search = new Ranker();
-//
-//					featSel(validationSet, foldFeactSelectCM, eval, search,
-//							accuracyMap);
-//
-//				}
+				// // //////////////////////////////////////
+				// // //////////////////////////////////////
+				//
+				// for (@SuppressWarnings("rawtypes")
+				// Class attrTransEvalClazz : attrTransEvaluationClazzes) {
+				//
+				// @SuppressWarnings("unchecked")
+				// ASEvaluation eval = (ASEvaluation) attrTransEvalClazz
+				// .getConstructor().newInstance();
+				//
+				// ASSearch search;
+				// search = new Ranker();
+				//
+				// featSel(validationSet, foldFeactSelectCM, eval, search,
+				// accuracyMap);
+				//
+				// }
 				// //////////////////////////////////////
 
 			} catch (Exception ignored) {
@@ -542,7 +666,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		void featSel(Instances validationSet, Frequency[] foldFeactSelectCM,
 				ASEvaluation eval, ASSearch search,
-				HashMap<String, Double> accuracyMap) throws IOException {
+				HashMap<String, Double> accuracyMap, String filenamePfx) throws IOException {
 			AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
 			featSelector.setClassifier(baseClassifier);
 			featSelector.setEvaluator(eval);
@@ -552,7 +676,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outputPath, baseClassifier
 									.getClass().getName(), eval.getClass() // attrSelectEvalClazz
-									.getName(), "v" + v
+									.getName(), filenamePfx
 									+ "_feat-selected-classifications.txt"))
 							.getChannel(), Config.OUT_CHARSET);
 			try {
@@ -648,14 +772,14 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
 					baseClassifier.getClass().getName(), eval.getClass() // attrSelectEvalClazz
-							.getName(), "v" + v + "_feat-selection.txt"),
+							.getName(), filenamePfx + "_feat-selection.txt"),
 					featSelector.toString());
 			// algo name
 			System.out.println(baseClassifierClazz.getSimpleName() + "/"
 					+ eval.getClass() // attrSelectEvalClazz
 							.getSimpleName() + " - "
 					+ (System.currentTimeMillis() - startTime) + " (fold " + v
-					+ "): Finished feature selection for fold: " + v);
+					+ "): Finished feature selection for " + filenamePfx);
 		}
 	}
 
@@ -740,7 +864,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 
-		// ImportIntoMallet.main(args);
+		CalcCutPoints.main(args);
+		ImportIntoMallet.main(args);
 		//
 		// // Still cannot handle quantized vals
 		// // CountConditionalFreqs countCond = new CountConditionalFreqs();

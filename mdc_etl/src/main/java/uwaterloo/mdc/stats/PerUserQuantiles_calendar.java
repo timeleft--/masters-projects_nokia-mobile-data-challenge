@@ -22,6 +22,7 @@ public class PerUserQuantiles_calendar extends PerUserQuantiles {
 		colsToSkip.add("class");
 		colsToSkip.add("last_mod");
 		colsToSkip.add("title");
+		colsToSkip.add("begin");
 	}
 
 	@Override

@@ -21,6 +21,8 @@ public class PerUserQuantiles_sys extends PerUserQuantiles {
 		colsToSkip.add("freespace_y");
 		colsToSkip.add("freespace_z");
 		colsToSkip.add("freeram");
+		//Don't quantize nominals
+		colsToSkip.add("charging");
 	}
 
 	@Override

@@ -38,8 +38,8 @@ public class ImportIntoMallet {
 					&& !("contacts.csv".equals(fName))
 					&& !("gsm.csv".equals(fName))
 					&& !("media.csv".equals(fName))
-					&& !("sys.csv".equals(fName))
-					&& !("accel.csv".equals(fName))
+//					&& !("sys.csv".equals(fName))
+//					&& !("accel.csv".equals(fName))
 					&& !("process.csv".equals(fName));
 
 			return result;

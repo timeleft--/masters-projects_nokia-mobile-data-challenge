@@ -20,6 +20,7 @@ public class PerUserQuantiles_mediaplay extends PerUserQuantiles {
 		colsToSkip.add("title");
 		colsToSkip.add("uri");
 		colsToSkip.add("duration");
+		colsToSkip.add("state");
 	}
 
 	@Override

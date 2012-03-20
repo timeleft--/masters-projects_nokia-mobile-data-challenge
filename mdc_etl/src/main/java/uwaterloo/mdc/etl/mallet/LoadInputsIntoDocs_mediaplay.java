@@ -3,6 +3,7 @@ package uwaterloo.mdc.etl.mallet;
 import java.io.File;
 import java.util.HashSet;
 
+import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Discretize;
 
 public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
@@ -31,7 +32,7 @@ public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
 	
 	public enum PlayerState {
 		Missing, //just a place holder
-		P //assuming all states are Playing
+		P; //assuming all states are Playing
 //		S1,
 //		S2,
 //		S3,
@@ -41,7 +42,13 @@ public class LoadInputsIntoDocs_mediaplay extends LoadInputsIntoDocs {
 //		S7,
 //		S8,
 //		S9;
-	
+		public String toString() {
+			if (this == Missing) {
+				return Config.MISSING_VALUE_PLACEHOLDER;
+			} else {
+				return super.toString();
+			}
+		};
 	};
 	
 	static {

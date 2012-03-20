@@ -86,7 +86,7 @@ public class PrintStatsCallable implements Callable<Void> {
 
 		Comparable<?>[] valsArr;
 		synchronized (Discretize.enumsMap) {
-			if (Config.QUANTIZE_NOT_DISCRETIZE) {
+			if (Config.QUANTIZE_NOT_DISCRETIZE || Config.WEKA_DISCRETIZE) {
 				if (Discretize.enumsMap.containsKey(statKey)) {
 					valsArr = Discretize.QuantilesEnum.values();
 					assert Config.NUM_QUANTILES + 1 == valsArr.length : "Generalize this code.. but don't use digits only";
