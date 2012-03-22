@@ -24,6 +24,7 @@ import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.rank.Percentile;
 
 import uwaterloo.mdc.etl.Config;
@@ -34,16 +35,25 @@ import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.MathUtil;
 import uwaterloo.mdc.etl.util.StringUtils;
+import weka.attributeSelection.SVMAttributeEval;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.core.converters.ArffLoader;
 import weka.core.converters.ArffSaver;
+import weka.core.converters.SVMLightSaver;
+import weka.filters.Filter;
+import weka.filters.unsupervised.attribute.Add;
+import weka.filters.unsupervised.attribute.Remove;
 
 //import uwaterloo.mdc.etl.mallet.*;
 
 public class LoadCountsAsAttributes implements
 		Callable<ExecutorCompletionService<Instances>> {
+
+	public static final String CLASSIFIER_TO_HONOUR = "weka.classifiers.trees.J48";
+	public static final String ATRRSELECTOR_TO_HONOUR = "weka.attributeSelection.SVMAttributeEval";
 
 	private static class SVMLightSaverSingleton implements Callable<Void> {
 		protected static List<String> userIds;
@@ -258,29 +268,48 @@ public class LoadCountsAsAttributes implements
 		}
 	}
 
-	private static class ArffSaverCallable implements Callable<Void> {
-		String outPath = "C:\\mdc-datasets\\weka\\segmented_user";
-		Instances insts;
+	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\segmented_user";
+	public static final String TEMP_PATH = "C:\\mdc-datasets\\weka\\segmented_user_temp";
 
-		public ArffSaverCallable(Instances insts) {
+	private static class ArffSaverCallable implements Callable<Void> {
+		final String outPath;
+		Instances insts;
+		private boolean arffFmt = true;
+
+		public ArffSaverCallable(Instances insts, String outPath,
+				boolean arffFormat) {
+			this(insts, outPath);
+			arffFmt = arffFormat;
+		}
+
+		public ArffSaverCallable(Instances insts, String outPath) {
 			this.insts = insts;
-			outPath = FilenameUtils.concat(outPath, insts.relationName()
-					+ ".arff");
+			this.outPath = FilenameUtils.concat(outPath,
+//					FilenameUtils.concat(BASE_ARFFS_PATH, outPath),
+					insts.relationName());
 		}
 
 		@Override
 		public Void call() throws Exception {
-			File dest = FileUtils.getFile(outPath);
+			File dest = FileUtils.getFile(outPath
+					+ (arffFmt ? ".arff" : ".csv"));
 			System.out.println((System.currentTimeMillis() - time)
 					+ ": Writing " + dest.getAbsolutePath());
 
-			ArffSaver arffsaver = new ArffSaver();
-			arffsaver.setInstances(insts);
-			arffsaver.setDestination(FileUtils.openOutputStream(dest));
-			// arffsaver.setCompressOutput(true);
-			arffsaver.writeBatch();
-			System.out.println((System.currentTimeMillis() - time)
-					+ ": Finished writing " + dest.getAbsolutePath());
+			if (arffFmt) {
+				ArffSaver arffsaver = new ArffSaver();
+				arffsaver.setInstances(insts);
+				arffsaver.setDestination(FileUtils.openOutputStream(dest));
+				// arffsaver.setCompressOutput(true);
+				arffsaver.writeBatch();
+			} else {
+				SVMLightSaver svmlightSave = new SVMLightSaver();
+				svmlightSave.setInstances(insts);
+				svmlightSave.setDestination(FileUtils.openOutputStream(dest));
+				svmlightSave.writeBatch();
+			}
+			// System.out.println((System.currentTimeMillis() - time)
+			// + ": Finished writing " + dest.getAbsolutePath());
 
 			return null;
 		}
@@ -330,7 +359,7 @@ public class LoadCountsAsAttributes implements
 
 		LoadCountsAsAttributes app = new LoadCountsAsAttributes();
 
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT) {
+		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 			printExec = Executors.newSingleThreadExecutor();
 			SVMLightSaverSingleton.init(app.inputPath,
 					Config.NUM_USERS_TO_PROCESS); // TODO: support more than LOO
@@ -353,7 +382,7 @@ public class LoadCountsAsAttributes implements
 				continue;
 			}
 
-			if (Config.LOADCOUNTS_FOR_SVMLIGHT) {
+			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 				SVMLightSaverSingleton svmlightSaver = null;
 				while ((svmlightSaver = SVMLightSaverSingleton
 						.acquireSaver(insts)) == null) {
@@ -365,12 +394,13 @@ public class LoadCountsAsAttributes implements
 					svmlightSaver.release();
 				}
 			} else {
-				printExec.submit(new ArffSaverCallable(insts));
+				printExec.submit(new ArffSaverCallable(insts, TEMP_PATH));
 				++printingJobs;
+
 			}
 		}
 
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT) {
+		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 
 			SVMLightSaverSingleton noncontended = SVMLightSaverSingleton
 					.acquireSaver(null);
@@ -447,7 +477,7 @@ public class LoadCountsAsAttributes implements
 			appUsageAttrsFV.addElement(appAttr);
 		}
 
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT) {
+		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 			// TODO support more than LOO
 			AppsSVMLightSaver.init(app.inputPath, Config.SVMLIGHT_INPUTPATH,
 					Config.NUM_USERS_TO_PROCESS, app.allAttributes.size());
@@ -506,7 +536,7 @@ public class LoadCountsAsAttributes implements
 				}
 			}
 
-			if (Config.LOADCOUNTS_FOR_SVMLIGHT) {
+			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 				AppsSVMLightSaver saver = null;
 				while ((saver = (AppsSVMLightSaver) AppsSVMLightSaver
 						.acquireSaver(userAppUsage)) == null) {
@@ -518,133 +548,291 @@ public class LoadCountsAsAttributes implements
 					saver.release();
 				}
 			} else {
-				ArffSaverCallable arffSaveCall = new ArffSaverCallable(
-						userAppUsage);
-				arffSaveCall.outPath = FilenameUtils
-						.removeExtension(arffSaveCall.outPath);
-				arffSaveCall.outPath += ".app";
-				printExec.submit(arffSaveCall);
+
+				String userid = userAppUsage.relationName();
+
+				Instances countsInsts = new Instances(Channels.newReader(
+						FileUtils.openInputStream(
+								FileUtils.getFile(TEMP_PATH, //"ALL",
+										userid + ".arff")).getChannel(),
+						Config.OUT_CHARSET));
+				Instances joinedInsts = Instances.mergeInstances(userAppUsage,
+						countsInsts);
+				joinedInsts.setClassIndex(joinedInsts.numAttributes() - 1);
+				joinedInsts.setRelationName(userid);
+				countsInsts = null;
+				userAppUsage = null;
+
+				if (Config.LOADCOUNTS_DELETE_MISSING_CLASS) {
+					// Should have done this earlier
+					// actually
+					joinedInsts.deleteWithMissingClass();
+				}
+
+				Instances copyInsts = joinedInsts;
+				Remove generalRemove;
+				if (Config.LOAD_FEATSELECTED_ONLY) {
+
+					generalRemove = new Remove();
+					String remIxes = FileUtils.readFileToString(FileUtils
+							.getFile(AttributeConsensusRank.OUTPUT_PATH,
+									CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
+					generalRemove = new Remove();
+					generalRemove.setInputFormat(copyInsts);
+					generalRemove.setAttributeIndices(remIxes);
+					copyInsts = Filter.useFilter(copyInsts, generalRemove);
+				}
+				
+				copyInsts.setRelationName(joinedInsts.relationName());
+				
+				printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils.concat(OUTPUT_PATH, "ALL"),
+						!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
+				++printingJobs;
+
+				for (String positiveClass : Config.LABEL_HIERARCHY) {
+					int existingPositive = 0;
+					int existingNEgative = 0;
+					for (String someClass : Config.LABELS_SINGLES) {
+						int clsIx = positiveClass.indexOf(someClass);
+						Boolean clsPositive = null;
+						if (positiveClass.charAt(clsIx + someClass.length()) == '+') {
+							clsPositive = true;
+						} else if (positiveClass.charAt(clsIx
+								+ someClass.length()) == '-') {
+							clsPositive = false;
+						}
+						if (clsPositive == null) {
+							continue; // 1 digit class trapped in a 2 digit
+										// positiveclas
+						}
+						long numForUser;
+						synchronized (userClassCount) {
+							numForUser = userClassCount.get(userid).getCount(
+									someClass);
+						}
+						if (clsPositive) {
+							existingPositive += numForUser;
+						} else {
+							existingNEgative += numForUser;
+						}
+					}
+					if (existingNEgative == 0 || existingPositive == 0) {
+						// not a usefule user for this positive class
+						System.out
+								.println(userid + " is not useful for classes "
+										+ positiveClass);
+						continue;
+					}
+
+					FileUtils.writeStringToFile(
+							FileUtils.getFile(FilenameUtils.concat(OUTPUT_PATH, "c"
+									+ positiveClass), userid + "-counts.txt"),
+							"Positive: " + existingPositive + " - Negative: "
+									+ existingNEgative);
+
+					copyInsts = joinedInsts;
+					if (Config.LOAD_FEATSELECTED_ONLY) {
+
+						File filterFile = FileUtils
+								.getFile(
+										AttributeConsensusRank.OUTPUT_PATH,
+										CLASSIFIER_TO_HONOUR,
+										ATRRSELECTOR_TO_HONOUR,
+										"filter"
+												+ positiveClass
+												+ AttributeConsensusRank.FEAT_SELECTION_FNAME_SUFFIX);
+
+						if (filterFile.exists()) {
+							String remIxes = FileUtils
+									.readFileToString(filterFile);
+							Remove remove = new Remove();
+							remove.setInputFormat(copyInsts);
+							remove.setAttributeIndices(remIxes);
+							copyInsts = Filter.useFilter(copyInsts, remove);
+
+						} else {
+
+							System.out.println("No filter for positiveclass: "
+									+ positiveClass);
+							copyInsts = Filter.useFilter(copyInsts,
+									generalRemove);
+						}
+					}
+
+					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+
+						Add add = new Add();
+						add.setAttributeIndex("last");
+						add.setAttributeName("binary-label");
+						add.setNominalLabels("+1,-1");
+						add.setInputFormat(joinedInsts);
+
+						copyInsts = new Instances(joinedInsts);
+
+						copyInsts = Filter.useFilter(copyInsts, add);
+
+						@SuppressWarnings("rawtypes")
+						Enumeration instEnum = copyInsts.enumerateInstances();
+
+						while (instEnum.hasMoreElements()) {
+							Instance copyInst = (Instance) instEnum
+									.nextElement();
+
+							String cls = Long.toString(Math.round(copyInst
+									.classValue()) + 1);
+
+							String binaryLabel = null;
+							if (positiveClass.contains("+" + cls + "+")) {
+								binaryLabel = "+1";
+
+							} else if (positiveClass.contains("-" + cls + "-")) {
+								binaryLabel = "-1";
+							}
+
+							if (binaryLabel != null) {
+								copyInst.setValue(copyInst.numAttributes() - 1,
+										binaryLabel);
+							} else {
+								copyInst.setMissing(copyInst.numAttributes() - 1);
+							}
+
+							copyInst.setDataset(copyInsts);
+
+						}
+
+						Remove rem = new Remove();
+						// The index range starts from 1 when it
+						// is
+						// text
+						rem.setAttributeIndices(Integer.toString(copyInsts
+								.numAttributes() - 1));
+						rem.setInputFormat(copyInsts);
+						copyInsts = Filter.useFilter(copyInsts, rem);
+
+						copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
+						copyInsts.deleteWithMissingClass();
+					}
+
+					copyInsts.setRelationName(joinedInsts.relationName());
+
+					printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils.concat(OUTPUT_PATH,"c"
+							+ positiveClass),
+							!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
+					++printingJobs;
+				}
+
+				// ArffSaverCallable arffSaveCall = new ArffSaverCallable(
+				// userAppUsage, "ALL", ".app");
+				// // arffSaveCall.outPath = FilenameUtils
+				// // .removeExtension(arffSaveCall.outPath);
+				// // arffSaveCall.outPath += ".app";
+				// printExec.submit(arffSaveCall);
 			}
 			++userIx;
 		}
 
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT) {
+		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 
 			AppsSVMLightSaver noncontended = (AppsSVMLightSaver) AppsSVMLightSaver
 					.acquireSaver(null);
 			noncontended.dispose();
 			noncontended.release();
-
+		}
+		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE
+				|| Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER) {
 			File outputDir = FileUtils.getFile(Config.SVMLIGHT_INPUTPATH);
 			for (File srcDir : outputDir.listFiles()) {
 				for (File srcFile : FileUtils.listFiles(srcDir,
 						new String[] { "csv" }, false)) {
-					for (String positiveClass : Config.LABEL_HIERARCHY) { // classes
-						int positiveExamples = 0;
-						File inputDir = FileUtils.getFile(
-								srcDir.getParentFile(), "c" + positiveClass,
-								srcDir.getName());
-						Writer destWr = Channels.newWriter(
-								FileUtils.openOutputStream(
-										FileUtils.getFile(inputDir,
-												srcFile.getName()))
-										.getChannel(), Config.OUT_CHARSET);
-						try {
-							BufferedReader srcRead = new BufferedReader(
-									Channels.newReader(FileUtils
-											.openInputStream(srcFile)
-											.getChannel(), Config.OUT_CHARSET));
-							String line;
-							while ((line = srcRead.readLine()) != null) {
-								int spaceIx = line.indexOf(' ');
-								String cls = line.substring(0, spaceIx);
+					// classes
+					String positiveClass = srcFile.getName().substring(1);
+					int positiveExamples = 0;
+					File inputDir = FileUtils.getFile(srcDir.getParentFile(),
+							"c" + positiveClass, srcDir.getName());
+					Writer destWr = Channels.newWriter(
+							FileUtils.openOutputStream(
+									FileUtils.getFile(inputDir,
+											srcFile.getName())).getChannel(),
+							Config.OUT_CHARSET);
+					try {
+						BufferedReader srcRead = new BufferedReader(
+								Channels.newReader(
+										FileUtils.openInputStream(srcFile)
+												.getChannel(),
+										Config.OUT_CHARSET));
+						String line;
+						while ((line = srcRead.readLine()) != null) {
+							int spaceIx = line.indexOf(' ');
+							String cls = line.substring(0, spaceIx);
 
-								if (positiveClass.contains("+" + cls + "+")) {
-									destWr.append("+1")
-											.append(line.substring(spaceIx))
-											.append(System.lineSeparator());
-									if (positiveExamples == 0) {
-										System.out
-												.println("The first positive example for "
-														+ positiveClass
-														+ " in "
-														+ srcFile
-																.getAbsolutePath());
-									}
-									++positiveExamples;
-
-								} else if (line.startsWith("0")) {
-									if (Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
-										destWr.append(line).append(
-												System.lineSeparator());
-									}
-								} else if (positiveClass.contains("-" + cls
-										+ "-")) {
-									destWr.append("-1")
-											.append(line.substring(spaceIx))
-											.append(System.lineSeparator());
+							if (positiveClass.contains("+" + cls + "+")) {
+								destWr.append("+1")
+										.append(line.substring(spaceIx))
+										.append(System.lineSeparator());
+								if (positiveExamples == 0) {
+									System.out
+											.println("The first positive example for "
+													+ positiveClass
+													+ " in "
+													+ srcFile.getAbsolutePath());
 								}
+								++positiveExamples;
+
+							} else if (line.startsWith("0")) {
+								if (Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
+									destWr.append(line).append(
+											System.lineSeparator());
+								}
+							} else if (positiveClass.contains("-" + cls + "-")) {
+								destWr.append("-1")
+										.append(line.substring(spaceIx))
+										.append(System.lineSeparator());
 							}
-						} finally {
-							destWr.flush();
-							destWr.close();
 						}
+					} finally {
+						destWr.flush();
+						destWr.close();
+					}
 
-						if (positiveExamples > 0) {
+					if (positiveExamples > 0) {
 
-							// Also prepare files for SVMlight output.. it needs
-							// a
-							// file
-							// to overwrite!
+						// Also prepare files for SVMlight output.. it needs
+						// a
+						// file
+						// to overwrite!
 
-							String outDirPathPfx = 
-									 "c" + positiveClass
-									+ File.separator
-									+ srcDir.getName()
-									+ File.separator 
-									+ "t";
+						String outDirPathPfx = "c" + positiveClass
+								+ File.separator + srcDir.getName()
+								+ File.separator + "t";
 
-							for (int t = 0; t < 4; ++t) {
-								FileUtils
-										.openOutputStream(
-												FileUtils
-														.getFile(
-																Config.SVMLIGHT_OUTPUTPATH,
-																outDirPathPfx
-																		+ t,
-																"alpha.txt"))
-										.close();
-								FileUtils
-										.openOutputStream(
-												FileUtils
-														.getFile(
-																Config.SVMLIGHT_OUTPUTPATH,
-																outDirPathPfx
-																		+ t,
-																"model.txt"))
-										.close();
-								FileUtils
-										.openOutputStream(
-												FileUtils
-														.getFile(
-																Config.SVMLIGHT_OUTPUTPATH,
-																outDirPathPfx
-																		+ t,
-																"trans.txt"))
-										.close();
-								FileUtils.openOutputStream(
-										FileUtils.getFile(
-												Config.SVMLIGHT_OUTPUTPATH,
-												outDirPathPfx + t,
-												"predictions.txt")).close();
-							}
-						} else {
-							System.out.println("No positive examples for "
-									+ positiveClass + " in "
-									+ srcFile.getAbsolutePath() + ". Deleting "
-									+ inputDir.getAbsolutePath());
-							FileUtils.deleteDirectory(inputDir);
+						for (int t = 0; t < 4; ++t) {
+							FileUtils.openOutputStream(
+									FileUtils.getFile(
+											Config.SVMLIGHT_OUTPUTPATH,
+											outDirPathPfx + t, "alpha.txt"))
+									.close();
+							FileUtils.openOutputStream(
+									FileUtils.getFile(
+											Config.SVMLIGHT_OUTPUTPATH,
+											outDirPathPfx + t, "model.txt"))
+									.close();
+							FileUtils.openOutputStream(
+									FileUtils.getFile(
+											Config.SVMLIGHT_OUTPUTPATH,
+											outDirPathPfx + t, "trans.txt"))
+									.close();
+							FileUtils.openOutputStream(
+									FileUtils.getFile(
+											Config.SVMLIGHT_OUTPUTPATH,
+											outDirPathPfx + t,
+											"predictions.txt")).close();
 						}
+					} else {
+						System.out.println("No positive examples for "
+								+ positiveClass + " in "
+								+ srcFile.getAbsolutePath() + ". Deleting "
+								+ inputDir.getAbsolutePath());
+						FileUtils.deleteDirectory(inputDir);
 					}
 				}
 			}
@@ -811,19 +999,26 @@ public class LoadCountsAsAttributes implements
 		return countEcs;
 	}
 
+	private static final Map<String, Frequency> userClassCount = Collections
+			.synchronizedMap(new HashMap<String, Frequency>());
+
 	private class CountingCallable implements Callable<Instances> {
 		private final File userDir;
 		private final HashMap<String, HashMap<String, Integer>> appFreqMap;
 
 		public Instances call() throws Exception {
+			String relName = userDir.getName();
+			synchronized (userClassCount) {
+				userClassCount.put(relName, new Frequency());
+			}
 
 			System.out.println((System.currentTimeMillis() - time)
-					+ ": Reading user " + userDir.getName());
+					+ ": Reading user " + relName);
 
 			Collection<File> microLocsFiles = FileUtils.listFiles(userDir,
 					new String[] { "csv" }, true);
-			weka.core.Instances wekaDoc = new weka.core.Instances(
-					userDir.getName(), allAttributes, microLocsFiles.size());
+			weka.core.Instances wekaDoc = new weka.core.Instances(relName,
+					allAttributes, microLocsFiles.size());
 			wekaDoc.setClassIndex(labelAttribute.index());
 
 			Long prevStartTime = null;
@@ -1077,6 +1272,9 @@ public class LoadCountsAsAttributes implements
 
 				if (instLabel != null) {
 					wekaInst.setClassValue(instLabel);
+					synchronized (userClassCount) {
+						userClassCount.get(relName).addValue(instLabel);
+					}
 				} else {
 					wekaInst.setClassMissing();
 				}
@@ -1138,7 +1336,7 @@ public class LoadCountsAsAttributes implements
 				wekaDoc.add(wekaInst);
 			}
 			System.out.println((System.currentTimeMillis() - time)
-					+ ": Finished reading user " + userDir.getName());
+					+ ": Finished reading user " + relName);
 			return wekaDoc;
 		}
 

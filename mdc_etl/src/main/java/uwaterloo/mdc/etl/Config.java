@@ -16,8 +16,13 @@ public class Config {
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 32;
+	public static final int NUM_THREADS = 8;
 	public static final int NUM_USERS_TO_PROCESS = 80;
+
+	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
+	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
+
+	public static final int NUMBER_TESTING_USERS = 20;
 
 	public static final String DELIMITER_USER_FEATURE = "_";
 	public static final String DELIMITER_START_ENDTIME = "-";
@@ -71,10 +76,6 @@ public class Config {
 	public static final int NUM_FREQ_MAC_ADDRS_TO_KEEP = 3;
 
 
-	public static final int NUMBER_TESTING_USERS = 20;
-
-	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
-	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
 	public static final boolean USER_SPECIFIC_FEATURES = false;
 
@@ -115,7 +116,9 @@ public class Config {
 
 	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 
-	public static final boolean LOADCOUNTS_FOR_SVMLIGHT = false;
+	
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;
 	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
 //	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
@@ -139,6 +142,16 @@ public class Config {
 	public static final boolean DROP_HIGHEST_QUANTILE = false;
 
 	public static final boolean MICROLOC_SPLITS_DOCS = true;
+
+	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
+
+	public static final boolean CALSSIFYFEATSELECT_FEAT_SELECT = false;
+
+	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
+
+	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = true;
+
+	public static final boolean LOAD_FEATSELECTED_ONLY = true;
 	
 	
 

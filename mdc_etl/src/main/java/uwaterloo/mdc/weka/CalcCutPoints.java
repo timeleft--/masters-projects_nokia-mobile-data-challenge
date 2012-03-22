@@ -6,6 +6,8 @@ import java.nio.channels.Channels;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,7 +18,6 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.descriptive.rank.Percentile;
 
 import uwaterloo.mdc.etl.Config;
-import uwaterloo.mdc.etl.PerfMon;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.stats.CalcQuantizationBoundaries;
@@ -47,9 +48,9 @@ public class CalcCutPoints extends CalcQuantizationBoundaries implements
 	public static void main(String[] args) throws Exception {
 		System.out.println(new Date() + ": Started");
 		File dataDir = FileUtils.getFile(dataRoot);
-
-		File[] accel = new File[Config.NUM_USERS_TO_PROCESS];
-		File[] calllog = new File[Config.NUM_USERS_TO_PROCESS];
+//Done
+//		File[] accel = new File[Config.NUM_USERS_TO_PROCESS];
+//		File[] calllog = new File[Config.NUM_USERS_TO_PROCESS];
 		File[] sys = new File[Config.NUM_USERS_TO_PROCESS];
 
 //Nothing to quantize belwo	
@@ -60,8 +61,8 @@ public class CalcCutPoints extends CalcQuantizationBoundaries implements
 		
 		File[] userDirs = dataDir.listFiles();
 		for (int u = 0; u < Config.NUM_USERS_TO_PROCESS; ++u) {
-			accel[u] = FileUtils.getFile(userDirs[u], "accel.csv");
-			calllog[u] = FileUtils.getFile(userDirs[u], "calllog.csv");
+//			accel[u] = FileUtils.getFile(userDirs[u], "accel.csv");
+//			calllog[u] = FileUtils.getFile(userDirs[u], "calllog.csv");
 			sys[u] = FileUtils.getFile(userDirs[u], "sys.csv");
 			
 //			application[u] = FileUtils.getFile(userDirs[u], "application.csv");
@@ -72,8 +73,10 @@ public class CalcCutPoints extends CalcQuantizationBoundaries implements
 		}
 
 		// Common sense says that I shouldn't try parallelizing all this data
-		CalcCutPoints app = new CalcCutPoints(accel);
-		app.call();
+		CalcCutPoints app;
+		
+//		app = new CalcCutPoints(accel);
+//		app.call();
 
 //		app = new CalcCutPoints(application);
 //		app.call();
@@ -84,8 +87,8 @@ public class CalcCutPoints extends CalcQuantizationBoundaries implements
 //		app = new CalcCutPoints(calendar);
 //		app.call();
 
-		app = new CalcCutPoints(calllog);
-		app.call();
+//		app = new CalcCutPoints(calllog);
+//		app.call();
 
 //		app = new CalcCutPoints(mediaplay);
 //		app.call();
@@ -127,8 +130,9 @@ public class CalcCutPoints extends CalcQuantizationBoundaries implements
 //			}
 			System.out.println(new Date() + ": Finished reading "
 					+ quantileMap.getKey() );
-			for (String fnamePfx : quantileMap.getValue().keySet()) {
-
+			Object[] fnamePfxArr = quantileMap.getValue().keySet().toArray();
+			for (int f = 0;f<fnamePfxArr.length; ++f) {
+				String fnamePfx = (String)fnamePfxArr[f];
 				Instances dataset;
 				Discretize filter = (Discretize) discretizers.get(fnamePfx);
 				if (filter == null) {
@@ -168,13 +172,15 @@ public class CalcCutPoints extends CalcQuantizationBoundaries implements
 
 				dataset = structMap.get(filter);
 
-				Percentile qt = quantileMap.getValue().get(fnamePfx);
+				Percentile qt = quantileMap.getValue().remove(fnamePfx);
 				double[] data = qt.getData();
 
-				for (double d : data) {
+				int intervalSize = Config.NUM_USERS_TO_PROCESS / Config.CALCCUTPOINTS_NUM_SAMPLE_USERS;
+				Random rand = new Random(System.currentTimeMillis());
+				for (int i = 0; i<data.length-intervalSize; i+=intervalSize) {
 					Instance inst = new Instance(1 + 1);
 					inst.setDataset(dataset);
-					inst.setValue(0, d);
+					inst.setValue(0, data[i+rand.nextInt(intervalSize)]);
 					filter.input(inst);
 				}
 				System.out.println(new Date() + ": Finished loading "
