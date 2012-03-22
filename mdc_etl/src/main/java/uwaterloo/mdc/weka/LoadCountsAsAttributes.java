@@ -13,6 +13,7 @@ import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -35,16 +36,15 @@ import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.MathUtil;
 import uwaterloo.mdc.etl.util.StringUtils;
-import weka.attributeSelection.SVMAttributeEval;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
 import weka.core.Instances;
-import weka.core.converters.ArffLoader;
 import weka.core.converters.ArffSaver;
 import weka.core.converters.SVMLightSaver;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.Add;
+import weka.filters.unsupervised.attribute.AddID;
 import weka.filters.unsupervised.attribute.Remove;
 
 //import uwaterloo.mdc.etl.mallet.*;
@@ -285,7 +285,7 @@ public class LoadCountsAsAttributes implements
 		public ArffSaverCallable(Instances insts, String outPath) {
 			this.insts = insts;
 			this.outPath = FilenameUtils.concat(outPath,
-//					FilenameUtils.concat(BASE_ARFFS_PATH, outPath),
+			// FilenameUtils.concat(BASE_ARFFS_PATH, outPath),
 					insts.relationName());
 		}
 
@@ -330,6 +330,9 @@ public class LoadCountsAsAttributes implements
 	// private static ExecutorCompletionService<Void> printEcs;
 
 	private static Properties featSelectedApps;
+	private static FastVector appUsageAttrsFV;
+	private static final Map<String, Attribute> appUsageAttrs = Collections
+			.synchronizedMap(new HashMap<String, Attribute>());
 
 	private Map<String, HashMap<String, Attribute>> valueDomainMap;
 	private FastVector allAttributes;
@@ -339,7 +342,8 @@ public class LoadCountsAsAttributes implements
 	private Attribute[] prevLabelAttributeArr;
 	private int countingJobs;
 
-	private HashMap<String, HashMap<String, HashMap<String, Integer>>> allUsersAppFreqMap = new HashMap<String, HashMap<String, HashMap<String, Integer>>>();
+	private static final Map<String, HashMap<String, HashMap<String, Integer>>> allUsersAppFreqMap = Collections
+			.synchronizedMap(new HashMap<String, HashMap<String, HashMap<String, Integer>>>());
 
 	/**
 	 * @param args
@@ -364,7 +368,7 @@ public class LoadCountsAsAttributes implements
 			SVMLightSaverSingleton.init(app.inputPath,
 					Config.NUM_USERS_TO_PROCESS); // TODO: support more than LOO
 		} else {
-			printExec = Executors.newFixedThreadPool(Config.NUM_THREADS / 2);
+			printExec = Executors.newFixedThreadPool(Config.NUM_THREADS);
 		}
 
 		ExecutorCompletionService<Instances> ecs = app.call();
@@ -421,7 +425,7 @@ public class LoadCountsAsAttributes implements
 			if (userIx == Config.NUM_USERS_TO_PROCESS) {
 				break;
 			}
-			HashMap<String, HashMap<String, Integer>> appFreqMap = app.allUsersAppFreqMap
+			HashMap<String, HashMap<String, Integer>> appFreqMap = allUsersAppFreqMap
 					.get(userDir.getName());
 			for (File visit : userDir.listFiles()) {
 				for (File microLFile : visit.listFiles()) {
@@ -463,8 +467,7 @@ public class LoadCountsAsAttributes implements
 		System.out.println("Rare Apps Threshold (25 percentile): "
 				+ rareWordAppTh);
 
-		HashMap<String, Attribute> appUsageAttrs = new HashMap<String, Attribute>();
-		FastVector appUsageAttrsFV = new FastVector();
+		appUsageAttrsFV = new FastVector();
 		for (String appUid : aggregateAppFreq.keySet()) {
 			Integer appUsageOccurs = aggregateAppFreq.get(appUid);
 			if (appUsageOccurs > stopWordAppTh
@@ -483,253 +486,26 @@ public class LoadCountsAsAttributes implements
 					Config.NUM_USERS_TO_PROCESS, app.allAttributes.size());
 		}
 
+		LinkedList<Future<Integer>> transformFutures = new LinkedList<Future<Integer>>();
+		ExecutorService tranformExec = Executors
+				.newFixedThreadPool(Config.NUM_THREADS);
 		userIx = 0;
 		for (File userDir : dataDir.listFiles()) {
 			if (userIx == Config.NUM_USERS_TO_PROCESS) {
 				break;
 			}
-			HashMap<String, HashMap<String, Integer>> appFreqMap = app.allUsersAppFreqMap
-					.get(userDir.getName());
-			Instances userAppUsage = new Instances(userDir.getName(),
-					appUsageAttrsFV, 0);
-			for (File visit : userDir.listFiles()) {
-				for (File microLoc : visit.listFiles()) {
-					Instance microLocAppUsage = new Instance(
-							appUsageAttrsFV.size());
-					microLocAppUsage.setDataset(userAppUsage);
-					HashMap<String, Integer> visitAppFreq = appFreqMap
-							.get(microLoc.getName() + visit.getName());
-					double normalizer = 1;
-					if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
-						for (String appUid : visitAppFreq.keySet()) {
-							normalizer += visitAppFreq.get(appUid);
-						}
-					} else if (Config.NORMALIZE_BY
-							.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
-						normalizer = Integer.MIN_VALUE;
-						for (String appUid : visitAppFreq.keySet()) {
-							double c = visitAppFreq.get(appUid);
-							if (normalizer < c) {
-								normalizer = visitAppFreq.get(appUid);
-							}
-						}
-					}
-					for (String appUid : visitAppFreq.keySet()) {
-						Attribute appAttr = appUsageAttrs.get(appUid);
-						if (appAttr == null) {
-							continue;
-						}
-						if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
-							microLocAppUsage.setValue(appAttr,
-									visitAppFreq.get(appUid) / normalizer);
-						} else if (Config.NORMALIZE_BY
-								.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
-							microLocAppUsage.setValue(appAttr,
-									MathUtil.tf(visitAppFreq.get(appUid))
-											/ MathUtil.tf(normalizer));
-						} else {
-							microLocAppUsage.setValue(appAttr,
-									MathUtil.tf(visitAppFreq.get(appUid)));
-						}
-					}
-					userAppUsage.add(microLocAppUsage);
-				}
-			}
 
-			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
-				AppsSVMLightSaver saver = null;
-				while ((saver = (AppsSVMLightSaver) AppsSVMLightSaver
-						.acquireSaver(userAppUsage)) == null) {
-					Thread.sleep(500);
-				}
-				try {
-					printExec.submit(saver).get();
-				} finally {
-					saver.release();
-				}
-			} else {
+			transformFutures.add(tranformExec
+					.submit(new InstancesTransformCallable(userDir)));
 
-				String userid = userAppUsage.relationName();
-
-				Instances countsInsts = new Instances(Channels.newReader(
-						FileUtils.openInputStream(
-								FileUtils.getFile(TEMP_PATH, //"ALL",
-										userid + ".arff")).getChannel(),
-						Config.OUT_CHARSET));
-				Instances joinedInsts = Instances.mergeInstances(userAppUsage,
-						countsInsts);
-				joinedInsts.setClassIndex(joinedInsts.numAttributes() - 1);
-				joinedInsts.setRelationName(userid);
-				countsInsts = null;
-				userAppUsage = null;
-
-				if (Config.LOADCOUNTS_DELETE_MISSING_CLASS) {
-					// Should have done this earlier
-					// actually
-					joinedInsts.deleteWithMissingClass();
-				}
-
-				Instances copyInsts = joinedInsts;
-				Remove generalRemove;
-				if (Config.LOAD_FEATSELECTED_ONLY) {
-
-					generalRemove = new Remove();
-					String remIxes = FileUtils.readFileToString(FileUtils
-							.getFile(AttributeConsensusRank.OUTPUT_PATH,
-									CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
-					generalRemove = new Remove();
-					generalRemove.setInputFormat(copyInsts);
-					generalRemove.setAttributeIndices(remIxes);
-					copyInsts = Filter.useFilter(copyInsts, generalRemove);
-				}
-				
-				copyInsts.setRelationName(joinedInsts.relationName());
-				
-				printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils.concat(OUTPUT_PATH, "ALL"),
-						!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
-				++printingJobs;
-
-				for (String positiveClass : Config.LABEL_HIERARCHY) {
-					int existingPositive = 0;
-					int existingNEgative = 0;
-					for (String someClass : Config.LABELS_SINGLES) {
-						int clsIx = positiveClass.indexOf(someClass);
-						Boolean clsPositive = null;
-						if (positiveClass.charAt(clsIx + someClass.length()) == '+') {
-							clsPositive = true;
-						} else if (positiveClass.charAt(clsIx
-								+ someClass.length()) == '-') {
-							clsPositive = false;
-						}
-						if (clsPositive == null) {
-							continue; // 1 digit class trapped in a 2 digit
-										// positiveclas
-						}
-						long numForUser;
-						synchronized (userClassCount) {
-							numForUser = userClassCount.get(userid).getCount(
-									someClass);
-						}
-						if (clsPositive) {
-							existingPositive += numForUser;
-						} else {
-							existingNEgative += numForUser;
-						}
-					}
-					if (existingNEgative == 0 || existingPositive == 0) {
-						// not a usefule user for this positive class
-						System.out
-								.println(userid + " is not useful for classes "
-										+ positiveClass);
-						continue;
-					}
-
-					FileUtils.writeStringToFile(
-							FileUtils.getFile(FilenameUtils.concat(OUTPUT_PATH, "c"
-									+ positiveClass), userid + "-counts.txt"),
-							"Positive: " + existingPositive + " - Negative: "
-									+ existingNEgative);
-
-					copyInsts = joinedInsts;
-					if (Config.LOAD_FEATSELECTED_ONLY) {
-
-						File filterFile = FileUtils
-								.getFile(
-										AttributeConsensusRank.OUTPUT_PATH,
-										CLASSIFIER_TO_HONOUR,
-										ATRRSELECTOR_TO_HONOUR,
-										"filter"
-												+ positiveClass
-												+ AttributeConsensusRank.FEAT_SELECTION_FNAME_SUFFIX);
-
-						if (filterFile.exists()) {
-							String remIxes = FileUtils
-									.readFileToString(filterFile);
-							Remove remove = new Remove();
-							remove.setInputFormat(copyInsts);
-							remove.setAttributeIndices(remIxes);
-							copyInsts = Filter.useFilter(copyInsts, remove);
-
-						} else {
-
-							System.out.println("No filter for positiveclass: "
-									+ positiveClass);
-							copyInsts = Filter.useFilter(copyInsts,
-									generalRemove);
-						}
-					}
-
-					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-
-						Add add = new Add();
-						add.setAttributeIndex("last");
-						add.setAttributeName("binary-label");
-						add.setNominalLabels("+1,-1");
-						add.setInputFormat(joinedInsts);
-
-						copyInsts = new Instances(joinedInsts);
-
-						copyInsts = Filter.useFilter(copyInsts, add);
-
-						@SuppressWarnings("rawtypes")
-						Enumeration instEnum = copyInsts.enumerateInstances();
-
-						while (instEnum.hasMoreElements()) {
-							Instance copyInst = (Instance) instEnum
-									.nextElement();
-
-							String cls = Long.toString(Math.round(copyInst
-									.classValue()) + 1);
-
-							String binaryLabel = null;
-							if (positiveClass.contains("+" + cls + "+")) {
-								binaryLabel = "+1";
-
-							} else if (positiveClass.contains("-" + cls + "-")) {
-								binaryLabel = "-1";
-							}
-
-							if (binaryLabel != null) {
-								copyInst.setValue(copyInst.numAttributes() - 1,
-										binaryLabel);
-							} else {
-								copyInst.setMissing(copyInst.numAttributes() - 1);
-							}
-
-							copyInst.setDataset(copyInsts);
-
-						}
-
-						Remove rem = new Remove();
-						// The index range starts from 1 when it
-						// is
-						// text
-						rem.setAttributeIndices(Integer.toString(copyInsts
-								.numAttributes() - 1));
-						rem.setInputFormat(copyInsts);
-						copyInsts = Filter.useFilter(copyInsts, rem);
-
-						copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
-						copyInsts.deleteWithMissingClass();
-					}
-
-					copyInsts.setRelationName(joinedInsts.relationName());
-
-					printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils.concat(OUTPUT_PATH,"c"
-							+ positiveClass),
-							!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
-					++printingJobs;
-				}
-
-				// ArffSaverCallable arffSaveCall = new ArffSaverCallable(
-				// userAppUsage, "ALL", ".app");
-				// // arffSaveCall.outPath = FilenameUtils
-				// // .removeExtension(arffSaveCall.outPath);
-				// // arffSaveCall.outPath += ".app";
-				// printExec.submit(arffSaveCall);
-			}
 			++userIx;
 		}
+
+		for (Future<Integer> addedPrintTasks : transformFutures) {
+			printingJobs += addedPrintTasks.get();
+		}
+
+		tranformExec.shutdown();
 
 		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 
@@ -861,7 +637,7 @@ public class LoadCountsAsAttributes implements
 		shortColNameDict.load(FileUtils.openInputStream(FileUtils
 				.getFile(shotColNamesPath)));
 
-		countExec = Executors.newFixedThreadPool(Config.NUM_THREADS / 2);
+		countExec = Executors.newFixedThreadPool(Config.NUM_THREADS);
 		countEcs = new ExecutorCompletionService<Instances>(countExec);
 
 		// init the enumMap
@@ -987,7 +763,9 @@ public class LoadCountsAsAttributes implements
 							new HashMap<String, Integer>());
 				}
 			}
-			allUsersAppFreqMap.put(userDir.getName(), appFreqMap);
+			synchronized (allUsersAppFreqMap) {
+				allUsersAppFreqMap.put(userDir.getName(), appFreqMap);
+			}
 			CountingCallable countCall = new CountingCallable(userDir,
 					appFreqMap);
 			countEcs.submit(countCall);
@@ -1348,4 +1126,299 @@ public class LoadCountsAsAttributes implements
 		}
 	}
 
+	static class InstancesTransformCallable implements Callable<Integer> {
+
+		private final File userDir;
+		private final HashMap<String, HashMap<String, Integer>> appFreqMap;
+
+		public InstancesTransformCallable(File userDir) {
+			this.userDir = userDir;
+			appFreqMap = allUsersAppFreqMap.get(userDir.getName());
+		}
+
+		@Override
+		public Integer call() throws Exception {
+
+			int printingJobs = 0;
+			Instances userAppUsage = new Instances(userDir.getName(),
+					appUsageAttrsFV, 0);
+			for (File visit : userDir.listFiles()) {
+				for (File microLoc : visit.listFiles()) {
+					Instance microLocAppUsage = new Instance(
+							appUsageAttrsFV.size());
+					microLocAppUsage.setDataset(userAppUsage);
+					HashMap<String, Integer> visitAppFreq = appFreqMap
+							.get(microLoc.getName() + visit.getName());
+					double normalizer = 1;
+					if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+						for (String appUid : visitAppFreq.keySet()) {
+							normalizer += visitAppFreq.get(appUid);
+						}
+					} else if (Config.NORMALIZE_BY
+							.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
+						normalizer = Integer.MIN_VALUE;
+						for (String appUid : visitAppFreq.keySet()) {
+							double c = visitAppFreq.get(appUid);
+							if (normalizer < c) {
+								normalizer = visitAppFreq.get(appUid);
+							}
+						}
+					}
+					for (String appUid : visitAppFreq.keySet()) {
+						Attribute appAttr = appUsageAttrs.get(appUid);
+						if (appAttr == null) {
+							continue;
+						}
+						if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+							microLocAppUsage.setValue(appAttr,
+									visitAppFreq.get(appUid) / normalizer);
+						} else if (Config.NORMALIZE_BY
+								.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
+							microLocAppUsage.setValue(appAttr,
+									MathUtil.tf(visitAppFreq.get(appUid))
+											/ MathUtil.tf(normalizer));
+						} else {
+							microLocAppUsage.setValue(appAttr,
+									MathUtil.tf(visitAppFreq.get(appUid)));
+						}
+					}
+					userAppUsage.add(microLocAppUsage);
+				}
+			}
+
+			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
+				AppsSVMLightSaver saver = null;
+				while ((saver = (AppsSVMLightSaver) AppsSVMLightSaver
+						.acquireSaver(userAppUsage)) == null) {
+					Thread.sleep(500);
+				}
+				try {
+					printExec.submit(saver).get();
+				} finally {
+					saver.release();
+				}
+			} else {
+
+				String userid = userAppUsage.relationName();
+
+				Instances countsInsts = new Instances(Channels.newReader(
+						FileUtils.openInputStream(FileUtils.getFile(TEMP_PATH, // "ALL",
+								userid + ".arff")).getChannel(),
+						Config.OUT_CHARSET));
+				Instances joinedInsts = Instances.mergeInstances(userAppUsage,
+						countsInsts);
+				joinedInsts.setClassIndex(joinedInsts.numAttributes() - 1);
+				joinedInsts.setRelationName(userid);
+				countsInsts = null;
+				userAppUsage = null;
+
+				if (Config.LOADCOUNTS_DELETE_MISSING_CLASS) {
+					// Should have done this earlier
+					// actually
+					joinedInsts.deleteWithMissingClass();
+				}
+
+				Instances copyInsts = joinedInsts;
+				Remove generalRemove;
+				if (Config.LOAD_FEATSELECTED_ONLY) {
+
+					generalRemove = new Remove();
+					String remIxes = FileUtils.readFileToString(FileUtils
+							.getFile(AttributeConsensusRank.OUTPUT_PATH,
+									CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
+					generalRemove = new Remove();
+					generalRemove.setInputFormat(copyInsts);
+					generalRemove.setAttributeIndices(remIxes);
+					copyInsts = Filter.useFilter(copyInsts, generalRemove);
+				}
+
+				copyInsts.setRelationName(joinedInsts.relationName());
+
+				printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils
+						.concat(OUTPUT_PATH, "ALL"),
+						!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
+
+				++printingJobs;
+
+				for (String positiveClass : Config.LABEL_HIERARCHY) {
+					int existingPositive = 0;
+					int existingNEgative = 0;
+					for (String someClass : Config.LABELS_SINGLES) {
+						int clsIx = positiveClass.indexOf(someClass);
+						Boolean clsPositive = null;
+						if (positiveClass.charAt(clsIx + someClass.length()) == '+') {
+							clsPositive = true;
+						} else if (positiveClass.charAt(clsIx
+								+ someClass.length()) == '-') {
+							clsPositive = false;
+						}
+						if (clsPositive == null) {
+							continue; // 1 digit class trapped in a 2 digit
+										// positiveclas
+						}
+						long numForUser;
+						synchronized (userClassCount) {
+							numForUser = userClassCount.get(userid).getCount(
+									someClass);
+						}
+						if (clsPositive) {
+							existingPositive += numForUser;
+						} else {
+							existingNEgative += numForUser;
+						}
+					}
+					if (existingNEgative == 0 || existingPositive == 0) {
+						// not a usefule user for this positive class
+						System.out
+								.println(userid + " is not useful for classes "
+										+ positiveClass);
+						continue;
+					}
+
+					FileUtils.writeStringToFile(
+							FileUtils.getFile(
+									FilenameUtils.concat(OUTPUT_PATH, "c"
+											+ positiveClass), userid
+											+ "-counts.txt"), "Positive: "
+									+ existingPositive + " - Negative: "
+									+ existingNEgative);
+
+					copyInsts = joinedInsts;
+					if (Config.LOAD_FEATSELECTED_ONLY) {
+
+						File filterFile = FileUtils
+								.getFile(
+										AttributeConsensusRank.OUTPUT_PATH,
+										CLASSIFIER_TO_HONOUR,
+										ATRRSELECTOR_TO_HONOUR,
+										"filter"
+												+ positiveClass
+												+ AttributeConsensusRank.FEAT_SELECTION_FNAME_SUFFIX);
+
+						if (filterFile.exists()) {
+							String remIxes = FileUtils
+									.readFileToString(filterFile);
+							Remove remove = new Remove();
+							remove.setInputFormat(copyInsts);
+							remove.setAttributeIndices(remIxes);
+							copyInsts = Filter.useFilter(copyInsts, remove);
+
+						} else {
+
+							System.out.println("No filter for positiveclass: "
+									+ positiveClass);
+							copyInsts = Filter.useFilter(copyInsts,
+									generalRemove);
+						}
+					}
+
+					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+
+						Add add = new Add();
+						add.setAttributeIndex("last");
+						add.setAttributeName("binary-label");
+						add.setNominalLabels("+1,-1");
+						add.setInputFormat(joinedInsts);
+
+						copyInsts = new Instances(joinedInsts);
+
+						copyInsts = Filter.useFilter(copyInsts, add);
+
+						AddID addId = new AddID();
+						addId.setInputFormat(copyInsts);
+						// addId.setIDIndex("first");
+						String idName = "ID";
+						addId.setAttributeName(idName);
+						copyInsts = Filter.useFilter(copyInsts, addId);
+
+						Writer trueLableWr = Channels
+								.newWriter(
+										FileUtils
+												.openOutputStream(
+														FileUtils.getFile(
+																FilenameUtils
+																		.concat(OUTPUT_PATH,
+																				"c"
+																						+ positiveClass),
+																userid
+																		+ "_actual-labels.properties"))
+												.getChannel(),
+										Config.OUT_CHARSET);
+
+						try {
+							@SuppressWarnings("rawtypes")
+							Enumeration instEnum = copyInsts
+									.enumerateInstances();
+
+							while (instEnum.hasMoreElements()) {
+								Instance copyInst = (Instance) instEnum
+										.nextElement();
+
+								String cls = Long.toString(Math.round(copyInst
+										.classValue()) + 1);
+
+								long idVal = Math.round(copyInst.value(0));
+								trueLableWr.append(Long.toString(idVal))
+										.append("=").append(cls).append('\n');
+
+								String binaryLabel = null;
+								if (positiveClass.contains("+" + cls + "+")) {
+									binaryLabel = "+1";
+
+								} else if (positiveClass.contains("-" + cls
+										+ "-")) {
+									binaryLabel = "-1";
+								}
+
+								if (binaryLabel != null) {
+									copyInst.setValue(
+											copyInst.numAttributes() - 1,
+											binaryLabel);
+								} else {
+									copyInst.setMissing(copyInst
+											.numAttributes() - 1);
+								}
+
+								copyInst.setDataset(copyInsts);
+
+							}
+						} finally {
+							trueLableWr.flush();
+							trueLableWr.close();
+						}
+
+						Remove rem = new Remove();
+						// The index range starts from 1 when it
+						// is
+						// text
+						rem.setAttributeIndices(Integer.toString(copyInsts
+								.numAttributes() - 1));
+						rem.setInputFormat(copyInsts);
+						copyInsts = Filter.useFilter(copyInsts, rem);
+
+						copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
+						// Will never happen, and we want to fix the ID
+						// copyInsts.deleteWithMissingClass();
+					}
+
+					copyInsts.setRelationName(joinedInsts.relationName());
+
+					printExec.submit(new ArffSaverCallable(copyInsts,
+							FilenameUtils.concat(OUTPUT_PATH, "c"
+									+ positiveClass),
+							!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
+					++printingJobs;
+				}
+
+				// ArffSaverCallable arffSaveCall = new ArffSaverCallable(
+				// userAppUsage, "ALL", ".app");
+				// // arffSaveCall.outPath = FilenameUtils
+				// // .removeExtension(arffSaveCall.outPath);
+				// // arffSaveCall.outPath += ".app";
+				// printExec.submit(arffSaveCall);
+			}
+			return printingJobs;
+		}
+
+	}
 }

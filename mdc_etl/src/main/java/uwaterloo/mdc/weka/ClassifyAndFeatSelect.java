@@ -7,17 +7,19 @@ import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math.stat.Frequency;
@@ -31,7 +33,6 @@ import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
 import weka.attributeSelection.Ranker;
-import weka.attributeSelection.SVMAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
@@ -39,12 +40,10 @@ import weka.classifiers.functions.LibSVM;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.core.SelectedTag;
 import weka.core.Utils;
 import weka.core.WekaException;
 import weka.core.converters.ArffLoader;
-import weka.filters.Filter;
-import weka.filters.unsupervised.attribute.Add;
-import weka.filters.unsupervised.attribute.Remove;
 
 public class ClassifyAndFeatSelect implements Callable<Void> {
 	// Commented out are Dimensionality reductions that failed
@@ -71,16 +70,27 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 	private class FoldCallable implements Callable<HashMap<String, Double>> {
 
+		final Pattern positiveSplit = Pattern.compile("\\+");
 		final Classifier baseClassifier;
 
 		final int v;
 
-		public FoldCallable(int fold) throws InstantiationException,
-				IllegalAccessException, IllegalArgumentException,
-				InvocationTargetException, NoSuchMethodException,
-				SecurityException {
+		private final File positiveClassDir;
+		private String positiveClass;
+		private String[] pSplits;
+
+		public FoldCallable(File positiveClassDir, int fold)
+				throws InstantiationException, IllegalAccessException,
+				IllegalArgumentException, InvocationTargetException,
+				NoSuchMethodException, SecurityException {
+			this.positiveClassDir = positiveClassDir;
 			this.v = fold;
 			baseClassifier = baseClassifierClazz.getConstructor().newInstance();
+			if (baseClassifier instanceof LibSVM) {
+				baseClassifier.setDebug(false);
+				((LibSVM) baseClassifier).setKernelType(new SelectedTag(
+						LibSVM.KERNELTYPE_POLYNOMIAL, LibSVM.TAGS_KERNELTYPE));
+			}
 		}
 
 		public void correlation(Instances trainInstances) throws IOException {
@@ -248,6 +258,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		@Override
 		public HashMap<String, Double> call() throws Exception {
 			HashMap<String, Double> accuracyMap = new HashMap<String, Double>();
+
 			try {
 				Frequency[] foldConfusionMatrix;
 				foldConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
@@ -268,486 +279,505 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				// train Classifier
 				boolean firstUser = true;
-				for (File positiveClassDir : FileUtils.getFile(inPath)
+
+				positiveClass = positiveClassDir.getName();
+				pSplits = positiveSplit.split(positiveClass);
+
+				int userIx = 0;
+				for (File userData : positiveClassDir
 						.listFiles(new FilenameFilter() {
 
 							@Override
-							public boolean accept(File arg0, String arg1) {
-								if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-									return arg1.startsWith("c");
-								} else {
-									return arg1.equals("ALL");
-								}
+							public boolean accept(File dir, String name) {
+
+								return name.endsWith(".arff");
 							}
 						})) {
-					
-					String positiveClass = positiveClassDir.getName();
-					int userIx = 0;
-					for (File userData : positiveClassDir
-							.listFiles(new FilenameFilter() {
+					if (userIx == Config.NUM_USERS_TO_PROCESS) {
+						break;
+					}
 
-								@Override
-								public boolean accept(File dir, String name) {
+					// File appData = FileUtils.getFile(FilenameUtils
+					// .removeExtension(userData.getAbsolutePath())
+					// + ".app");
 
-									return name.endsWith(".arff");
-								}
-							})) {
-						if (userIx == Config.NUM_USERS_TO_PROCESS) {
-							break;
+					if (userIx == (foldStart + inFoldTestIx)) {
+						validationSet = new Instances(Channels.newReader(
+								FileUtils.openInputStream(userData)
+										.getChannel(), Config.OUT_CHARSET));
+						// Reader appReader =
+						// Channels.newReader(FileUtils
+						// .openInputStream(appData).getChannel(),
+						// Config.OUT_CHARSET);
+						// validationSet = Instances.mergeInstances(new
+						// Instances(
+						// appReader), validationSet);
+						validationSet.setClassIndex(validationSet
+								.numAttributes() - 1);
+						// validationSet.setRelationName(FilenameUtils
+						// .removeExtension(userData.getName()));
+					} else {
+						ArffLoader dataLoader = new ArffLoader();
+						dataLoader.setFile(userData);
+
+						// ArffLoader appLoader = new ArffLoader();
+						// appLoader.setFile(appData);
+
+						// load structure
+						Instances dataStruct = dataLoader.getStructure();
+						dataStruct
+								.setClassIndex(dataStruct.numAttributes() - 1);
+						// Instances appStruct =
+						// appLoader.getStructure();
+						// Instances joinedStruct =
+						// Instances.mergeInstances(
+						// appStruct, dataStruct);
+						// joinedStruct
+						// .setClassIndex(joinedStruct.numAttributes() -
+						// 1);
+						// joinedStruct.setRelationName(FilenameUtils
+						// .removeExtension(userData.getName()));
+
+						if (firstUser) {
+							if (baseClassifier instanceof UpdateableClassifier) {
+								baseClassifier.buildClassifier(dataStruct); // joinedStruct);
+							} else {
+								trainingSet = new Instances(dataStruct); // joinedStruct);
+							}
 						}
 
-						// File appData = FileUtils.getFile(FilenameUtils
-						// .removeExtension(userData.getAbsolutePath())
-						// + ".app");
-
-						if (userIx == (foldStart + inFoldTestIx)) {
-							validationSet = new Instances(Channels.newReader(
-									FileUtils.openInputStream(userData)
-											.getChannel(), Config.OUT_CHARSET));
-							// Reader appReader =
-							// Channels.newReader(FileUtils
-							// .openInputStream(appData).getChannel(),
-							// Config.OUT_CHARSET);
-							// validationSet = Instances.mergeInstances(new
-							// Instances(
-							// appReader), validationSet);
-							 validationSet.setClassIndex(validationSet
-									 .numAttributes() - 1);
-							// validationSet.setRelationName(FilenameUtils
-							// .removeExtension(userData.getName()));
-						} else {
-							ArffLoader dataLoader = new ArffLoader();
-							dataLoader.setFile(userData);
-
-							// ArffLoader appLoader = new ArffLoader();
-							// appLoader.setFile(appData);
-
-							// load structure
-							Instances dataStruct = dataLoader.getStructure();
-							dataStruct.setClassIndex(dataStruct.numAttributes() - 1);
-							// Instances appStruct =
-							// appLoader.getStructure();
-							// Instances joinedStruct =
-							// Instances.mergeInstances(
-							// appStruct, dataStruct);
-							// joinedStruct
-							// .setClassIndex(joinedStruct.numAttributes() -
-							// 1);
-							// joinedStruct.setRelationName(FilenameUtils
-							// .removeExtension(userData.getName()));
-
-							if (firstUser) {
-								if (baseClassifier instanceof UpdateableClassifier) {
-									baseClassifier.buildClassifier(dataStruct); // joinedStruct);
-								} else {
-									trainingSet = new Instances(dataStruct); // joinedStruct);
-								}
-							}
-
-							// load data
-							Instance dataInst;
-							// Instance appInst;
-							// int instIx = 0;
-							while ((dataInst = dataLoader
-									.getNextInstance(dataStruct)) != null) {
-								// appInst =
-								// appLoader.getNextInstance(appStruct);
-								// if (appInst == null) {
-								// throw new Exception(
-								// "App Insances fewer than data instances: "
-								// + instIx);
-								// }
-
-								if (dataInst.classIsMissing()) {
-									// .isMissing(dataInst.numAttributes() -
-									// 1))
-									// {
-									continue;
-								}
-
-								// Instance joinedInst = dataInst
-								// .mergeInstance(appInst);
-								// joinedInst.setDataset(joinedStruct);
-
-								if (baseClassifier instanceof UpdateableClassifier) {
-									((UpdateableClassifier) baseClassifier)
-											.updateClassifier(dataInst); // joinedInst);
-								} else {
-									trainingSet.add(dataInst); // joinedInst);
-								}
-								// ++instIx;
-							}
-							// if (appLoader.getNextInstance(appStruct) !=
-							// null)
-							// {
+						// load data
+						Instance dataInst;
+						// Instance appInst;
+						// int instIx = 0;
+						while ((dataInst = dataLoader
+								.getNextInstance(dataStruct)) != null) {
+							// appInst =
+							// appLoader.getNextInstance(appStruct);
+							// if (appInst == null) {
 							// throw new Exception(
-							// "App Insances more than data instances: "
+							// "App Insances fewer than data instances: "
 							// + instIx);
 							// }
-						}
 
-						// System.out.println(baseClassifierClazz.getSimpleName()
-						// +
-						// " - "
-						// + (System.currentTimeMillis() - startTime) +
-						// " (fold "
-						// + v + "): Done reading user: " +
-						// userData.getName());
-						++userIx;
-					}
-
-					if (baseClassifier instanceof UpdateableClassifier) {
-						// already trained
-					} else {
-						if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION) {
-							if (correlationSummary == null) {
-								correlationSummary = new SummaryStatistics[trainingSet
-										.numAttributes()][];
-								for (int i = 0; i < trainingSet.numAttributes(); ++i) {
-									correlationSummary[i] = new SummaryStatistics[i];
-									for (int j = 0; j < i; ++j) {
-										correlationSummary[i][j] = new SummaryStatistics();
-									}
-								}
-							}
-							correlation(trainingSet);
-						}
-						if (Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO) {
-							mutualInfo(trainingSet);
-							System.out
-									.println(baseClassifierClazz
-											.getSimpleName()
-											+ " - "
-											+ (System.currentTimeMillis() - startTime)
-											+ " (fold "
-											+ v
-											+ "): Calculated info gain matrix for fold : "
-											+ v);
-							return accuracyMap;
-						}
-						baseClassifier.buildClassifier(trainingSet);
-						trainingSet = null;
-					}
-
-					System.out.println(baseClassifierClazz.getSimpleName()
-							+ " - " + (System.currentTimeMillis() - startTime)
-							+ " (fold " + v + "): Finished training for positive class: "
-							+ positiveClass);
-					Writer classificationsWr = Channels
-							.newWriter(
-									FileUtils
-											.openOutputStream(
-													FileUtils
-															.getFile(
-																	outputPath,
-																	baseClassifier
-																			.getClass()
-																			.getName(),
-																	"v"
-																			+ v
-																			+ "_"
-																			+ positiveClass
-																			+ "_classifications.txt"))
-											.getChannel(), Config.OUT_CHARSET);
-
-					try {
-						classificationsWr
-								.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
-
-						// TODONOT: user 113
-						if (validationSet == null || validationSet.numInstances() == 0) {
-							classificationsWr
-									.append("No validation data for fold: " + v + " - class: "
-											+ positiveClass);
-
-						} else {
-							int trueClassificationsCount = 0;
-
-							for (int i = 0; i < validationSet.numInstances(); ++i) {
-								Instance vInst = validationSet.instance(i);
-
-								if (vInst.classIsMissing()) {
-									continue;
-								}
-
-								Instance classMissing = (Instance) vInst.copy();
-								classMissing.setDataset(vInst.dataset());
-								classMissing.setClassMissing();
-								
-								double[] vClassDist = baseClassifier
-										.distributionForInstance(classMissing);
-								classificationsWr.append(vInst.dataset()
-										.relationName() + "[" + i + "]");
-								double vClassMaxProb = Double.NEGATIVE_INFINITY;
-								double vClass = -1;
-								for (int j = 0; j < vClassDist.length; ++j) {
-									classificationsWr.append("\t"
-											+ vClassDist[j]);
-									if (vClassDist[j] > vClassMaxProb) {
-										vClassMaxProb = vClassDist[j];
-										vClass = j + 1;
-									}
-								}
-								classificationsWr.append('\n');
-								// The class "Value" is actually its
-								// index!!!!!!
-								if (vClass == vInst.classValue() + 1) {
-									++trueClassificationsCount;
-								}
-								long trueLabelCfMIx = Math.round(vInst
-										.classValue());
-								// Will not happen at all.. remember that
-								// .classvalue returns the index in the nominal
-								// if(Config.CLASSIFY_USING_BIANRY_ENSEMBLE){
-								// if(trueLabelCfMIx == -1){
-								// trueLabelCfMIx = 0;
-								// }
-								// }
-
-								long bestLabelInt = Math.round(vClass);
-								foldFeactSelectCM[(int) trueLabelCfMIx]
-										.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE?trueLabelCfMIx == bestLabelInt:bestLabelInt));
-								synchronized (totalConfusionMatrix) {
-									totalConfusionMatrix[(int) trueLabelCfMIx]
-											.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE?trueLabelCfMIx == bestLabelInt:bestLabelInt));
-								}
-							}
-							accuracyMap.put(ALL_FEATS, trueClassificationsCount
-									* 1.0 / validationSet.numInstances());
-							synchronized (cvClassificationAccuracyWr) {
-
-								cvClassificationAccuracyWr
-										.append(Integer.toString(v))
-										.append('\t')
-										.append(Integer
-												.toString(trueClassificationsCount))
-										.append('\t')
-										.append(Integer.toString(validationSet
-												.numInstances()))
-										.append('\t')
-										.append(Double.toString(accuracyMap
-												.get(ALL_FEATS))).append('\n');
+							if (dataInst.classIsMissing()) {
+								// .isMissing(dataInst.numAttributes() -
+								// 1))
+								// {
+								continue;
 							}
 
-						}
-					} finally {
-						classificationsWr.flush();
-						classificationsWr.close();
-					}
-					Writer foldConfusionWr = Channels
-							.newWriter(
-									FileUtils
-											.openOutputStream(
-													FileUtils
-															.getFile(
-																	outputPath,
-																	baseClassifier
-																			.getClass()
-																			.getName(),
-																	"v"
-																			+ v
-																			+ "_"
-																			+ positiveClass
-																			+ "_confusion-matrix.txt"))
-											.getChannel(), Config.OUT_CHARSET);
-					try {
-						writeConfusionMatrix(foldConfusionWr, foldFeactSelectCM);
-					} finally {
-						foldConfusionWr.flush();
-						foldConfusionWr.close();
-					}
-					System.out.println(baseClassifierClazz.getSimpleName()
-							+ " - " + (System.currentTimeMillis() - startTime)
-							+ " (fold " + v
-							+ "): Finished validation for  class: "
-							+ positiveClass);
+							// Instance joinedInst = dataInst
+							// .mergeInstance(appInst);
+							// joinedInst.setDataset(joinedStruct);
 
-					// //////////////////////////////////////
-					if (Config.CALSSIFYFEATSELECT_FEAT_SELECT) {
-						for (@SuppressWarnings("rawtypes")
-						Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
-
-							@SuppressWarnings("unchecked")
-							ASEvaluation eval = (ASEvaluation) attrSelectEvalClazz
-									.getConstructor().newInstance();
-
-							if (eval instanceof GainRatioAttributeEval) {
-								((GainRatioAttributeEval) eval)
-										.setMissingMerge(false);
-							}
-
-							ASSearch search;
-							if (eval instanceof SubsetEvaluator) {
-								search = new GreedyStepwise();
-								// ((GreedyStepwise)
-								// search).setSearchBackwards(true);
-								// ((GreedyStepwise)
-								// search).setNumToSelect(this.baseClassifier.)
-								((GreedyStepwise) search)
-										.setGenerateRanking(true);
+							if (baseClassifier instanceof UpdateableClassifier) {
+								((UpdateableClassifier) baseClassifier)
+										.updateClassifier(dataInst); // joinedInst);
 							} else {
-								search = new Ranker();
+								trainingSet.add(dataInst); // joinedInst);
 							}
+							// ++instIx;
+						}
+						// if (appLoader.getNextInstance(appStruct) !=
+						// null)
+						// {
+						// throw new Exception(
+						// "App Insances more than data instances: "
+						// + instIx);
+						// }
+					}
 
-							// if (eval instanceof SVMAttributeEval) {
-							//
-							// Add add = new Add();
-							// add.setAttributeIndex("last");
-							// add.setAttributeName("binary-label");
-							// add.setNominalLabels("+1,-1");
-							// add.setInputFormat(validationSet);
-							//
-							// for (String positiveClass :
-							// Config.LABEL_HIERARCHY) { // classes
-							//
-							// Instances copyValidation = new Instances(
-							// validationSet);
-							//
-							// // Should have done this earlier
-							// // actually
-							// copyValidation.deleteWithMissingClass();
-							//
-							// copyValidation = Filter.useFilter(
-							// copyValidation, add);
-							//
-							// @SuppressWarnings("rawtypes")
-							// Enumeration instEnum = copyValidation
-							// .enumerateInstances();
-							// int positiveExamples = 0;
-							// while (instEnum.hasMoreElements()) {
-							// Instance copyInst = (Instance) instEnum
-							// .nextElement();
-							//
-							// String cls = Long.toString(Math
-							// .round(copyInst
-							// .classValue()) + 1);
-							//
-							// String binaryLabel = null;
-							// if (positiveClass.contains("+"
-							// + cls + "+")) {
-							// binaryLabel = "+1";
-							// ++positiveExamples;
-							//
-							// } else if (positiveClass
-							// .contains("-" + cls + "-")) {
-							// binaryLabel = "-1";
-							// }
-							//
-							// if (binaryLabel != null) {
-							// copyInst.setValue(copyInst
-							// .numAttributes() - 1,
-							// binaryLabel);
-							// } else {
-							// copyInst.setMissing(copyInst
-							// .numAttributes() - 1);
-							// }
-							//
-							// copyInst.setDataset(copyValidation);
-							//
-							// }
-							//
-							// Remove rem = new Remove();
-							// // The index range starts from 1 when it
-							// // is
-							// // text
-							// rem.setAttributeIndices(Integer
-							// .toString(copyValidation
-							// .numAttributes() - 1));
-							// rem.setInputFormat(copyValidation);
-							// copyValidation = Filter.useFilter(
-							// copyValidation, rem);
-							//
-							// copyValidation
-							// .setClassIndex(copyValidation
-							// .numAttributes() - 1);
-							// copyValidation.deleteWithMissingClass();
-							//
-							// copyValidation
-							// .setRelationName(validationSet
-							// .getRevision()
-							// + positiveClass);
-							//
-							// if (positiveExamples > 0) {
-							// HashMap<String, Double> tempAccuracy = new
-							// HashMap<String, Double>();
-							// Frequency[] tempCM;
-							// tempCM = new
-							// Frequency[Config.LABEL_HIERARCHY.length];
-							// for (int c = 0; c < tempCM.length; ++c) {
-							// tempCM[c] = new Frequency();
-							// }
-							// featSel(copyValidation, tempCM,
-							// eval, search, tempAccuracy,
-							// "v" + v + "_"
-							// + positiveClass);
-							// for (String accuKeys : tempAccuracy
-							// .keySet()) {
-							// accuracyMap
-							// .put(accuKeys
-							// + positiveClass,
-							// tempAccuracy
-							// .get(accuKeys));
-							// }
-							// // The confusion matrix needs some
-							// // tweeking,
-							// // lest it throws exceptions (Null
-							// // or o
-							// // bound)
-							// // Writer tempCmWr = Channels
-							// // .newWriter(
-							// // FileUtils
-							// // .openOutputStream(
-							// // FileUtils
-							// // .getFile(
-							// // outputPath,
-							// // baseClassifier
-							// // .getClass()
-							// // .getName(),
-							// // "v"
-							// // + v
-							// // + "svm"
-							// // + positiveClass
-							// // + "_confusion-matrix.txt"))
-							// // .getChannel(),
-							// // Config.OUT_CHARSET);
-							// // try {
-							// // writeConfusionMatrix(tempCmWr,
-							// // tempCM);
-							// // } finally {
-							// // tempCmWr.flush();
-							// // tempCmWr.close();
-							// // }
-							// }
-							// }
-							// } else {
-							featSel(validationSet, foldFeactSelectCM, eval,
-									search, accuracyMap, "v" + v + "_"
-											+ positiveClass);
+					// System.out.println(baseClassifierClazz.getSimpleName()
+					// +
+					// " - "
+					// + (System.currentTimeMillis() - startTime) +
+					// " (fold "
+					// + v + "): Done reading user: " +
+					// userData.getName());
+					++userIx;
+				}
 
+				if (baseClassifier instanceof UpdateableClassifier) {
+					// already trained
+				} else {
+					if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION) {
+						if (correlationSummary == null) {
+							correlationSummary = new SummaryStatistics[trainingSet
+									.numAttributes()][];
+							for (int i = 0; i < trainingSet.numAttributes(); ++i) {
+								correlationSummary[i] = new SummaryStatistics[i];
+								for (int j = 0; j < i; ++j) {
+									correlationSummary[i][j] = new SummaryStatistics();
+								}
+							}
+						}
+						correlation(trainingSet);
+					}
+					if (Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO) {
+						mutualInfo(trainingSet);
+						System.out.println(baseClassifierClazz.getSimpleName()
+								+ " - "
+								+ (System.currentTimeMillis() - startTime)
+								+ " (fold " + v
+								+ "): Calculated info gain matrix for fold : "
+								+ v);
+						return accuracyMap;
+					}
+					baseClassifier.buildClassifier(trainingSet);
+					trainingSet = null;
+				}
+
+				System.out.println(baseClassifierClazz.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime) + " (fold "
+						+ v + "): Finished training for positive class: "
+						+ positiveClass);
+
+				// ////////////////////*********************/////////////////////////
+
+				if (validationSet == null || validationSet.numInstances() == 0) {
+					System.err.println("No validation data for fold: " + v
+							+ " - class: " + positiveClass);
+					return accuracyMap;
+				}
+
+				Properties validationActualCs = new Properties();
+				validationActualCs.load(Channels.newReader(
+						FileUtils.openInputStream(
+								FileUtils.getFile(positiveClassDir,
+										validationSet.relationName()
+												+ "_actual-labels.properties"))
+								.getChannel(), Config.OUT_CHARSET));
+
+				Writer classificationsWr = Channels
+						.newWriter(
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																outputPath,
+																baseClassifier
+																		.getClass()
+																		.getName(),
+																"v"
+																		+ v
+																		+ "_"
+																		+ positiveClass
+																		+ "_classifications.txt"))
+										.getChannel(), Config.OUT_CHARSET);
+
+				try {
+					classificationsWr
+							.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+
+					// TODONOT: user 113
+
+					int trueClassificationsCount = 0;
+					int totalClassificationsCount = validationSet
+							.numInstances();
+					for (int i = 0; i < validationSet.numInstances(); ++i) {
+						Instance vInst = validationSet.instance(i);
+
+						if (vInst.classIsMissing()) {
+							continue;
 						}
 
-						// // //////////////////////////////////////
-						// // //////////////////////////////////////
+						Instance classMissing = (Instance) vInst.copy();
+						classMissing.setDataset(vInst.dataset());
+						classMissing.setClassMissing();
+
+						double[] vClassDist = baseClassifier
+								.distributionForInstance(classMissing);
+						classificationsWr.append(vInst.dataset().relationName()
+								+ "[" + i + "]");
+						double vClassMaxProb = Double.NEGATIVE_INFINITY;
+						double vClass = -1;
+						for (int j = 0; j < vClassDist.length; ++j) {
+							classificationsWr.append("\t" + vClassDist[j]);
+							if (vClassDist[j] > vClassMaxProb) {
+								vClassMaxProb = vClassDist[j];
+								vClass = j + 1;
+							}
+						}
+						classificationsWr.append('\n');
+						// The class "Value" is actually its
+						// index!!!!!!
+
+						if (vClass == vInst.classValue() + 1) {
+							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+								if (pSplits.length == 3) {
+									// there can be only 1 +C+
+									String actualC = validationActualCs
+											.getProperty(Long.toString(Math
+													.round(vInst.value(0))));
+									if (pSplits[1].equals(actualC)) {
+										++trueClassificationsCount;
+									}
+								} else {
+									--totalClassificationsCount;
+								}
+							} else {
+								++trueClassificationsCount;
+							}
+						}
+
+						long trueLabelCfMIx;
+						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							trueLabelCfMIx = Long.parseLong(validationActualCs
+									.getProperty(Long.toString(Math.round(vInst
+											.value(0))))) - 1; // ID is at index
+																// 0
+						} else {
+							trueLabelCfMIx = Math.round(vInst.classValue());
+						}
+						// Will not happen at all.. remember that
+						// .classvalue returns the index in the nominal
+						// if(Config.CLASSIFY_USING_BIANRY_ENSEMBLE){
+						// if(trueLabelCfMIx == -1){
+						// trueLabelCfMIx = 0;
+						// }
+						// }
+
+						long bestLabelInt = Math.round(vClass);
+						foldFeactSelectCM[(int) trueLabelCfMIx]
+								.addValue(bestLabelInt);
+						// foldFeactSelectCM[(int) trueLabelCfMIx]
+						// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
+						// trueLabelCfMIx == bestLabelInt
+						// : bestLabelInt));
+						synchronized (totalConfusionMatrix) {
+							totalConfusionMatrix.get(positiveClass)[(int) trueLabelCfMIx]
+									.addValue(bestLabelInt);
+							// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE
+							// ? trueLabelCfMIx == bestLabelInt
+							// : bestLabelInt));
+						}
+					}
+					if (totalClassificationsCount > 0) {
+						accuracyMap.put(ALL_FEATS, trueClassificationsCount
+								* 1.0 / totalClassificationsCount);
+
+						synchronized (cvClassificationAccuracyWr) {
+
+							cvClassificationAccuracyWr
+									.get(positiveClass)
+									.append(Integer.toString(v))
+									.append('\t')
+									.append(Integer
+											.toString(trueClassificationsCount))
+									.append('\t')
+									.append(Integer
+											.toString(totalClassificationsCount))
+									.append('\t')
+									.append(Double.toString(accuracyMap
+											.get(ALL_FEATS))).append('\n');
+						}
+					}
+				} finally {
+					classificationsWr.flush();
+					classificationsWr.close();
+				}
+				Writer foldConfusionWr = Channels.newWriter(
+						FileUtils.openOutputStream(
+								FileUtils.getFile(outputPath, baseClassifier
+										.getClass().getName(), "v" + v + "_"
+										+ positiveClass
+										+ "_confusion-matrix.txt"))
+								.getChannel(), Config.OUT_CHARSET);
+				try {
+					writeConfusionMatrix(foldConfusionWr, foldFeactSelectCM);
+				} finally {
+					foldConfusionWr.flush();
+					foldConfusionWr.close();
+				}
+				System.out.println(baseClassifierClazz.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime) + " (fold "
+						+ v + "): Finished validation for  class: "
+						+ positiveClass);
+
+				// //////////////////////////////////////
+				if (Config.CALSSIFYFEATSELECT_FEAT_SELECT) {
+					for (@SuppressWarnings("rawtypes")
+					Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
+
+						@SuppressWarnings("unchecked")
+						ASEvaluation eval = (ASEvaluation) attrSelectEvalClazz
+								.getConstructor().newInstance();
+
+						if (eval instanceof GainRatioAttributeEval) {
+							((GainRatioAttributeEval) eval)
+									.setMissingMerge(false);
+						}
+
+						ASSearch search;
+						if (eval instanceof SubsetEvaluator) {
+							search = new GreedyStepwise();
+							// ((GreedyStepwise)
+							// search).setSearchBackwards(true);
+							// ((GreedyStepwise)
+							// search).setNumToSelect(this.baseClassifier.)
+							((GreedyStepwise) search).setGenerateRanking(true);
+						} else {
+							search = new Ranker();
+						}
+
+						// if (eval instanceof SVMAttributeEval) {
 						//
-						// for (@SuppressWarnings("rawtypes")
-						// Class attrTransEvalClazz :
-						// attrTransEvaluationClazzes) {
+						// Add add = new Add();
+						// add.setAttributeIndex("last");
+						// add.setAttributeName("binary-label");
+						// add.setNominalLabels("+1,-1");
+						// add.setInputFormat(validationSet);
 						//
-						// @SuppressWarnings("unchecked")
-						// ASEvaluation eval = (ASEvaluation)
-						// attrTransEvalClazz
-						// .getConstructor().newInstance();
+						// for (String positiveClass :
+						// Config.LABEL_HIERARCHY) { // classes
 						//
-						// ASSearch search;
-						// search = new Ranker();
+						// Instances copyValidation = new Instances(
+						// validationSet);
 						//
-						// featSel(validationSet, foldFeactSelectCM, eval,
-						// search,
-						// accuracyMap);
+						// // Should have done this earlier
+						// // actually
+						// copyValidation.deleteWithMissingClass();
+						//
+						// copyValidation = Filter.useFilter(
+						// copyValidation, add);
+						//
+						// @SuppressWarnings("rawtypes")
+						// Enumeration instEnum = copyValidation
+						// .enumerateInstances();
+						// int positiveExamples = 0;
+						// while (instEnum.hasMoreElements()) {
+						// Instance copyInst = (Instance) instEnum
+						// .nextElement();
+						//
+						// String cls = Long.toString(Math
+						// .round(copyInst
+						// .classValue()) + 1);
+						//
+						// String binaryLabel = null;
+						// if (positiveClass.contains("+"
+						// + cls + "+")) {
+						// binaryLabel = "+1";
+						// ++positiveExamples;
+						//
+						// } else if (positiveClass
+						// .contains("-" + cls + "-")) {
+						// binaryLabel = "-1";
+						// }
+						//
+						// if (binaryLabel != null) {
+						// copyInst.setValue(copyInst
+						// .numAttributes() - 1,
+						// binaryLabel);
+						// } else {
+						// copyInst.setMissing(copyInst
+						// .numAttributes() - 1);
+						// }
+						//
+						// copyInst.setDataset(copyValidation);
 						//
 						// }
-						// //////////////////////////////////////
+						//
+						// Remove rem = new Remove();
+						// // The index range starts from 1 when it
+						// // is
+						// // text
+						// rem.setAttributeIndices(Integer
+						// .toString(copyValidation
+						// .numAttributes() - 1));
+						// rem.setInputFormat(copyValidation);
+						// copyValidation = Filter.useFilter(
+						// copyValidation, rem);
+						//
+						// copyValidation
+						// .setClassIndex(copyValidation
+						// .numAttributes() - 1);
+						// copyValidation.deleteWithMissingClass();
+						//
+						// copyValidation
+						// .setRelationName(validationSet
+						// .getRevision()
+						// + positiveClass);
+						//
+						// if (positiveExamples > 0) {
+						// HashMap<String, Double> tempAccuracy = new
+						// HashMap<String, Double>();
+						// Frequency[] tempCM;
+						// tempCM = new
+						// Frequency[Config.LABEL_HIERARCHY.length];
+						// for (int c = 0; c < tempCM.length; ++c) {
+						// tempCM[c] = new Frequency();
+						// }
+						// featSel(copyValidation, tempCM,
+						// eval, search, tempAccuracy,
+						// "v" + v + "_"
+						// + positiveClass);
+						// for (String accuKeys : tempAccuracy
+						// .keySet()) {
+						// accuracyMap
+						// .put(accuKeys
+						// + positiveClass,
+						// tempAccuracy
+						// .get(accuKeys));
+						// }
+						// // The confusion matrix needs some
+						// // tweeking,
+						// // lest it throws exceptions (Null
+						// // or o
+						// // bound)
+						// // Writer tempCmWr = Channels
+						// // .newWriter(
+						// // FileUtils
+						// // .openOutputStream(
+						// // FileUtils
+						// // .getFile(
+						// // outputPath,
+						// // baseClassifier
+						// // .getClass()
+						// // .getName(),
+						// // "v"
+						// // + v
+						// // + "svm"
+						// // + positiveClass
+						// // + "_confusion-matrix.txt"))
+						// // .getChannel(),
+						// // Config.OUT_CHARSET);
+						// // try {
+						// // writeConfusionMatrix(tempCmWr,
+						// // tempCM);
+						// // } finally {
+						// // tempCmWr.flush();
+						// // tempCmWr.close();
+						// // }
+						// }
+						// }
+						// } else {
+						featSel(validationSet, foldFeactSelectCM, eval, search,
+								accuracyMap, "v" + v, validationActualCs);
+
 					}
+
+					// // //////////////////////////////////////
+					// // //////////////////////////////////////
+					//
+					// for (@SuppressWarnings("rawtypes")
+					// Class attrTransEvalClazz :
+					// attrTransEvaluationClazzes) {
+					//
+					// @SuppressWarnings("unchecked")
+					// ASEvaluation eval = (ASEvaluation)
+					// attrTransEvalClazz
+					// .getConstructor().newInstance();
+					//
+					// ASSearch search;
+					// search = new Ranker();
+					//
+					// featSel(validationSet, foldFeactSelectCM, eval,
+					// search,
+					// accuracyMap);
+					//
+					// }
+					// //////////////////////////////////////
 				}
 
 			} catch (Exception ignored) {
@@ -758,8 +788,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		void featSel(Instances validationSet, Frequency[] foldFeactSelectCM,
 				ASEvaluation eval, ASSearch search,
-				HashMap<String, Double> accuracyMap, String filenamePfx)
-				throws IOException {
+				HashMap<String, Double> accuracyMap, String filenamePfx,
+				Properties validationActualCs) throws IOException {
 			AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
 			featSelector.setClassifier(baseClassifier);
 			featSelector.setEvaluator(eval);
@@ -769,7 +799,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outputPath, baseClassifier
 									.getClass().getName(), eval.getClass() // attrSelectEvalClazz
-									.getName(), filenamePfx
+									.getName(), filenamePfx + "_"
+									+ positiveClass
 									+ "_feat-selected-classifications.txt"))
 							.getChannel(), Config.OUT_CHARSET);
 			try {
@@ -782,7 +813,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				} else {
 					int featSelectCorrectCount = 0;
-
+					int featSelTotalCount = validationSet.numInstances();
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
@@ -808,46 +839,85 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							}
 						}
 						featSelectWr.append('\n');
-						// The class "Value" is actually its index!!!!!!
+						// // The class "Value" is actually its index!!!!!!
+						// if (vClass == vInst.classValue() + 1) {
+						// ++featSelectCorrectCount;
+						// }
 						if (vClass == vInst.classValue() + 1) {
-							++featSelectCorrectCount;
+							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+								if (pSplits.length == 3) {
+									// there can be only 1 +C+
+									String actualC = validationActualCs
+											.getProperty(Long.toString(Math
+													.round(vInst.value(0))));
+									if (pSplits[1].equals(actualC)) {
+										++featSelectCorrectCount;
+									}
+								} else {
+									--featSelTotalCount;
+								}
+							} else {
+								++featSelectCorrectCount;
+							}
 						}
-						long trueLabelCfMIx = Math.round(vInst.classValue());
+						long trueLabelCfMIx;
+						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							trueLabelCfMIx = Long.parseLong(validationActualCs
+									.getProperty(Long.toString(Math.round(vInst
+											.value(0))))) - 1; // ID is at index
+																// 0
+						} else {
+							trueLabelCfMIx = Math.round(vInst.classValue());
+						}
 						long bestLabelInt = Math.round(vClass);
+
+						// foldFeactSelectCM[(int) trueLabelCfMIx]
+						// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
+						// trueLabelCfMIx == bestLabelInt
+						// : bestLabelInt));
+
 						foldFeactSelectCM[(int) trueLabelCfMIx]
-								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE?trueLabelCfMIx == bestLabelInt:bestLabelInt));
+								.addValue(bestLabelInt);
+
 						synchronized (totalFeatSelectCM) {
-							totalFeatSelectCM.get(eval.getClass() // attrSelectEvalClazz
-									.getName() /*
-												 * + searchClazz . getName
-												 */)[(int) trueLabelCfMIx]
-									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE?trueLabelCfMIx == bestLabelInt:bestLabelInt));
+							totalFeatSelectCM.get(positiveClass).get(
+									eval.getClass() // attrSelectEvalClazz
+											.getName() /*
+														 * + searchClazz .
+														 * getName
+														 */)[(int) trueLabelCfMIx]
+									.addValue(bestLabelInt);
+							// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE
+							// ? trueLabelCfMIx == bestLabelInt
+							// : bestLabelInt));
 						}
 					}
-					// a map of accuracies for different algot
-					accuracyMap.put(eval.getClass() // attrSelectEvalClazz
-							.getName(), featSelectCorrectCount * 1.0
-							/ validationSet.numInstances());
-					synchronized (cvFeatSelectAccuracyWr) {
+					if (featSelTotalCount > 0) {
+						// a map of accuracies for different algot
+						accuracyMap.put(eval.getClass() // attrSelectEvalClazz
+								.getName(), featSelectCorrectCount * 1.0
+								/ featSelTotalCount);
+						synchronized (cvFeatSelectAccuracyWr) {
 
-						cvFeatSelectAccuracyWr
-								.get(eval.getClass() // attrSelectEvalClazz
-										.getName() /*
-													 * + searchClazz . getName
-													 */)
-								.append(Integer.toString(v))
-								.append('\t')
-								.append(Integer
-										.toString(featSelectCorrectCount))
-								.append('\t')
-								.append(Integer.toString(validationSet
-										.numInstances()))
-								.append('\t')
-								.append(Double.toString(accuracyMap.get(eval
-										.getClass() // attrSelectEvalClazz
-										.getName()))).append('\n');
+							cvFeatSelectAccuracyWr
+									.get(eval.getClass() // attrSelectEvalClazz
+											.getName() /*
+														 * + searchClazz .
+														 * getName
+														 */)
+									.get(positiveClass)
+									.append(Integer.toString(v))
+									.append('\t')
+									.append(Integer
+											.toString(featSelectCorrectCount))
+									.append('\t')
+									.append(Integer.toString(featSelTotalCount))
+									.append('\t')
+									.append(Double.toString(accuracyMap
+											.get(eval.getClass() // attrSelectEvalClazz
+													.getName()))).append('\n');
+						}
 					}
-
 				}
 			} catch (WekaException ignored) {
 				if (ignored.getMessage().startsWith(
@@ -879,68 +949,112 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	// juust one for all threads
 	static SummaryStatistics[][] correlationSummary;
 
-	private String outputPath = "C:\\mdc-datasets\\weka\\validation";
+	private String outputPath = (Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO ? "C:\\mdc-datasets\\weka\\mutual-info"
+			: "C:\\mdc-datasets\\weka\\validation");
 	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user";
 
-	private final Frequency[] totalConfusionMatrix;
-	private final HashMap<String, Frequency[]> totalFeatSelectCM;
+	private final Map<String, Frequency[]> totalConfusionMatrix;
+	private final Map<String, Map<String, Frequency[]>> totalFeatSelectCM;
 	private long startTime = System.currentTimeMillis();
 
 	private final int inFoldTestIx = new Random(System.currentTimeMillis())
 			.nextInt(Config.VALIDATION_FOLD_WIDTH);
 
-	private final Writer cvClassificationAccuracyWr;
-	private final HashMap<String, Writer> cvFeatSelectAccuracyWr;
+	private final Map<String, Writer> cvClassificationAccuracyWr;
+	private final Map<String, Map<String, Writer>> cvFeatSelectAccuracyWr;
 
 	private Class<? extends Classifier> baseClassifierClazz;
+	private File[] classHierDirs = FileUtils.getFile(inPath).listFiles(
+			new FilenameFilter() {
+
+				@Override
+				public boolean accept(File arg0, String arg1) {
+					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+						return arg1.startsWith("c");
+					} else {
+						return arg1.equals("ALL");
+					}
+				}
+			});
 
 	public ClassifyAndFeatSelect(Class<? extends Classifier> baseClassifierClazz)
 			throws IOException {
 		this.baseClassifierClazz = baseClassifierClazz;
 
-		totalConfusionMatrix = new Frequency[Config.LABELS_SINGLES.length];
-		for (int i = 0; i < totalConfusionMatrix.length; ++i) {
-			totalConfusionMatrix[i] = new Frequency();
-		}
-		cvClassificationAccuracyWr = Channels
-				.newWriter(
+		totalConfusionMatrix = Collections
+				.synchronizedMap(new HashMap<String, Frequency[]>());
+		cvClassificationAccuracyWr = Collections
+				.synchronizedMap(new HashMap<String, Writer>());
+		totalFeatSelectCM = Collections
+				.synchronizedMap(new HashMap<String, Map<String, Frequency[]>>());
+		cvFeatSelectAccuracyWr = Collections
+				.synchronizedMap(new HashMap<String, Map<String, Writer>>());
+
+		for (File positiveClassDir : classHierDirs) {
+			String positiveClass = positiveClassDir.getName();
+
+			Frequency[] pcCM = new Frequency[Config.LABELS_SINGLES.length];
+			for (int i = 0; i < pcCM.length; ++i) {
+				pcCM[i] = new Frequency();
+			}
+			totalConfusionMatrix.put(positiveClass, pcCM);
+
+			cvClassificationAccuracyWr
+					.put(positiveClass,
+							Channels.newWriter(
+									FileUtils
+											.openOutputStream(
+													FileUtils
+															.getFile(
+																	outputPath,
+																	baseClassifierClazz
+																			.getName(),
+																	positiveClass
+																			+ "_classification-accuracy-cv.txt"))
+											.getChannel(), Config.OUT_CHARSET));
+			cvClassificationAccuracyWr.get(positiveClass).append("vFold")
+					.append('\t').append("trueN").append('\t').append("totalN")
+					.append('\t').append("accuracy").append('\n');
+
+			Map<String, Frequency[]> pcTotalFeatSelectCM = Collections
+					.synchronizedMap(new HashMap<String, Frequency[]>());
+			;
+			Map<String, Writer> pcCvFeatSelectAccuracyWr = Collections
+					.synchronizedMap(new HashMap<String, Writer>());
+			for (@SuppressWarnings("rawtypes")
+			Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
+				Frequency[] freqArr = new Frequency[Config.LABELS_SINGLES.length];
+				for (int i = 0; i < freqArr.length; ++i) {
+					freqArr[i] = new Frequency();
+				}
+				pcTotalFeatSelectCM.put(attrSelectEvalClazz.getName() /*
+																	 * +
+																	 * searchClazz
+																	 */,
+						freqArr);
+
+				Writer writer = Channels.newWriter(
 						FileUtils.openOutputStream(
 								FileUtils.getFile(outputPath,
 										baseClassifierClazz.getName(),
-										"classification-accuracy-cv.txt"))
+										attrSelectEvalClazz.getName() /*
+																	 * +
+																	 * searchClazz
+																	 */,
+										"feat-selected-accuracy-cv.txt"))
 								.getChannel(), Config.OUT_CHARSET);
-		cvClassificationAccuracyWr.append("vFold").append('\t').append("trueN")
-				.append('\t').append("totalN").append('\t').append("accuracy")
-				.append('\n');
 
-		totalFeatSelectCM = new HashMap<String, Frequency[]>();
-		cvFeatSelectAccuracyWr = new HashMap<String, Writer>();
-		for (@SuppressWarnings("rawtypes")
-		Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
-			Frequency[] freqArr = new Frequency[Config.LABELS_SINGLES.length];
-			for (int i = 0; i < freqArr.length; ++i) {
-				freqArr[i] = new Frequency();
+				writer.append("vFold").append('\t').append("trueN")
+						.append('\t').append("totalN").append('\t')
+						.append("accuracy").append('\n');
+				pcCvFeatSelectAccuracyWr.put(
+						attrSelectEvalClazz.getName() /*
+													 * + searchClazz
+													 */, writer);
+
 			}
-			totalFeatSelectCM.put(
-					attrSelectEvalClazz.getName() /* + searchClazz */, freqArr);
-
-			Writer writer = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath,
-									baseClassifierClazz.getName(),
-									attrSelectEvalClazz.getName() /*
-																 * + searchClazz
-																 */,
-									"feat-selected-accuracy-cv.txt"))
-							.getChannel(), Config.OUT_CHARSET);
-
-			writer.append("vFold").append('\t').append("trueN").append('\t')
-					.append("totalN").append('\t').append("accuracy")
-					.append('\n');
-			cvFeatSelectAccuracyWr
-					.put(attrSelectEvalClazz.getName() /* + searchClazz */,
-							writer);
-
+			totalFeatSelectCM.put(positiveClass, pcTotalFeatSelectCM);
+			cvFeatSelectAccuracyWr.put(positiveClass, pcCvFeatSelectAccuracyWr);
 		}
 
 	}
@@ -1029,10 +1143,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					.newFixedThreadPool(Config.NUM_THREADS);
 			ArrayList<Future<HashMap<String, Double>>> foldFutures = new ArrayList<Future<HashMap<String, Double>>>();
 			int numClassifyTasks = 0;
-			for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
-				FoldCallable FoldCallable = new FoldCallable(v);
-				foldFutures.add(foldExecutors.submit(FoldCallable));
-				++numClassifyTasks;
+			for (File positiveClassDir : classHierDirs) {
+				for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
+					FoldCallable FoldCallable = new FoldCallable(
+							positiveClassDir, v);
+					foldFutures.add(foldExecutors.submit(FoldCallable));
+					++numClassifyTasks;
+				}
 			}
 			for (int i = 0; i < numClassifyTasks; ++i) {
 				HashMap<String, Double> accuracies = foldFutures.get(i).get();
@@ -1078,11 +1195,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				Thread.sleep(1000);
 			}
 		} finally {
-			cvClassificationAccuracyWr.flush();
-			cvClassificationAccuracyWr.close();
-			for (Writer wr : cvFeatSelectAccuracyWr.values()) {
+			for (Writer wr : cvClassificationAccuracyWr.values()) {
 				wr.flush();
 				wr.close();
+			}
+			for (Map<String, Writer> pcCvFeatSelectAccuracyWr : cvFeatSelectAccuracyWr
+					.values()) {
+				for (Writer wr : pcCvFeatSelectAccuracyWr.values()) {
+					wr.flush();
+					wr.close();
+				}
 			}
 		}
 		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
@@ -1098,44 +1220,56 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							accuracySummaryFeatSelected.get(clazz.getName())
 									.toString());
 		}
-		Writer totalConfusionWr = Channels.newWriter(
-				FileUtils.openOutputStream(
-						FileUtils.getFile(outputPath,
-								baseClassifierClazz.getName(),
-								"confusion-matrix.txt")).getChannel(),
-				Config.OUT_CHARSET);
-		try {
-			writeConfusionMatrix(totalConfusionWr, totalConfusionMatrix);
-		} finally {
-			totalConfusionWr.flush();
-			totalConfusionWr.close();
-		}
-
-		for (@SuppressWarnings("rawtypes")
-		Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
-			Writer featSelectedConfusionWr = Channels.newWriter(
+		for (File positiveClassDir : classHierDirs) {
+			String positiveClass = positiveClassDir.getName();
+			Writer totalConfusionWr = Channels.newWriter(
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outputPath,
 									baseClassifierClazz.getName(),
-									attrSelectEvalClazz.getName(),
-									/* searchClazz.getName() */
-									"feat-selected-confusion-matrix.txt"))
+									positiveClass + "_confusion-matrix.txt"))
 							.getChannel(), Config.OUT_CHARSET);
 			try {
-				writeConfusionMatrix(
-						featSelectedConfusionWr,
-						totalFeatSelectCM.get(attrSelectEvalClazz.getName()/*
-																			 * +
-																			 * searchClazz
-																			 * .
-																			 * getName
-																			 */));
+				writeConfusionMatrix(totalConfusionWr,
+						totalConfusionMatrix.get(positiveClass));
 			} finally {
-				featSelectedConfusionWr.flush();
-				featSelectedConfusionWr.close();
+				totalConfusionWr.flush();
+				totalConfusionWr.close();
+			}
+
+			for (@SuppressWarnings("rawtypes")
+			Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
+				Writer featSelectedConfusionWr = Channels
+						.newWriter(
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																outputPath,
+																baseClassifierClazz
+																		.getName(),
+																attrSelectEvalClazz
+																		.getName(),
+																/*
+																 * searchClazz.
+																 * getName()
+																 */
+																positiveClass
+																		+ "_feat-selected-confusion-matrix.txt"))
+										.getChannel(), Config.OUT_CHARSET);
+				try {
+					writeConfusionMatrix(
+							featSelectedConfusionWr,
+							totalFeatSelectCM.get(positiveClass).get(
+									attrSelectEvalClazz.getName()/*
+																 * + searchClazz
+																 * . getName
+																 */));
+				} finally {
+					featSelectedConfusionWr.flush();
+					featSelectedConfusionWr.close();
+				}
 			}
 		}
-
 		if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION
 				&& correlationSummary != null) {
 			Writer corrWr = Channels.newWriter(
@@ -1167,22 +1301,37 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 	public static void writeConfusionMatrix(Writer foldConfusionWr,
 			Frequency[] foldConfusionMatrix) throws IOException {
-		if(foldConfusionMatrix.length == 0){
+		if (foldConfusionMatrix.length == 0) {
 			foldConfusionWr.append("EMPTY");
 			return;
 		}
-		foldConfusionWr.append("label");
-		Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0].valuesIterator();
-		while(valsIster.hasNext()){
-			foldConfusionWr.append('\t').append(valsIster.next().toString());
+		if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+			foldConfusionWr.append("label\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
+		} else {
+			foldConfusionWr.append("label\tTRUE\tFALSE\n");
+			// Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
+			// .valuesIterator();
+			// while (valsIster.hasNext()) {
+			// foldConfusionWr.append('\t').append(valsIster.next().toString());
+			// }
 		}
 		foldConfusionWr.append('\n');
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i + 1));
 			long totalCount = 0;
-			valsIster = foldConfusionMatrix[i].valuesIterator();
-			while(valsIster.hasNext()){
-				long cnt = foldConfusionMatrix[i].getCount(valsIster.next());
+			// valsIster = foldConfusionMatrix[i].valuesIterator();
+			// while (valsIster.hasNext()) {
+			if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+				for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
+					long cnt = foldConfusionMatrix[i].getCount(j); // valsIster.next());
+					totalCount += cnt;
+					foldConfusionWr.append('\t').append(Long.toString(cnt));
+				}
+			} else {
+				long cnt = foldConfusionMatrix[i].getCount(Boolean.TRUE);
+				totalCount += cnt;
+				foldConfusionWr.append('\t').append(Long.toString(cnt));
+				cnt = foldConfusionMatrix[i].getCount(Boolean.FALSE);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));
 			}
