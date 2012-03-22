@@ -80,15 +80,24 @@ public class Config {
 	public static final boolean USER_SPECIFIC_FEATURES = false;
 
 	public static final String[] LABELS_SINGLES = {"1","2","3","4","5","6","7","8","9","10"};
-	public static final String[] LABEL_HIERARCHY = {"+1+2+3+-4-5-6-7-8-9-10-","-1-2-3-+4+5+6+7+8+9+10+",
-		"+1+-2-","+1+-3-","+2+-1-","+2+-3-","+3+-1-","+3+-2-",
-		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
-		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
-		"+10+-1-2-3-4-5-6-7-8-9-",
-		"+1+2+-3-", //Homes vs Work
-		"+4+5+-1-2-3-6-7-8-9-10-", //On the way vs rest
-		"+6+7+-1-2-3-4-5-8-9-10-", // Sports vs rest
-		"+8+9+-1-2-3-4-5-6-7-10-", // Commercial vs rest
+	public static final String[] LABEL_HIERARCHY = {"+1+2+3+-4-5-6-7-8-9-10-",
+		// This is redundant.. it is exactly the previoys one: "-1-2-3-+4+5+6+7+8+9+10+",
+		// Add this layer and see if two levels or three levels is better
+//				"+1+2+-3-", //Homes vs Work
+//				"+4+5+-1-2-3-6-7-8-9-10-", //On the way vs rest
+//				"+6+7+-1-2-3-4-5-8-9-10-", // Sports vs rest
+//				"+8+9+-1-2-3-4-5-6-7-10-", // Commercial vs rest
+		// Pair wise:
+		"+1+-2-","+1+-3-",/*"+2+-1-",*/"+2+-3-",/*"+3+-1-","+3+-2-",*/
+		// Once agains all (that still remain)
+		"+4+-5-6-7-8-9-10-","+5+-4-6-7-8-9-10-","+6+-4-5-7-8-9-10-",
+		"+7+-4-5-6-8-9-10-","+8+-4-5-6-7-9-10-","+9+-4-5-6-7-8-10-",
+		"+10+-4-5-6-7-8-9-",
+		// Those are wrong!
+//		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
+//		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
+//		"+10+-1-2-3-4-5-6-7-8-9-",
+		
 		};
 	
 //	private static final String[] LABELS_CONSIDERED = LABEL_HIERARCHY;
@@ -125,9 +134,9 @@ public class Config {
 
 	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
 
-	public static final boolean CALSSIFYFEATSELECT_CALC_CORRELATION = false;
+	public static final boolean CALC_ATTR_PAIRSWISE_CORRELATION = false;
 
-	public static final boolean CALSSIFYFEATSELECT_CALC_MUTUALINFO = false;
+	public static final boolean CALC_ATTR_PAIRSWISE_MUTUALINFO = false;
 
 	public static final boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
 	public static final boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;

@@ -87,171 +87,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			this.v = fold;
 			baseClassifier = baseClassifierClazz.getConstructor().newInstance();
 			if (baseClassifier instanceof LibSVM) {
-				baseClassifier.setDebug(false);
+//				baseClassifier.setDebug(false);
 				((LibSVM) baseClassifier).setKernelType(new SelectedTag(
-						LibSVM.KERNELTYPE_POLYNOMIAL, LibSVM.TAGS_KERNELTYPE));
-			}
-		}
-
-		public void correlation(Instances trainInstances) throws IOException {
-			Writer corrWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath, baseClassifier
-									.getClass().getName(), "v" + v
-									+ "_feat-correlation.txt")).getChannel(),
-					Config.OUT_CHARSET);
-			try {
-				int numAttribs = trainInstances.numAttributes();
-				int numInstances = trainInstances.numInstances();
-				// double[][] correlation = new double[numAttribs][numAttribs];
-				double[] att1 = new double[numInstances];
-				double[] att2 = new double[numInstances];
-
-				corrWr.append("\"attrib\"");
-				for (int j = 0; j < numAttribs; ++j) {
-					corrWr.append('\t').append(
-							StringUtils.quote(trainInstances.attribute(j)
-									.name()));
-				}
-				corrWr.append('\n');
-
-				double corr;
-				for (int i = 0; i < numAttribs; i++) {
-					corrWr.append(StringUtils.quote(trainInstances.attribute(i)
-							.name()));
-					for (int j = 0; j < i; j++) {
-						int n = 0;
-						for (int k = 0; k < numInstances; k++) {
-							double temp1 = trainInstances.instance(k).value(i);
-							double temp2 = trainInstances.instance(k).value(j);
-							if (Double.isNaN(temp1) || Double.isNaN(temp2)) {
-								continue;
-							}
-							att1[n] = temp1;
-							att2[n] = temp2;
-							++n;
-						}
-						if (i == j) {
-							// correlation[i][j] = 1.0;
-							// // store the standard deviation
-							// stdDevs[i] = Math.sqrt(Utils.variance(att1));
-							corr = 1.0;
-						} else {
-							if (n <= 1) {
-								corr = Double.NaN;
-							} else {
-								corr = Utils.correlation(att1, att2, n);
-								// corr = new
-								// PearsonsCorrelation().correlation(att1,
-								// att2);
-							}
-						}
-						corrWr.append('\t').append(Double.toString(corr));
-
-						synchronized (correlationSummary[i][j]) {
-							correlationSummary[i][j].addValue(corr);
-						}
-
-					}
-					corrWr.append('\n');
-				}
-			} finally {
-				corrWr.flush();
-				corrWr.close();
-			}
-		}
-
-		public void mutualInfo(Instances trainInstances) throws IOException {
-			Writer infoWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath, baseClassifier
-									.getClass().getName(), "v" + v
-									+ "_feat-mutual-info.txt")).getChannel(),
-					Config.OUT_CHARSET);
-			try {
-				int numAttribs = trainInstances.numAttributes();
-				int numInstances = trainInstances.numInstances();
-				// double[][] infoelation = new double[numAttribs][numAttribs];
-				double[] att1 = new double[numInstances];
-				double[] att2 = new double[numInstances];
-
-				infoWr.append("\"attrib\"");
-				for (int j = 0; j < numAttribs; ++j) {
-					infoWr.append('\t').append(
-							StringUtils.quote(trainInstances.attribute(j)
-									.name()));
-				}
-				infoWr.append('\n');
-
-				double info;
-				for (int i = 0; i < numAttribs; i++) {
-					infoWr.append(StringUtils.quote(trainInstances.attribute(i)
-							.name()));
-					for (int j = 0; j < i; j++) {
-						int n = 0;
-						for (int k = 0; k < numInstances; k++) {
-							double temp1 = trainInstances.instance(k).value(i);
-							double temp2 = trainInstances.instance(k).value(j);
-							// if (Double.isNaN(temp1) || Double.isNaN(temp2)) {
-							// continue;
-							// }
-							att1[n] = temp1;
-							att2[n] = temp2;
-							++n;
-						}
-						if (i == j) {
-							// Should never happen
-
-							info = Double.POSITIVE_INFINITY; // 1.0;
-						} else {
-							if (n <= 1) {
-								info = Double.NaN;
-							} else {
-								Frequency xFreq = new Frequency();
-								Frequency yFreq = new Frequency();
-								Frequency xyFreq = new Frequency();
-								for (int i1 = 0; i1 < n; ++i1) {
-									xFreq.addValue(att1[i1]);
-									yFreq.addValue(att2[i1]);
-
-									for (int i2 = 0; i2 < n; ++i2) {
-										String xyVal = Double
-												.toString(att1[i1])
-												+ ","
-												+ Double.toString(att2[i2]);
-										xyFreq.addValue(xyVal);
-									}
-								}
-
-								info = 0;
-								Iterator<Comparable<?>> xIter = xFreq
-										.valuesIterator();
-								while (xIter.hasNext()) {
-									Comparable<?> x = xIter.next();
-									Iterator<Comparable<?>> yIter = yFreq
-											.valuesIterator();
-									while (yIter.hasNext()) {
-										Comparable<?> y = yIter.next();
-										String xyVal = x.toString() + ","
-												+ y.toString();
-										double term = xyFreq.getPct(xyVal)
-												/ xFreq.getPct(x)
-												* yFreq.getPct(y);
-										term = MathUtil.lg2(term);
-										term = xyFreq.getPct(xyVal) * term;
-										info += term;
-									}
-								}
-
-							}
-						}
-						infoWr.append('\t').append(Double.toString(info));
-					}
-					infoWr.append('\n');
-				}
-			} finally {
-				infoWr.flush();
-				infoWr.close();
+						LibSVM.KERNELTYPE_LINEAR, LibSVM.TAGS_KERNELTYPE));
 			}
 		}
 
@@ -401,29 +239,6 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				if (baseClassifier instanceof UpdateableClassifier) {
 					// already trained
 				} else {
-					if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION) {
-						if (correlationSummary == null) {
-							correlationSummary = new SummaryStatistics[trainingSet
-									.numAttributes()][];
-							for (int i = 0; i < trainingSet.numAttributes(); ++i) {
-								correlationSummary[i] = new SummaryStatistics[i];
-								for (int j = 0; j < i; ++j) {
-									correlationSummary[i][j] = new SummaryStatistics();
-								}
-							}
-						}
-						correlation(trainingSet);
-					}
-					if (Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO) {
-						mutualInfo(trainingSet);
-						System.out.println(baseClassifierClazz.getSimpleName()
-								+ " - "
-								+ (System.currentTimeMillis() - startTime)
-								+ " (fold " + v
-								+ "): Calculated info gain matrix for fold : "
-								+ v);
-						return accuracyMap;
-					}
 					baseClassifier.buildClassifier(trainingSet);
 					trainingSet = null;
 				}
@@ -539,19 +354,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// }
 
 						long bestLabelInt = Math.round(vClass);
-						foldFeactSelectCM[(int) trueLabelCfMIx]
-								.addValue(bestLabelInt);
-						// foldFeactSelectCM[(int) trueLabelCfMIx]
-						// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
-						// trueLabelCfMIx == bestLabelInt
-						// : bestLabelInt));
+//						foldFeactSelectCM[(int) trueLabelCfMIx]
+//								.addValue(bestLabelInt);
+						 foldFeactSelectCM[(int) trueLabelCfMIx]
+						 .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
+								 vClass == (vInst.classValue() + 1)
+						 : bestLabelInt));
 						synchronized (totalConfusionMatrix) {
 							totalConfusionMatrix.get(positiveClass)[(int) trueLabelCfMIx]
-									.addValue(bestLabelInt);
-							// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE
-							// ? trueLabelCfMIx == bestLabelInt
-							// : bestLabelInt));
-						}
+//									.addValue(bestLabelInt);
+									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
+											 vClass == (vInst.classValue() + 1)
+									 : bestLabelInt));
+							}
 					}
 					if (totalClassificationsCount > 0) {
 						accuracyMap.put(ALL_FEATS, trueClassificationsCount
@@ -871,13 +686,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						}
 						long bestLabelInt = Math.round(vClass);
 
-						// foldFeactSelectCM[(int) trueLabelCfMIx]
-						// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
-						// trueLabelCfMIx == bestLabelInt
-						// : bestLabelInt));
+						 foldFeactSelectCM[(int) trueLabelCfMIx]
+								 .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
+										 vClass == (vInst.classValue() + 1)
+								 : bestLabelInt));
 
-						foldFeactSelectCM[(int) trueLabelCfMIx]
-								.addValue(bestLabelInt);
+//						foldFeactSelectCM[(int) trueLabelCfMIx]
+//								.addValue(bestLabelInt);
 
 						synchronized (totalFeatSelectCM) {
 							totalFeatSelectCM.get(positiveClass).get(
@@ -886,11 +701,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 														 * + searchClazz .
 														 * getName
 														 */)[(int) trueLabelCfMIx]
-									.addValue(bestLabelInt);
-							// .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE
-							// ? trueLabelCfMIx == bestLabelInt
-							// : bestLabelInt));
-						}
+//									.addValue(bestLabelInt);
+																 .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
+																		 vClass == (vInst.classValue() + 1)
+																 : bestLabelInt));
+							}
 					}
 					if (featSelTotalCount > 0) {
 						// a map of accuracies for different algot
@@ -946,11 +761,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 	}
 
-	// juust one for all threads
-	static SummaryStatistics[][] correlationSummary;
 
-	private String outputPath = (Config.CALSSIFYFEATSELECT_CALC_MUTUALINFO ? "C:\\mdc-datasets\\weka\\mutual-info"
-			: "C:\\mdc-datasets\\weka\\validation");
+	private String outputPath = "C:\\mdc-datasets\\weka\\validation";
 	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user";
 
 	private final Map<String, Frequency[]> totalConfusionMatrix;
@@ -1270,28 +1082,6 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 			}
 		}
-		if (Config.CALSSIFYFEATSELECT_CALC_CORRELATION
-				&& correlationSummary != null) {
-			Writer corrWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath,
-									baseClassifierClazz.getName(),
-									"feat-correlation_summary.txt"))
-							.getChannel(), Config.OUT_CHARSET);
-			try {
-				for (int i = 0; i < correlationSummary.length; ++i) {
-					for (int j = 0; j < correlationSummary[i].length; ++j) {
-						corrWr.append(
-								Double.toString(correlationSummary[i][j]
-										.getGeometricMean())).append('\t');
-					}
-					corrWr.append('\n');
-				}
-			} finally {
-				corrWr.flush();
-				corrWr.close();
-			}
-		}
 
 		System.out.println(baseClassifierClazz.getSimpleName() + " - "
 				+ new Date().toString() + " (total): Done in "
@@ -1309,18 +1099,32 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			foldConfusionWr.append("label\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
 		} else {
 			foldConfusionWr.append("label\tTRUE\tFALSE\n");
-			// Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
-			// .valuesIterator();
-			// while (valsIster.hasNext()) {
-			// foldConfusionWr.append('\t').append(valsIster.next().toString());
-			// }
+//			 Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
+//			 .valuesIterator();
+//			 boolean headerTrue = false;
+//			 boolean headerFalse = false;
+//			 while (valsIster.hasNext()) {
+//				 if((Boolean)valsIster.next()){
+//					 foldConfusionWr.append('\t').append("TRUE");
+//					 headerTrue = true;
+//				 } else {
+//					 foldConfusionWr.append('\t').append("FALSE");
+//					 headerFalse = true;
+//				 }
+//			 }
+//			 if(!headerTrue){
+//				 foldConfusionWr.append('\t').append("TRUE");
+//			 }
+//			 if(!headerFalse){
+//				 foldConfusionWr.append('\t').append("FALSE");
+//			 }
+//			 
 		}
-		foldConfusionWr.append('\n');
+
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i + 1));
 			long totalCount = 0;
-			// valsIster = foldConfusionMatrix[i].valuesIterator();
-			// while (valsIster.hasNext()) {
+			
 			if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
 				for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
 					long cnt = foldConfusionMatrix[i].getCount(j); // valsIster.next());
@@ -1328,6 +1132,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					foldConfusionWr.append('\t').append(Long.toString(cnt));
 				}
 			} else {
+//				 valsIster = foldConfusionMatrix[i].valuesIterator();
+//				 while (valsIster.hasNext()) {
 				long cnt = foldConfusionMatrix[i].getCount(Boolean.TRUE);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));
