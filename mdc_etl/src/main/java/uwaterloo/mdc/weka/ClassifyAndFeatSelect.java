@@ -10,8 +10,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
@@ -24,10 +22,10 @@ import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
+import org.omg.CORBA.INTERNAL;
 
 import uwaterloo.mdc.etl.Config;
-import uwaterloo.mdc.etl.util.MathUtil;
-import uwaterloo.mdc.etl.util.StringUtils;
+import uwaterloo.mdc.etl.util.KeyValuePair;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.GainRatioAttributeEval;
@@ -41,7 +39,6 @@ import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.SelectedTag;
-import weka.core.Utils;
 import weka.core.WekaException;
 import weka.core.converters.ArffLoader;
 
@@ -67,10 +64,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	// // PrincipalComponents and
 	// LatentSemanticAnalysis.class, };
 	public static final String ALL_FEATS = "all-features";
+	private static final String INTERNAL_DIR_PFX = "internal-node_";
 
-	private class FoldCallable implements Callable<HashMap<String, Double>> {
+	private class FoldCallable implements
+			Callable<KeyValuePair<String, HashMap<String, Double>>> {
 
 		final Pattern positiveSplit = Pattern.compile("\\+");
+		final Pattern minusSplit = Pattern.compile("\\-");
 		final Classifier baseClassifier;
 
 		final int v;
@@ -78,6 +78,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		private final File positiveClassDir;
 		private String positiveClass;
 		private String[] pSplits;
+		private String[] mSplits;
 
 		public FoldCallable(File positiveClassDir, int fold)
 				throws InstantiationException, IllegalAccessException,
@@ -87,14 +88,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			this.v = fold;
 			baseClassifier = baseClassifierClazz.getConstructor().newInstance();
 			if (baseClassifier instanceof LibSVM) {
-//				baseClassifier.setDebug(false);
+				// baseClassifier.setDebug(false);
 				((LibSVM) baseClassifier).setKernelType(new SelectedTag(
 						LibSVM.KERNELTYPE_LINEAR, LibSVM.TAGS_KERNELTYPE));
 			}
 		}
 
 		@Override
-		public HashMap<String, Double> call() throws Exception {
+		public KeyValuePair<String, HashMap<String, Double>> call()
+				throws Exception {
 			HashMap<String, Double> accuracyMap = new HashMap<String, Double>();
 
 			try {
@@ -120,6 +122,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				positiveClass = positiveClassDir.getName();
 				pSplits = positiveSplit.split(positiveClass);
+				mSplits = minusSplit.split(positiveClass);
 
 				int userIx = 0;
 				for (File userData : positiveClassDir
@@ -198,7 +201,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							// + instIx);
 							// }
 
-							if (dataInst.classIsMissing()) {
+							if (Config.CLASSIFY_IGNORING_MISSING_LABELS
+									&& dataInst.classIsMissing()) {
 								// .isMissing(dataInst.numAttributes() -
 								// 1))
 								// {
@@ -253,16 +257,24 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				if (validationSet == null || validationSet.numInstances() == 0) {
 					System.err.println("No validation data for fold: " + v
 							+ " - class: " + positiveClass);
-					return accuracyMap;
+					return new KeyValuePair<String, HashMap<String, Double>>(
+							positiveClass, accuracyMap);
 				}
 
 				Properties validationActualCs = new Properties();
-				validationActualCs.load(Channels.newReader(
-						FileUtils.openInputStream(
-								FileUtils.getFile(positiveClassDir,
-										validationSet.relationName()
-												+ "_actual-labels.properties"))
-								.getChannel(), Config.OUT_CHARSET));
+				if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+					validationActualCs
+							.load(Channels.newReader(
+									FileUtils
+											.openInputStream(
+													FileUtils
+															.getFile(
+																	positiveClassDir,
+																	validationSet
+																			.relationName()
+																			+ "_actual-labels.properties"))
+											.getChannel(), Config.OUT_CHARSET));
+				}
 
 				Writer classificationsWr = Channels
 						.newWriter(
@@ -288,12 +300,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					// TODONOT: user 113
 
 					int trueClassificationsCount = 0;
-					int totalClassificationsCount = validationSet
-							.numInstances();
+					int trueInternalDirectionCount = 0;
+					int totalClassificationsCount = (Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? 0
+							: validationSet.numInstances());
+					int totalInternalDirections = 0;
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
-						if (vInst.classIsMissing()) {
+						if (Config.CLASSIFY_IGNORING_MISSING_LABELS
+								&& vInst.classIsMissing()) {
 							continue;
 						}
 
@@ -319,20 +334,50 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// index!!!!!!
 
 						if (vClass == vInst.classValue() + 1) {
+							// Correct.. but what
 							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-								if (pSplits.length == 3) {
-									// there can be only 1 +C+
-									String actualC = validationActualCs
-											.getProperty(Long.toString(Math
-													.round(vInst.value(0))));
-									if (pSplits[1].equals(actualC)) {
-										++trueClassificationsCount;
-									}
-								} else {
-									--totalClassificationsCount;
+								if (// +1 going to a leaf
+								(vClass == 1 && pSplits.length == 3)
+								// -1 going to a leaf
+										|| (vClass == 2 && mSplits.length == 3)) {
+
+									// // there is only 1 +C+
+									// String actualC = validationActualCs
+									// .getProperty(Long.toString(Math
+									// .round(vInst.value(0))));
+									// if (pSplits[1].equals(actualC)) {
+									++trueClassificationsCount;
+
+								} else if (// +1 going to a non-leaf
+								(vClass == 1 && pSplits.length > 3)
+								// -1 going to a non-leaf
+										|| (vClass == 2 && mSplits.length > 3)) {
+
+									// No meaning for accuracy at non leaves
+									// ++trueClassificationsCount;
+									++trueInternalDirectionCount;
 								}
 							} else {
 								++trueClassificationsCount;
+							}
+						}
+						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							// Count number that should go to a class
+							// leaf or get directed to a subtree
+							if (vInst.classValue() == 0) {
+								// +1
+								if (pSplits.length == 3) {
+									++totalClassificationsCount;
+								} else {
+									++totalInternalDirections;
+								}
+							} else {
+								// -1
+								if (mSplits.length == 3) {
+									++totalClassificationsCount;
+								} else {
+									++totalInternalDirections;
+								}
 							}
 						}
 
@@ -354,19 +399,17 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// }
 
 						long bestLabelInt = Math.round(vClass);
-//						foldFeactSelectCM[(int) trueLabelCfMIx]
-//								.addValue(bestLabelInt);
-						 foldFeactSelectCM[(int) trueLabelCfMIx]
-						 .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
-								 vClass == (vInst.classValue() + 1)
-						 : bestLabelInt));
+						// foldFeactSelectCM[(int) trueLabelCfMIx]
+						// .addValue(bestLabelInt);
+						foldFeactSelectCM[(int) trueLabelCfMIx]
+								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+										.classValue() + 1) : bestLabelInt));
 						synchronized (totalConfusionMatrix) {
 							totalConfusionMatrix.get(positiveClass)[(int) trueLabelCfMIx]
-//									.addValue(bestLabelInt);
-									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
-											 vClass == (vInst.classValue() + 1)
-									 : bestLabelInt));
-							}
+									// .addValue(bestLabelInt);
+									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+											.classValue() + 1) : bestLabelInt));
+						}
 					}
 					if (totalClassificationsCount > 0) {
 						accuracyMap.put(ALL_FEATS, trueClassificationsCount
@@ -386,6 +429,29 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									.append('\t')
 									.append(Double.toString(accuracyMap
 											.get(ALL_FEATS))).append('\n');
+						}
+					}
+					if (totalInternalDirections > 0) {
+						accuracyMap.put(INTERNAL_DIR_PFX + ALL_FEATS,
+								trueInternalDirectionCount * 1.0
+										/ totalInternalDirections);
+
+						synchronized (cvClassificationAccuracyWr) {
+
+							cvClassificationAccuracyWr
+									.get(positiveClass)
+									.append(INTERNAL_DIR_PFX
+											+ Integer.toString(v))
+									.append('\t')
+									.append(Integer
+											.toString(trueInternalDirectionCount))
+									.append('\t')
+									.append(Integer
+											.toString(totalInternalDirections))
+									.append('\t')
+									.append(Double.toString(accuracyMap
+											.get(INTERNAL_DIR_PFX + ALL_FEATS)))
+									.append('\n');
 						}
 					}
 				} finally {
@@ -598,7 +664,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			} catch (Exception ignored) {
 				ignored.printStackTrace(System.err);
 			}
-			return accuracyMap;
+
+			return new KeyValuePair<String, HashMap<String, Double>>(
+					positiveClass, accuracyMap);
 		}
 
 		void featSel(Instances validationSet, Frequency[] foldFeactSelectCM,
@@ -628,11 +696,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				} else {
 					int featSelectCorrectCount = 0;
-					int featSelTotalCount = validationSet.numInstances();
+					int featSelTotalCount = (Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? 0
+							: validationSet.numInstances());
+					int totalInternalDirections = 0;
+					int trueInternalDirectionCount = 0;
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
-						if (vInst.classIsMissing()) {
+						if (Config.CLASSIFY_IGNORING_MISSING_LABELS
+								&& vInst.classIsMissing()) {
 							continue;
 						}
 
@@ -660,19 +732,48 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// }
 						if (vClass == vInst.classValue() + 1) {
 							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-								if (pSplits.length == 3) {
-									// there can be only 1 +C+
-									String actualC = validationActualCs
-											.getProperty(Long.toString(Math
-													.round(vInst.value(0))));
-									if (pSplits[1].equals(actualC)) {
-										++featSelectCorrectCount;
-									}
-								} else {
-									--featSelTotalCount;
+								if (// +1 going to a leaf
+								(vClass == 1 && pSplits.length == 3)
+								// -1 going to a leaf
+										|| (vClass == 2 && mSplits.length == 3)) {
+
+									// // there is only 1 +C+
+									// String actualC = validationActualCs
+									// .getProperty(Long.toString(Math
+									// .round(vInst.value(0))));
+									// if (pSplits[1].equals(actualC)) {
+									++featSelectCorrectCount;
+
+								} else if (// +1 going to a non-leaf
+								(vClass == 1 && pSplits.length > 3)
+								// -1 going to a non-leaf
+										|| (vClass == 2 && mSplits.length > 3)) {
+
+									// No meaning for accuracy at non leaves
+									// ++trueClassificationsCount;
+									++trueInternalDirectionCount;
 								}
 							} else {
 								++featSelectCorrectCount;
+							}
+						}
+						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							// Count number that should go to a class
+							// leaf or get directed to a subtree
+							if (vInst.classValue() == 0) {
+								// +1
+								if (pSplits.length == 3) {
+									++featSelectCorrectCount;
+								} else {
+									++totalInternalDirections;
+								}
+							} else {
+								// -1
+								if (mSplits.length == 3) {
+									++featSelectCorrectCount;
+								} else {
+									++totalInternalDirections;
+								}
 							}
 						}
 						long trueLabelCfMIx;
@@ -686,13 +787,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						}
 						long bestLabelInt = Math.round(vClass);
 
-						 foldFeactSelectCM[(int) trueLabelCfMIx]
-								 .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
-										 vClass == (vInst.classValue() + 1)
-								 : bestLabelInt));
+						foldFeactSelectCM[(int) trueLabelCfMIx]
+								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+										.classValue() + 1) : bestLabelInt));
 
-//						foldFeactSelectCM[(int) trueLabelCfMIx]
-//								.addValue(bestLabelInt);
+						// foldFeactSelectCM[(int) trueLabelCfMIx]
+						// .addValue(bestLabelInt);
 
 						synchronized (totalFeatSelectCM) {
 							totalFeatSelectCM.get(positiveClass).get(
@@ -701,11 +801,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 														 * + searchClazz .
 														 * getName
 														 */)[(int) trueLabelCfMIx]
-//									.addValue(bestLabelInt);
-																 .addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ?
-																		 vClass == (vInst.classValue() + 1)
-																 : bestLabelInt));
-							}
+									// .addValue(bestLabelInt);
+									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+											.classValue() + 1) : bestLabelInt));
+						}
 					}
 					if (featSelTotalCount > 0) {
 						// a map of accuracies for different algot
@@ -731,6 +830,36 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									.append(Double.toString(accuracyMap
 											.get(eval.getClass() // attrSelectEvalClazz
 													.getName()))).append('\n');
+						}
+					}
+					if (totalInternalDirections > 0) {
+						// a map of accuracies for different algot
+						accuracyMap.put(INTERNAL_DIR_PFX + eval.getClass() // attrSelectEvalClazz
+								.getName(), trueInternalDirectionCount * 1.0
+								/ totalInternalDirections);
+						synchronized (cvFeatSelectAccuracyWr) {
+
+							cvFeatSelectAccuracyWr
+									.get(eval.getClass() // attrSelectEvalClazz
+											.getName() /*
+														 * + searchClazz .
+														 * getName
+														 */)
+									.get(positiveClass)
+									.append(INTERNAL_DIR_PFX
+											+ Integer.toString(v))
+									.append('\t')
+									.append(Integer
+											.toString(trueInternalDirectionCount))
+									.append('\t')
+									.append(Integer
+											.toString(totalInternalDirections))
+									.append('\t')
+									.append(Double.toString(accuracyMap
+											.get(INTERNAL_DIR_PFX
+													+ eval.getClass() // attrSelectEvalClazz
+															.getName())))
+									.append('\n');
 						}
 					}
 				}
@@ -760,7 +889,6 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					+ "): Finished feature selection for " + filenamePfx);
 		}
 	}
-
 
 	private String outputPath = "C:\\mdc-datasets\\weka\\validation";
 	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user";
@@ -937,14 +1065,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	}
 
 	public Void call() throws Exception {
-		SummaryStatistics accuracySummaryAllFeatures = new SummaryStatistics();
-		HashMap<String, SummaryStatistics> accuracySummaryFeatSelected = new HashMap<String, SummaryStatistics>();
+		HashMap<String, SummaryStatistics> accuracySummaryAllFeatures = new HashMap<String, SummaryStatistics>();
+		HashMap<String, HashMap<String, SummaryStatistics>> accuracySummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
+		HashMap<String, SummaryStatistics> internalDirSummaryAllFeatures = new HashMap<String, SummaryStatistics>();
+		HashMap<String, HashMap<String, SummaryStatistics>> internalDirSummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
 		try {
-			for (@SuppressWarnings("rawtypes")
-			Class clazz : attrSelectEvaluationClazzes) {
-				accuracySummaryFeatSelected.put(clazz.getName(),
-						new SummaryStatistics());
-			}
 
 			System.out.println(baseClassifierClazz.getSimpleName() + " - "
 					+ new Date().toString()
@@ -953,9 +1078,25 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					+ Config.VALIDATION_FOLD_WIDTH + " users");
 			ExecutorService foldExecutors = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
-			ArrayList<Future<HashMap<String, Double>>> foldFutures = new ArrayList<Future<HashMap<String, Double>>>();
+			ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>> foldFutures = new ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>>();
 			int numClassifyTasks = 0;
 			for (File positiveClassDir : classHierDirs) {
+				String positiveClass = positiveClassDir.getName();
+
+				// Will lazy init those, coz they keep growing
+				// HashMap<String, SummaryStatistics>
+				// pcAccuracySummaryFeatSelected = new HashMap<String,
+				// SummaryStatistics>();
+				// for (@SuppressWarnings("rawtypes")
+				// Class clazz : attrSelectEvaluationClazzes) {
+				// pcAccuracySummaryFeatSelected.put(clazz.getName(),
+				// new SummaryStatistics());
+				// }
+				// accuracySummaryFeatSelected.put(positiveClass,
+				// pcAccuracySummaryFeatSelected);
+				// accuracySummaryAllFeatures.put(positiveClass,
+				// new SummaryStatistics());
+
 				for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
 					FoldCallable FoldCallable = new FoldCallable(
 							positiveClassDir, v);
@@ -964,7 +1105,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 			}
 			for (int i = 0; i < numClassifyTasks; ++i) {
-				HashMap<String, Double> accuracies = foldFutures.get(i).get();
+				KeyValuePair<String, HashMap<String, Double>> accuracies = foldFutures
+						.get(i).get();
 				if (accuracies == null) {
 					System.err
 							.println("ERROR: Null accuracies map returned by fold: "
@@ -974,30 +1116,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					continue;
 				}
 
-				Double accu = accuracies.get(ALL_FEATS);
-				if (accu == null) {
-					System.err
-							.println("ERROR: Null accuracy for feat selector "
-									+ ALL_FEATS + " for classifier "
-									+ this.baseClassifierClazz.getName());
-				} else {
-					accuracySummaryAllFeatures.addValue(accu);
-				}
-
-				for (@SuppressWarnings("rawtypes")
-				Class clazz : attrSelectEvaluationClazzes) {
-					accu = accuracies.get(clazz.getName());
-					if (accu == null) {
-						System.err
-								.println("ERROR: Null accuracy for feat selector "
-										+ clazz.getName()
-										+ " for classifier "
-										+ this.baseClassifierClazz.getName());
-					} else {
-						accuracySummaryFeatSelected.get(clazz.getName())
-								.addValue(accu);
-					}
-				}
+				gatherSummaryStats(accuracies, accuracySummaryAllFeatures,
+						accuracySummaryFeatSelected, false);
+				gatherSummaryStats(accuracies, internalDirSummaryAllFeatures,
+						internalDirSummaryFeatSelected, true);
 			}
 			foldExecutors.shutdown();
 			while (!foldExecutors.isTerminated()) {
@@ -1019,21 +1141,75 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 			}
 		}
-		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-				baseClassifierClazz.getName(), "accuracy-summary.txt"),
-				accuracySummaryAllFeatures.toString());
 
-		for (@SuppressWarnings("rawtypes")
-		Class clazz : attrSelectEvaluationClazzes) {
-			FileUtils
-					.writeStringToFile(FileUtils.getFile(outputPath,
-							baseClassifierClazz.getName(), clazz.getName(),
-							"feat-selected_accuracy-summary.txt"),
-							accuracySummaryFeatSelected.get(clazz.getName())
-									.toString());
-		}
+		double acrossPCsAllFeatAccuNumer = 0.0;
+		double acrossPCsAllFeatAccuDenim = 0.0;
 		for (File positiveClassDir : classHierDirs) {
 			String positiveClass = positiveClassDir.getName();
+			HashMap<String, SummaryStatistics> pcAccuracySummaryFeatSelected = accuracySummaryFeatSelected
+					.get(positiveClass);
+
+			FileUtils
+					.writeStringToFile(FileUtils.getFile(outputPath,
+							baseClassifierClazz.getName(), positiveClass
+									+ "_internal-dir-summary.txt"),
+							internalDirSummaryAllFeatures.get(positiveClass)
+									.toString());
+
+			SummaryStatistics pcAccuSummaryAllFeats = accuracySummaryAllFeatures
+					.get(positiveClass);
+			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+					baseClassifierClazz.getName(), positiveClass
+							+ "_accuracy-summary.txt"), pcAccuSummaryAllFeats
+					.toString());
+
+			// The Mean of Means.. the variance would be from the t distrib
+			// But many accuracies have n = 0, thus we shouldn't increase denim
+			// coz those means are meaningless
+			if (pcAccuSummaryAllFeats.getN() > 0) {
+				acrossPCsAllFeatAccuNumer += pcAccuSummaryAllFeats.getMean();
+				++acrossPCsAllFeatAccuDenim;
+			}
+
+			// // Grand Mean
+			// acrossPCsAllFeatAccuNumer += pcAccuSummaryAllFeats.getSum();
+			// //pcAccuSummaryAllFeats.getN() * pcAccuSummaryAllFeats.getMean();
+			// acrossPCsAllFeatAccuDenim += pcAccuSummaryAllFeats.getN();
+
+			// I don't know what should I do when variance is 0..
+			// /**
+			// * The Graybill-Deal method as explained in
+			// * http://www.itl.nist.gov/div898/software
+			// * /dataplot/refman1/auxillar/consmean.htm
+			// */
+			// This is wrong.. tha division must be before the addition
+			// double var = pcAccuSummaryAllFeats.getVariance();
+			// if(var > 0){
+			// acrossPCsAllFeatAccuNumer/=var;
+			// acrossPCsAllFeatAccuDenim/=var;
+			// }
+
+			for (@SuppressWarnings("rawtypes")
+			Class clazz : attrSelectEvaluationClazzes) {
+				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+						baseClassifierClazz.getName(), clazz.getName(),
+						positiveClass + "_feat-selected_accuracy-summary.txt"),
+						pcAccuracySummaryFeatSelected.get(clazz.getName())
+								.toString());
+				FileUtils
+						.writeStringToFile(
+								FileUtils
+										.getFile(
+												outputPath,
+												baseClassifierClazz.getName(),
+												clazz.getName(),
+												positiveClass
+														+ "_feat-selected_internal-dir-summary.txt"),
+								internalDirSummaryFeatSelected
+										.get(positiveClass)
+										.get(clazz.getName()).toString());
+			}
+
 			Writer totalConfusionWr = Channels.newWriter(
 					FileUtils.openOutputStream(
 							FileUtils.getFile(outputPath,
@@ -1083,6 +1259,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			}
 		}
 
+		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+				baseClassifierClazz.getName(), "_consensus_accuracy-summary.txt"),
+				Double.toString(acrossPCsAllFeatAccuNumer
+						/ acrossPCsAllFeatAccuDenim));
+
 		System.out.println(baseClassifierClazz.getSimpleName() + " - "
 				+ new Date().toString() + " (total): Done in "
 				+ (System.currentTimeMillis() - startTime) + " millis");
@@ -1099,32 +1280,32 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			foldConfusionWr.append("label\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
 		} else {
 			foldConfusionWr.append("label\tTRUE\tFALSE\n");
-//			 Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
-//			 .valuesIterator();
-//			 boolean headerTrue = false;
-//			 boolean headerFalse = false;
-//			 while (valsIster.hasNext()) {
-//				 if((Boolean)valsIster.next()){
-//					 foldConfusionWr.append('\t').append("TRUE");
-//					 headerTrue = true;
-//				 } else {
-//					 foldConfusionWr.append('\t').append("FALSE");
-//					 headerFalse = true;
-//				 }
-//			 }
-//			 if(!headerTrue){
-//				 foldConfusionWr.append('\t').append("TRUE");
-//			 }
-//			 if(!headerFalse){
-//				 foldConfusionWr.append('\t').append("FALSE");
-//			 }
-//			 
+			// Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
+			// .valuesIterator();
+			// boolean headerTrue = false;
+			// boolean headerFalse = false;
+			// while (valsIster.hasNext()) {
+			// if((Boolean)valsIster.next()){
+			// foldConfusionWr.append('\t').append("TRUE");
+			// headerTrue = true;
+			// } else {
+			// foldConfusionWr.append('\t').append("FALSE");
+			// headerFalse = true;
+			// }
+			// }
+			// if(!headerTrue){
+			// foldConfusionWr.append('\t').append("TRUE");
+			// }
+			// if(!headerFalse){
+			// foldConfusionWr.append('\t').append("FALSE");
+			// }
+			//
 		}
 
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i + 1));
 			long totalCount = 0;
-			
+
 			if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
 				for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
 					long cnt = foldConfusionMatrix[i].getCount(j); // valsIster.next());
@@ -1132,8 +1313,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					foldConfusionWr.append('\t').append(Long.toString(cnt));
 				}
 			} else {
-//				 valsIster = foldConfusionMatrix[i].valuesIterator();
-//				 while (valsIster.hasNext()) {
+				// valsIster = foldConfusionMatrix[i].valuesIterator();
+				// while (valsIster.hasNext()) {
 				long cnt = foldConfusionMatrix[i].getCount(Boolean.TRUE);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));
@@ -1143,6 +1324,56 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			}
 			foldConfusionWr.append('\t').append(Long.toString(totalCount))
 					.append('\n');
+		}
+	}
+
+	void gatherSummaryStats(
+			KeyValuePair<String, HashMap<String, Double>> accuracies,
+			HashMap<String, SummaryStatistics> accuracySummaryAllFeatures,
+			HashMap<String, HashMap<String, SummaryStatistics>> accuracySummaryFeatSelected,
+			boolean internal) {
+
+		Double accu = accuracies.getValue().get(
+				(internal ? INTERNAL_DIR_PFX : "") + ALL_FEATS);
+		if (accu == null) {
+			System.err.println("ERROR: Null accuracy for feat selector "
+					+ (internal ? INTERNAL_DIR_PFX : "") + ALL_FEATS
+					+ " for classifier " + this.baseClassifierClazz.getName());
+		} else {
+			SummaryStatistics accSumm = accuracySummaryAllFeatures
+					.get((internal ? INTERNAL_DIR_PFX : "")
+							+ accuracies.getKey());
+			if (accSumm == null) {
+				accSumm = new SummaryStatistics();
+				accuracySummaryAllFeatures.put(
+				// No need.. the map will be different already (internal ?
+				// INTERNAL_DIR_PFX: "") +
+						accuracies.getKey(), accSumm);
+			}
+			accSumm.addValue(accu);
+		}
+
+		for (@SuppressWarnings("rawtypes")
+		Class clazz : attrSelectEvaluationClazzes) {
+			accu = accuracies.getValue().get(
+					(internal ? INTERNAL_DIR_PFX : "") + clazz.getName());
+			if (accu == null) {
+				System.err.println("ERROR: Null accuracy for feat selector "
+						+ clazz.getName() + " for classifier "
+						+ this.baseClassifierClazz.getName());
+			} else {
+				SummaryStatistics accSumm = accuracySummaryFeatSelected.get(
+						accuracies.getKey()).get(
+						(internal ? INTERNAL_DIR_PFX : "") + clazz.getName());
+				if (accSumm == null) {
+					accSumm = new SummaryStatistics();
+					accuracySummaryFeatSelected.get(accuracies.getKey()).put(
+					// No need.. the map will be different already (internal ?
+					// INTERNAL_DIR_PFX : "") +
+							clazz.getName(), accSumm);
+				}
+				accSumm.addValue(accu);
+			}
 		}
 	}
 

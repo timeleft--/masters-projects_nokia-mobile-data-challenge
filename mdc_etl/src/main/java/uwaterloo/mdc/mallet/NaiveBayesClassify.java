@@ -293,11 +293,11 @@ public class NaiveBayesClassify implements Callable<Void> {
 
 	public static void writeConfusionMatrix(Writer foldConfusionWr,
 			Frequency[] foldConfusionMatrix) throws IOException {
-		foldConfusionWr.append("label\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\ttotal\n");
+		foldConfusionWr.append("label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\ttotal\n");
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
-			foldConfusionWr.append(Integer.toString(i+1));
+			foldConfusionWr.append(Integer.toString(i));
 			long totalCount = 0;
-			for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
+			for (int j = 0; j <= Config.LABELS_SINGLES.length; ++j) {
 				long cnt = foldConfusionMatrix[i].getCount(j);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));

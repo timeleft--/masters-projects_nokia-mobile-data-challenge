@@ -146,7 +146,7 @@ public class CountConditionalFreqs implements Callable<Void> {
 				System.out.println("null Pair!!!");
 				continue;
 			}
-			for (int i = 1; i <= 10; ++i) {
+			for (int i = 0; i <= Config.LABELS_SINGLES.length; ++i) {
 				HashMap<String, Frequency> freqMap = targetStatsPair.getValue()
 						.get(i);
 				for (String freqKey : freqMap.keySet()) {
@@ -248,7 +248,7 @@ public class CountConditionalFreqs implements Callable<Void> {
 			this.userDir = userDir;
 
 			targetStats = new HashMap<Integer, HashMap<String, Frequency>>();
-			for (int i = 1; i <= 10; ++i) {
+			for (int i = 0; i <= Config.LABELS_SINGLES.length; ++i) {
 				HashMap<String, Frequency> freqMap = new HashMap<String, Frequency>();
 				for (String statKey : Discretize.enumsMap.keySet()) {
 					freqMap.put(statKey, new Frequency());

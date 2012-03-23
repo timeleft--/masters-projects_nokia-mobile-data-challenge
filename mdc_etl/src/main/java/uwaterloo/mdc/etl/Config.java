@@ -79,8 +79,13 @@ public class Config {
 
 	public static final boolean USER_SPECIFIC_FEATURES = false;
 
-	public static final String[] LABELS_SINGLES = {"1","2","3","4","5","6","7","8","9","10"};
-	public static final String[] LABEL_HIERARCHY = {"+1+2+3+-4-5-6-7-8-9-10-",
+	// 0 is an extra label representing insignificant places
+	public static final String[] LABELS_SINGLES = {"0","1","2","3","4","5","6","7","8","9","10"};
+	public static final String[] LABEL_HIERARCHY = {
+		// Known vs unknown
+		"+0+-1-2-3-4-5-6-7-8-9-10-",
+		// Prevalent vs not
+		"+1+2+3+-4-5-6-7-8-9-10-",
 		// This is redundant.. it is exactly the previoys one: "-1-2-3-+4+5+6+7+8+9+10+",
 		// Add this layer and see if two levels or three levels is better
 //				"+1+2+-3-", //Homes vs Work
@@ -125,24 +130,34 @@ public class Config {
 
 	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 
+	public static final boolean LOAD_MISSING_CLASS_AS_OTHER = true;
+	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = false;
+
+	public static final boolean LOAD_FEATSELECTED_ONLY = false;
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;
+	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
 	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
 //	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
+
+
+	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
+	public static final boolean CLASSIFY_IGNORING_MISSING_LABELS = true;
+	
+	public static final boolean CALSSIFYFEATSELECT_FEAT_SELECT = false;
 
 	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
 
 	public static final boolean CALC_ATTR_PAIRSWISE_CORRELATION = false;
 
-	public static final boolean CALC_ATTR_PAIRSWISE_MUTUALINFO = false;
+	public static final boolean CALC_ATTR_PAIRSWISE_MUTUALINFO = true;
 
 	public static final boolean RECORD_ONLY_ACCELOROMETER_CHANGES = true;
 	public static final boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
 
-	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE = false;
-
+	
 	public enum NORMALIZE_BY_ENUM {NONE, MAXIMUM, SUM};
 	public static final NORMALIZE_BY_ENUM NORMALIZE_BY = NORMALIZE_BY_ENUM.MAXIMUM;
 
@@ -154,14 +169,8 @@ public class Config {
 
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 
-	public static final boolean CALSSIFYFEATSELECT_FEAT_SELECT = false;
-
-	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
-
-	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = true;
-
-	public static final boolean LOAD_FEATSELECTED_ONLY = true;
 	
+
 	
 
 	// This class is thread-safe: multiple threads can share a single Properties

@@ -1048,6 +1048,9 @@ public class LoadCountsAsAttributes implements
 					}
 				}
 
+				if(Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null){
+					instLabel = Config.LABELS_SINGLES[Config.LABELS_SINGLES.length-1];
+				}
 				if (instLabel != null) {
 					wekaInst.setClassValue(instLabel);
 					synchronized (userClassCount) {
@@ -1312,7 +1315,8 @@ public class LoadCountsAsAttributes implements
 						}
 					}
 
-					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+//Prepare for all cases 
+//					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
 
 						Add add = new Add();
 						add.setAttributeIndex("last");
@@ -1330,7 +1334,7 @@ public class LoadCountsAsAttributes implements
 						String idName = "ID";
 						addId.setAttributeName(idName);
 						copyInsts = Filter.useFilter(copyInsts, addId);
-
+						
 						Writer trueLableWr = Channels
 								.newWriter(
 										FileUtils
@@ -1387,10 +1391,9 @@ public class LoadCountsAsAttributes implements
 							trueLableWr.close();
 						}
 
+						// Remove the multinomial class
 						Remove rem = new Remove();
-						// The index range starts from 1 when it
-						// is
-						// text
+						// The index range starts from 1 here
 						rem.setAttributeIndices(Integer.toString(copyInsts
 								.numAttributes() - 1));
 						rem.setInputFormat(copyInsts);
@@ -1399,7 +1402,7 @@ public class LoadCountsAsAttributes implements
 						copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
 						// Will never happen, and we want to fix the ID
 						// copyInsts.deleteWithMissingClass();
-					}
+//					}
 
 					copyInsts.setRelationName(joinedInsts.relationName());
 
