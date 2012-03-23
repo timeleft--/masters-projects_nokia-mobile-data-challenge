@@ -184,7 +184,7 @@ public class LoadCountsAsAttributes implements
 			if (currInst.classIsMissing()) {
 				result = "0";
 			} else {
-				result = Long.toString(Math.round(currInst.classValue() + 1));
+				result = Long.toString(Math.round(currInst.classValue()));
 			}
 			if (result == null || "null".equals(result)) {
 				throw new NullPointerException("where did this come from??");
@@ -1049,7 +1049,7 @@ public class LoadCountsAsAttributes implements
 				}
 
 				if(Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null){
-					instLabel = Config.LABELS_SINGLES[Config.LABELS_SINGLES.length-1];
+					instLabel = Config.LABELS_SINGLES[0];
 				}
 				if (instLabel != null) {
 					wekaInst.setClassValue(instLabel);
@@ -1062,13 +1062,14 @@ public class LoadCountsAsAttributes implements
 
 				if (prevLabel != null) {
 					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
-						int i = 0;
-						for (; i < Config.LABELS_SINGLES.length; ++i) {
+						// 1 means true, 0 flase.. or is missing better 
+						for (int i = 0; i < Config.LABELS_SINGLES.length; ++i) {
+							double val = (Config.SPREAD_NOMINAL_FEATURES_USE_MISSING?Double.NaN:0);
 							if (Config.LABELS_SINGLES[i].equals(prevLabel)) {
-								break;
+								val = 1.0;
 							}
+							wekaInst.setValue(prevLabelAttributeArr[i], val);
 						}
-						wekaInst.setValue(prevLabelAttributeArr[i], 1);
 					} else {
 						wekaInst.setValue(prevLabelAttribute, prevLabel);
 					}
@@ -1321,7 +1322,7 @@ public class LoadCountsAsAttributes implements
 						Add add = new Add();
 						add.setAttributeIndex("last");
 						add.setAttributeName("binary-label");
-						add.setNominalLabels("+1,-1");
+						add.setNominalLabels(Config.LABELS_BINARY[0]+","+Config.LABELS_BINARY[1]);
 						add.setInputFormat(joinedInsts);
 
 						copyInsts = new Instances(joinedInsts);
@@ -1359,7 +1360,7 @@ public class LoadCountsAsAttributes implements
 										.nextElement();
 
 								String cls = Long.toString(Math.round(copyInst
-										.classValue()) + 1);
+										.classValue()));
 
 								long idVal = Math.round(copyInst.value(0));
 								trueLableWr.append(Long.toString(idVal))

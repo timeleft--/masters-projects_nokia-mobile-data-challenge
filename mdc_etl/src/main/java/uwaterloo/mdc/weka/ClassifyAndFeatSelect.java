@@ -295,7 +295,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				try {
 					classificationsWr
-							.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+							.append("instance\tclass0\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
 
 					// TODONOT: user 113
 
@@ -326,20 +326,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							classificationsWr.append("\t" + vClassDist[j]);
 							if (vClassDist[j] > vClassMaxProb) {
 								vClassMaxProb = vClassDist[j];
-								vClass = j + 1;
+								vClass = j;
 							}
 						}
 						classificationsWr.append('\n');
 						// The class "Value" is actually its
 						// index!!!!!!
-
-						if (vClass == vInst.classValue() + 1) {
+						if (vClass == vInst.classValue()) {
 							// Correct.. but what
 							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
 								if (// +1 going to a leaf
-								(vClass == 1 && pSplits.length == 3)
+								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length == 3)
 								// -1 going to a leaf
-										|| (vClass == 2 && mSplits.length == 3)) {
+										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length == 3)) {
 
 									// // there is only 1 +C+
 									// String actualC = validationActualCs
@@ -349,9 +348,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									++trueClassificationsCount;
 
 								} else if (// +1 going to a non-leaf
-								(vClass == 1 && pSplits.length > 3)
+								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length > 3)
 								// -1 going to a non-leaf
-										|| (vClass == 2 && mSplits.length > 3)) {
+										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length > 3)) {
 
 									// No meaning for accuracy at non leaves
 									// ++trueClassificationsCount;
@@ -383,10 +382,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 						long trueLabelCfMIx;
 						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							// Get the true label from the properties file,
+							// Using the value of the ID attribute as key
+							// ID is at index 0
 							trueLabelCfMIx = Long.parseLong(validationActualCs
 									.getProperty(Long.toString(Math.round(vInst
-											.value(0))))) - 1; // ID is at index
-																// 0
+											.value(0))))); 
 						} else {
 							trueLabelCfMIx = Math.round(vInst.classValue());
 						}
@@ -399,16 +400,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// }
 
 						long bestLabelInt = Math.round(vClass);
-						// foldFeactSelectCM[(int) trueLabelCfMIx]
+						// foldConfusionMatrix[(int) trueLabelCfMIx]
 						// .addValue(bestLabelInt);
-						foldFeactSelectCM[(int) trueLabelCfMIx]
+						foldConfusionMatrix[(int) trueLabelCfMIx]
 								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
-										.classValue() + 1) : bestLabelInt));
+										.classValue()) : bestLabelInt));
 						synchronized (totalConfusionMatrix) {
 							totalConfusionMatrix.get(positiveClass)[(int) trueLabelCfMIx]
 									// .addValue(bestLabelInt);
 									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
-											.classValue() + 1) : bestLabelInt));
+											.classValue()) : bestLabelInt));
 						}
 					}
 					if (totalClassificationsCount > 0) {
@@ -466,7 +467,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										+ "_confusion-matrix.txt"))
 								.getChannel(), Config.OUT_CHARSET);
 				try {
-					writeConfusionMatrix(foldConfusionWr, foldFeactSelectCM);
+					writeConfusionMatrix(foldConfusionWr, foldConfusionMatrix);
 				} finally {
 					foldConfusionWr.flush();
 					foldConfusionWr.close();
@@ -533,7 +534,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						//
 						// String cls = Long.toString(Math
 						// .round(copyInst
-						// .classValue()) + 1);
+						// .classValue()) ;
 						//
 						// String binaryLabel = null;
 						// if (positiveClass.contains("+"
@@ -690,7 +691,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				featSelector.buildClassifier(validationSet);
 
 				featSelectWr
-						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+						.append("instance\tclass0Prob\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
 				if (validationSet.numInstances() == 0) {
 					featSelectWr.append("Not validation data for fold: " + v);
 
@@ -722,20 +723,20 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							featSelectWr.append("\t" + vClassDist[j]);
 							if (vClassDist[j] > vClassMaxProb) {
 								vClassMaxProb = vClassDist[j];
-								vClass = j + 1;
+								vClass = j;
 							}
 						}
 						featSelectWr.append('\n');
 						// // The class "Value" is actually its index!!!!!!
-						// if (vClass == vInst.classValue() + 1) {
+						// if (vClass == vInst.classValue()) {
 						// ++featSelectCorrectCount;
 						// }
-						if (vClass == vInst.classValue() + 1) {
+						if (vClass == vInst.classValue()) {
 							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
 								if (// +1 going to a leaf
-								(vClass == 1 && pSplits.length == 3)
+								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length == 3)
 								// -1 going to a leaf
-										|| (vClass == 2 && mSplits.length == 3)) {
+										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length == 3)) {
 
 									// // there is only 1 +C+
 									// String actualC = validationActualCs
@@ -745,9 +746,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									++featSelectCorrectCount;
 
 								} else if (// +1 going to a non-leaf
-								(vClass == 1 && pSplits.length > 3)
+								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length > 3)
 								// -1 going to a non-leaf
-										|| (vClass == 2 && mSplits.length > 3)) {
+										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length > 3)) {
 
 									// No meaning for accuracy at non leaves
 									// ++trueClassificationsCount;
@@ -778,10 +779,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						}
 						long trueLabelCfMIx;
 						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							// Get the true class from the properties file
+							// Using the .. oh, why did I copy paste..look above :(
+							// 0 is the index of the ID attrib
 							trueLabelCfMIx = Long.parseLong(validationActualCs
 									.getProperty(Long.toString(Math.round(vInst
-											.value(0))))) - 1; // ID is at index
-																// 0
+											.value(0)))));
 						} else {
 							trueLabelCfMIx = Math.round(vInst.classValue());
 						}
@@ -789,7 +792,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 						foldFeactSelectCM[(int) trueLabelCfMIx]
 								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
-										.classValue() + 1) : bestLabelInt));
+										.classValue()) : bestLabelInt));
 
 						// foldFeactSelectCM[(int) trueLabelCfMIx]
 						// .addValue(bestLabelInt);
@@ -803,7 +806,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 														 */)[(int) trueLabelCfMIx]
 									// .addValue(bestLabelInt);
 									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
-											.classValue() + 1) : bestLabelInt));
+											.classValue()) : bestLabelInt));
 						}
 					}
 					if (featSelTotalCount > 0) {
@@ -1277,7 +1280,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			return;
 		}
 		if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-			foldConfusionWr.append("label\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
+			foldConfusionWr.append("label\t0\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
 		} else {
 			foldConfusionWr.append("label\tTRUE\tFALSE\n");
 			// Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
@@ -1303,11 +1306,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
-			foldConfusionWr.append(Integer.toString(i + 1));
+			foldConfusionWr.append(Integer.toString(i));
 			long totalCount = 0;
 
 			if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-				for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
+				for (int j = 0; j <= Config.LABELS_SINGLES.length; ++j) {
 					long cnt = foldConfusionMatrix[i].getCount(j); // valsIster.next());
 					totalCount += cnt;
 					foldConfusionWr.append('\t').append(Long.toString(cnt));

@@ -104,6 +104,9 @@ public class Config {
 //		"+10+-1-2-3-4-5-6-7-8-9-",
 		
 		};
+	public static final String[] LABELS_BINARY = new String[] { "+1","-1"};
+	public static final int LABLES_BINARY_POSITIVE_IX = 0;
+	public static final int LABLES_BINARY_NEGATIVE_IX = 1;
 	
 //	private static final String[] LABELS_CONSIDERED = LABEL_HIERARCHY;
 
@@ -129,6 +132,7 @@ public class Config {
 	public static final String APPUID_PROPERTIES_FILE = "C:\\mdc-datasets\\app-uid_name.properties";
 
 	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
+	public static final boolean SPREAD_NOMINAL_FEATURES_USE_MISSING = false;
 
 	public static final boolean LOAD_MISSING_CLASS_AS_OTHER = true;
 	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = false;
@@ -168,6 +172,10 @@ public class Config {
 	public static final boolean MICROLOC_SPLITS_DOCS = true;
 
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
+
+	
+
+	
 
 	
 

@@ -112,7 +112,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 							.getChannel(), Config.OUT_CHARSET);
 			try {
 				classificationsWr
-						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+						.append("instance\tclass0\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
 				if (validationSet.numInstances() == 0) {
 					classificationsWr.append("No validation data for fold: "
 							+ v);
@@ -141,12 +141,12 @@ public class NaiveBayesClassify implements Callable<Void> {
 							classificationsWr.append("\t" + vClassDist[j]);
 							if (vClassDist[j] > vClassMaxProb) {
 								vClassMaxProb = vClassDist[j];
-								vClass = j + 1;
+								vClass = j;
 							}
 						}
 						classificationsWr.append('\n');
 						// The class "Value" is actually its index!!!!!!
-						if (vClass == vInst.classValue() + 1) {
+						if (vClass == vInst.classValue()) {
 							++trueClassificationsCount;
 						}
 						long trueLabelCfMIx = Math.round(vInst.classValue());
@@ -212,7 +212,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 				featSelector.buildClassifier(validationSet);
 
 				featSelectWr
-						.append("instance\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
+						.append("instance\tclass0\tclass1Prob\tclass2Prob\tclass3Prob\tclass4Prob\tclass5Prob\tclass6Prob\tclass7Prob\tclass8Prob\tclass9Prob\tclass10Prob\n");
 				if (validationSet.numInstances() == 0) {
 					featSelectWr.append("Not validation data for fold: " + v);
 
@@ -240,12 +240,12 @@ public class NaiveBayesClassify implements Callable<Void> {
 							featSelectWr.append("\t" + vClassDist[j]);
 							if (vClassDist[j] > vClassMaxProb) {
 								vClassMaxProb = vClassDist[j];
-								vClass = j + 1;
+								vClass = j;
 							}
 						}
 						featSelectWr.append('\n');
 						// The class "Value" is actually its index!!!!!!
-						if (vClass == vInst.classValue() + 1) {
+						if (vClass == vInst.classValue()) {
 							++featSelectCorrectCount;
 						}
 						long trueLabelCfMIx = Math.round(vInst.classValue());
@@ -436,11 +436,11 @@ public class NaiveBayesClassify implements Callable<Void> {
 
 	public static void writeConfusionMatrix(Writer foldConfusionWr,
 			Frequency[] foldConfusionMatrix) throws IOException {
-		foldConfusionWr.append("label\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\ttotal\n");
+		foldConfusionWr.append("label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\ttotal\n");
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
-			foldConfusionWr.append(Integer.toString(i + 1));
+			foldConfusionWr.append(Integer.toString(i));
 			long totalCount = 0;
-			for (int j = 1; j <= Config.LABELS_SINGLES.length; ++j) {
+			for (int j = 0; j <= Config.LABELS_SINGLES.length; ++j) {
 				long cnt = foldConfusionMatrix[i].getCount(j);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));
