@@ -136,7 +136,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				Instances trainingSet = null;
 
 				// train Classifier
-				boolean firstUser = true;
+//				boolean firstUser = true;
 				int userIx = 0;
 				for (File userData : positiveClassDir
 						.listFiles(new FilenameFilter() {
@@ -155,77 +155,81 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					// .removeExtension(userData.getAbsolutePath())
 					// + ".app");
 
-					if (userIx == (foldStart + inFoldTestIx)) {
-						validationSet = new Instances(Channels.newReader(
-								FileUtils.openInputStream(userData)
-										.getChannel(), Config.OUT_CHARSET));
-						// Reader appReader =
-						// Channels.newReader(FileUtils
-						// .openInputStream(appData).getChannel(),
-						// Config.OUT_CHARSET);
-						// validationSet = Instances.mergeInstances(new
-						// Instances(
-						// appReader), validationSet);
-						validationSet.setClassIndex(validationSet
-								.numAttributes() - 1);
-						// validationSet.setRelationName(FilenameUtils
-						// .removeExtension(userData.getName()));
-					} else {
-						ArffLoader dataLoader = new ArffLoader();
-						dataLoader.setFile(userData);
+					ArffLoader dataLoader = new ArffLoader();
+					dataLoader.setFile(userData);
 
-						// ArffLoader appLoader = new ArffLoader();
-						// appLoader.setFile(appData);
+					// ArffLoader appLoader = new ArffLoader();
+					// appLoader.setFile(appData);
 
-						// load structure
-						Instances dataStruct = dataLoader.getStructure();
-						dataStruct
-								.setClassIndex(dataStruct.numAttributes() - 1);
-						// Instances appStruct =
-						// appLoader.getStructure();
-						// Instances joinedStruct =
-						// Instances.mergeInstances(
-						// appStruct, dataStruct);
-						// joinedStruct
-						// .setClassIndex(joinedStruct.numAttributes() -
-						// 1);
-						// joinedStruct.setRelationName(FilenameUtils
-						// .removeExtension(userData.getName()));
+					// load structure
+					Instances dataStruct = dataLoader.getStructure();
+					dataStruct.setClassIndex(dataStruct.numAttributes() - 1);
+					// Instances appStruct =
+					// appLoader.getStructure();
+					// Instances joinedStruct =
+					// Instances.mergeInstances(
+					// appStruct, dataStruct);
+					// joinedStruct
+					// .setClassIndex(joinedStruct.numAttributes() -
+					// 1);
+					// joinedStruct.setRelationName(FilenameUtils
+					// .removeExtension(userData.getName()));
 
-						if (firstUser) {
-							if (baseClassifier instanceof UpdateableClassifier) {
-								baseClassifier.buildClassifier(dataStruct); // joinedStruct);
-							} else {
-								trainingSet = new Instances(dataStruct); // joinedStruct);
-							}
+					if (userIx == 0) {
+						// if(firstUser
+						if (baseClassifier instanceof UpdateableClassifier) {
+							baseClassifier.buildClassifier(dataStruct); // joinedStruct);
+						} else {
+							trainingSet = new Instances(dataStruct); // joinedStruct);
+						}
+						validationSet = new Instances(dataStruct); // joinedStruct);
+					}
+
+					// if (userIx == (foldStart + inFoldTestIx)) {
+					//
+					// validationSet = new Instances(Channels.newReader(
+					// FileUtils.openInputStream(userData)
+					// .getChannel(), Config.OUT_CHARSET));
+					// // Reader appReader =
+					// // Channels.newReader(FileUtils
+					// // .openInputStream(appData).getChannel(),
+					// // Config.OUT_CHARSET);
+					// // validationSet = Instances.mergeInstances(new
+					// // Instances(
+					// // appReader), validationSet);
+					// validationSet.setClassIndex(validationSet
+					// .numAttributes() - 1);
+					// // validationSet.setRelationName(FilenameUtils
+					// // .removeExtension(userData.getName()));
+					// } else {
+
+					// load data
+					Instance dataInst;
+					// Instance appInst;
+					// int instIx = 0;
+					while ((dataInst = dataLoader.getNextInstance(dataStruct)) != null) {
+						// appInst =
+						// appLoader.getNextInstance(appStruct);
+						// if (appInst == null) {
+						// throw new Exception(
+						// "App Insances fewer than data instances: "
+						// + instIx);
+						// }
+
+						if (ignoreInstsWithMissingClass
+								&& dataInst.classIsMissing()) {
+							// .isMissing(dataInst.numAttributes() -
+							// 1))
+							// {
+							continue;
 						}
 
-						// load data
-						Instance dataInst;
-						// Instance appInst;
-						// int instIx = 0;
-						while ((dataInst = dataLoader
-								.getNextInstance(dataStruct)) != null) {
-							// appInst =
-							// appLoader.getNextInstance(appStruct);
-							// if (appInst == null) {
-							// throw new Exception(
-							// "App Insances fewer than data instances: "
-							// + instIx);
-							// }
-
-							if (ignoreInstsWithMissingClass
-									&& dataInst.classIsMissing()) {
-								// .isMissing(dataInst.numAttributes() -
-								// 1))
-								// {
-								continue;
-							}
-
-							// Instance joinedInst = dataInst
-							// .mergeInstance(appInst);
-							// joinedInst.setDataset(joinedStruct);
-
+						// Instance joinedInst = dataInst
+						// .mergeInstance(appInst);
+						// joinedInst.setDataset(joinedStruct);
+						if (userIx == (foldStart + inFoldTestIx)) {
+							validationSet.add(dataInst); // joinedInst);
+						} else {
 							if (baseClassifier instanceof UpdateableClassifier) {
 								((UpdateableClassifier) baseClassifier)
 										.updateClassifier(dataInst); // joinedInst);
@@ -1101,32 +1105,32 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						PrincipalComponents.class, LatentSemanticAnalysis.class },
 				false);
 		app.call();
-		
+
 		// // Naive Bayes
 		// app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
 		// app.call();
 
-//		// Boosting
-//		app = new ClassifyAndFeatSelect(
-//				AdaBoostM1.class,
-//				true,
-//				false,
-//				true,
-//				new Class[] { GainRatioAttributeEval.class,
-//						PrincipalComponents.class, LatentSemanticAnalysis.class },
-//				false);
-//		app.call();
-//		app = new ClassifyAndFeatSelect(
-//				MultiBoostAB.class,
-//				true,
-//				false,
-//				true,
-//				new Class[] { GainRatioAttributeEval.class,
-//						PrincipalComponents.class, LatentSemanticAnalysis.class },
-//				false);
-//		app.call();
+		// // Boosting
+		// app = new ClassifyAndFeatSelect(
+		// AdaBoostM1.class,
+		// true,
+		// false,
+		// true,
+		// new Class[] { GainRatioAttributeEval.class,
+		// PrincipalComponents.class, LatentSemanticAnalysis.class },
+		// false);
+		// app.call();
+		// app = new ClassifyAndFeatSelect(
+		// MultiBoostAB.class,
+		// true,
+		// false,
+		// true,
+		// new Class[] { GainRatioAttributeEval.class,
+		// PrincipalComponents.class, LatentSemanticAnalysis.class },
+		// false);
+		// app.call();
 
-			// // Bayes Net
+		// // Bayes Net
 		// app = new ClassifyAndFeatSelect(BayesNet.class);
 		// app.call();
 
@@ -1136,11 +1140,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		// app = new ClassifyAndFeatSelect(Logistic.class);
 		// app.call();
 
-//		// Sometimes: Exception: weka.classifiers.functions.Logistic: Not enough training
-//		// SVM
-//		app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
-//				new Class[] { SVMAttributeEval.class }, false);
-//		app.call();
+		// // Sometimes: Exception: weka.classifiers.functions.Logistic: Not
+		// enough training
+		// // SVM
+		// app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
+		// new Class[] { SVMAttributeEval.class }, false);
+		// app.call();
 
 		// // Cannot handle multinomial attrs
 		// // Bayesian Logisitc Regression
