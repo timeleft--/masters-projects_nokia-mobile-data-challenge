@@ -7,6 +7,10 @@ public class Config {
 		// Avoid creation
 	}
 
+	public static final String USERID_COLNAME = "userid";
+	public static final int NUM_THREADS = 16;
+	public static final int NUM_USERS_TO_PROCESS = 80;
+	
 	public static final String LOG_PATH = "C:\\mdc-datasets\\mallet\\log";
 
 	public static final String IN_CHARSET = "US-ASCII";
@@ -15,9 +19,6 @@ public class Config {
 	public static final String MISSING_VALUE_PLACEHOLDER = "?";
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
-	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 8;
-	public static final int NUM_USERS_TO_PROCESS = 80;
 
 	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
@@ -107,6 +108,7 @@ public class Config {
 	public static final String[] LABELS_BINARY = new String[] { "+1","-1"};
 	public static final int LABLES_BINARY_POSITIVE_IX = 0;
 	public static final int LABLES_BINARY_NEGATIVE_IX = 1;
+	public static final String LABELS_MULTICLASS_NAME = "ALL";
 	
 //	private static final String[] LABELS_CONSIDERED = LABEL_HIERARCHY;
 
@@ -146,11 +148,10 @@ public class Config {
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
 //	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
 
-
-	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
-	public static final boolean CLASSIFY_IGNORING_MISSING_LABELS = true;
-	
-	public static final boolean CALSSIFYFEATSELECT_FEAT_SELECT = false;
+// These should be values per classifier type
+//	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
+//	public static final boolean CLASSIFY_IGNORING_MISSING_LABELS = true;
+//	public static final boolean CALSSIFYFEATSELECT_FEAT_SELECT = false;
 
 	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
 
@@ -174,13 +175,6 @@ public class Config {
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 
 	
-
-	
-
-	
-
-	
-
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
 	public static Properties placeLabels;

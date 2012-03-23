@@ -3,6 +3,8 @@ package uwaterloo.mdc.weka;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
@@ -22,47 +24,54 @@ import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
-import org.omg.CORBA.INTERNAL;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
+import weka.attributeSelection.AttributeTransformer;
 import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
+import weka.attributeSelection.LatentSemanticAnalysis;
+import weka.attributeSelection.PrincipalComponents;
 import weka.attributeSelection.Ranker;
+import weka.attributeSelection.SVMAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
 import weka.classifiers.functions.LibSVM;
+import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
+import weka.classifiers.meta.MultiBoostAB;
+import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.SelectedTag;
 import weka.core.WekaException;
 import weka.core.converters.ArffLoader;
+import weka.core.converters.ArffSaver;
 
 public class ClassifyAndFeatSelect implements Callable<Void> {
-	// Commented out are Dimensionality reductions that failed
-	// Class<? extends ASEvaluation>[] cannot create!
-	@SuppressWarnings("rawtypes")
-	public static Class[] attrSelectEvaluationClazzes = {
-	// CfsSubsetEval.class,
-	// // ChiSquaredAttributeEval.class,
-	// ConsistencySubsetEval.class,
-	// // FilteredAttributeEval.class, FilteredSubsetEval.class,
-	// GainRatioAttributeEval.class,
-	// // InfoGainAttributeEval.class,
-	// ReliefFAttributeEval.class,
-	// SVMAttributeEval.class,
-	// SymmetricalUncertAttributeEval.class,
-	// WrapperSubsetEval.class,
-
-	};
-	// // Attribute Transformers
-	// public static Class[] attrTransEvaluationClazzes = {
-	// // PrincipalComponents and
-	// LatentSemanticAnalysis.class, };
+	// // Commented out are Dimensionality reductions that failed
+	// // Class<? extends ASEvaluation>[] cannot create!
+	// @SuppressWarnings("rawtypes")
+	// public static Class[] attrSelectEvaluationClazzes = {
+	// // CfsSubsetEval.class,
+	// // // ChiSquaredAttributeEval.class,
+	// // ConsistencySubsetEval.class,
+	// // // FilteredAttributeEval.class, FilteredSubsetEval.class,
+	// // GainRatioAttributeEval.class,
+	// // // InfoGainAttributeEval.class,
+	// // ReliefFAttributeEval.class,
+	// // SVMAttributeEval.class,
+	// // SymmetricalUncertAttributeEval.class,
+	// // WrapperSubsetEval.class,
+	//
+	// };
+	// // // Attribute Transformers
+	// // public static Class[] attrTransEvaluationClazzes = {
+	// // // PrincipalComponents and
+	// // LatentSemanticAnalysis.class, };
 	public static final String ALL_FEATS = "all-features";
 	private static final String INTERNAL_DIR_PFX = "internal-node_";
 
@@ -79,19 +88,28 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		private String positiveClass;
 		private String[] pSplits;
 		private String[] mSplits;
+		private boolean classifyingBinary;
 
 		public FoldCallable(File positiveClassDir, int fold)
 				throws InstantiationException, IllegalAccessException,
 				IllegalArgumentException, InvocationTargetException,
 				NoSuchMethodException, SecurityException {
 			this.positiveClassDir = positiveClassDir;
+			positiveClass = positiveClassDir.getName();
+			pSplits = positiveSplit.split(positiveClass);
+			mSplits = minusSplit.split(positiveClass);
 			this.v = fold;
 			baseClassifier = baseClassifierClazz.getConstructor().newInstance();
 			if (baseClassifier instanceof LibSVM) {
 				// baseClassifier.setDebug(false);
 				((LibSVM) baseClassifier).setKernelType(new SelectedTag(
-						LibSVM.KERNELTYPE_LINEAR, LibSVM.TAGS_KERNELTYPE));
+						LibSVM.KERNELTYPE_RBF, LibSVM.TAGS_KERNELTYPE));
+				// WARNING: using -h 0 may be faster
+				((LibSVM) baseClassifier).setShrinking(false);
 			}
+
+			classifyingBinary = classifyBinaryHierarchy
+					&& !Config.LABELS_MULTICLASS_NAME.equals(positiveClass);
 		}
 
 		@Override
@@ -119,11 +137,6 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				// train Classifier
 				boolean firstUser = true;
-
-				positiveClass = positiveClassDir.getName();
-				pSplits = positiveSplit.split(positiveClass);
-				mSplits = minusSplit.split(positiveClass);
-
 				int userIx = 0;
 				for (File userData : positiveClassDir
 						.listFiles(new FilenameFilter() {
@@ -201,7 +214,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							// + instIx);
 							// }
 
-							if (Config.CLASSIFY_IGNORING_MISSING_LABELS
+							if (ignoreInstsWithMissingClass
 									&& dataInst.classIsMissing()) {
 								// .isMissing(dataInst.numAttributes() -
 								// 1))
@@ -262,7 +275,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 
 				Properties validationActualCs = new Properties();
-				if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+				if (classifyingBinary) {
 					validationActualCs
 							.load(Channels.newReader(
 									FileUtils
@@ -301,13 +314,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 					int trueClassificationsCount = 0;
 					int trueInternalDirectionCount = 0;
-					int totalClassificationsCount = (Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? 0
+					int totalClassificationsCount = (classifyingBinary ? 0
 							: validationSet.numInstances());
 					int totalInternalDirections = 0;
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
-						if (Config.CLASSIFY_IGNORING_MISSING_LABELS
+						if (ignoreInstsWithMissingClass
 								&& vInst.classIsMissing()) {
 							continue;
 						}
@@ -334,10 +347,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// index!!!!!!
 						if (vClass == vInst.classValue()) {
 							// Correct.. but what
-							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							if (classifyingBinary) {
 								if (// +1 going to a leaf
 								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length == 3)
-								// -1 going to a leaf
+										// -1 going to a leaf
 										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length == 3)) {
 
 									// // there is only 1 +C+
@@ -349,7 +362,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 								} else if (// +1 going to a non-leaf
 								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length > 3)
-								// -1 going to a non-leaf
+										// -1 going to a non-leaf
 										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length > 3)) {
 
 									// No meaning for accuracy at non leaves
@@ -360,7 +373,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								++trueClassificationsCount;
 							}
 						}
-						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+						if (classifyingBinary) {
 							// Count number that should go to a class
 							// leaf or get directed to a subtree
 							if (vInst.classValue() == 0) {
@@ -381,13 +394,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						}
 
 						long trueLabelCfMIx;
-						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+						if (classifyingBinary) {
 							// Get the true label from the properties file,
 							// Using the value of the ID attribute as key
 							// ID is at index 0
 							trueLabelCfMIx = Long.parseLong(validationActualCs
 									.getProperty(Long.toString(Math.round(vInst
-											.value(0))))); 
+											.value(0)))));
 						} else {
 							trueLabelCfMIx = Math.round(vInst.classValue());
 						}
@@ -403,12 +416,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// foldConfusionMatrix[(int) trueLabelCfMIx]
 						// .addValue(bestLabelInt);
 						foldConfusionMatrix[(int) trueLabelCfMIx]
-								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+								.addValue((classifyingBinary ? vClass == (vInst
 										.classValue()) : bestLabelInt));
 						synchronized (totalConfusionMatrix) {
 							totalConfusionMatrix.get(positiveClass)[(int) trueLabelCfMIx]
 									// .addValue(bestLabelInt);
-									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+									.addValue((classifyingBinary ? vClass == (vInst
 											.classValue()) : bestLabelInt));
 						}
 					}
@@ -467,7 +480,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										+ "_confusion-matrix.txt"))
 								.getChannel(), Config.OUT_CHARSET);
 				try {
-					writeConfusionMatrix(foldConfusionWr, foldConfusionMatrix);
+					writeConfusionMatrix(foldConfusionWr, foldConfusionMatrix,
+							classifyingBinary);
 				} finally {
 					foldConfusionWr.flush();
 					foldConfusionWr.close();
@@ -478,7 +492,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						+ positiveClass);
 
 				// //////////////////////////////////////
-				if (Config.CALSSIFYFEATSELECT_FEAT_SELECT) {
+				if (featSelect) {
 					for (@SuppressWarnings("rawtypes")
 					Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
 
@@ -697,15 +711,14 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				} else {
 					int featSelectCorrectCount = 0;
-					int featSelTotalCount = (Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? 0
+					int featSelTotalCount = (classifyingBinary ? 0
 							: validationSet.numInstances());
 					int totalInternalDirections = 0;
 					int trueInternalDirectionCount = 0;
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
-						if (Config.CLASSIFY_IGNORING_MISSING_LABELS
-								&& vInst.classIsMissing()) {
+						if (classifyingBinary && vInst.classIsMissing()) {
 							continue;
 						}
 
@@ -732,10 +745,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// ++featSelectCorrectCount;
 						// }
 						if (vClass == vInst.classValue()) {
-							if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+							if (classifyingBinary) {
 								if (// +1 going to a leaf
 								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length == 3)
-								// -1 going to a leaf
+										// -1 going to a leaf
 										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length == 3)) {
 
 									// // there is only 1 +C+
@@ -747,7 +760,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 								} else if (// +1 going to a non-leaf
 								(vClass == Config.LABLES_BINARY_POSITIVE_IX && pSplits.length > 3)
-								// -1 going to a non-leaf
+										// -1 going to a non-leaf
 										|| (vClass == Config.LABLES_BINARY_NEGATIVE_IX && mSplits.length > 3)) {
 
 									// No meaning for accuracy at non leaves
@@ -758,7 +771,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								++featSelectCorrectCount;
 							}
 						}
-						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+						if (classifyingBinary) {
 							// Count number that should go to a class
 							// leaf or get directed to a subtree
 							if (vInst.classValue() == 0) {
@@ -778,9 +791,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							}
 						}
 						long trueLabelCfMIx;
-						if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+						if (classifyingBinary) {
 							// Get the true class from the properties file
-							// Using the .. oh, why did I copy paste..look above :(
+							// Using the .. oh, why did I copy paste..look above
+							// :(
 							// 0 is the index of the ID attrib
 							trueLabelCfMIx = Long.parseLong(validationActualCs
 									.getProperty(Long.toString(Math.round(vInst
@@ -791,7 +805,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						long bestLabelInt = Math.round(vClass);
 
 						foldFeactSelectCM[(int) trueLabelCfMIx]
-								.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+								.addValue((classifyingBinary ? vClass == (vInst
 										.classValue()) : bestLabelInt));
 
 						// foldFeactSelectCM[(int) trueLabelCfMIx]
@@ -805,7 +819,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 														 * getName
 														 */)[(int) trueLabelCfMIx]
 									// .addValue(bestLabelInt);
-									.addValue((Config.CLASSIFY_USING_BIANRY_ENSEMBLE ? vClass == (vInst
+									.addValue((classifyingBinary ? vClass == (vInst
 											.classValue()) : bestLabelInt));
 						}
 					}
@@ -817,12 +831,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						synchronized (cvFeatSelectAccuracyWr) {
 
 							cvFeatSelectAccuracyWr
+									.get(positiveClass)
 									.get(eval.getClass() // attrSelectEvalClazz
 											.getName() /*
 														 * + searchClazz .
 														 * getName
 														 */)
-									.get(positiveClass)
 									.append(Integer.toString(v))
 									.append('\t')
 									.append(Integer
@@ -843,12 +857,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						synchronized (cvFeatSelectAccuracyWr) {
 
 							cvFeatSelectAccuracyWr
+							.get(positiveClass)
 									.get(eval.getClass() // attrSelectEvalClazz
 											.getName() /*
 														 * + searchClazz .
 														 * getName
 														 */)
-									.get(positiveClass)
 									.append(INTERNAL_DIR_PFX
 											+ Integer.toString(v))
 									.append('\t')
@@ -890,6 +904,34 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							.getSimpleName() + " - "
 					+ (System.currentTimeMillis() - startTime) + " (fold " + v
 					+ "): Finished feature selection for " + filenamePfx);
+
+			if (eval instanceof AttributeTransformer) {
+				System.out.println(baseClassifierClazz.getSimpleName() + "/"
+						+ eval.getClass() // attrSelectEvalClazz
+								.getSimpleName() + " - "
+						+ (System.currentTimeMillis() - startTime) + " (fold "
+						+ v
+						+ "): Writing out transformed validation instance for "
+						+ filenamePfx);
+				OutputStream trOut = FileUtils.openOutputStream(FileUtils
+						.getFile(inPath, "transformed", baseClassifier
+								.getClass().getName(), eval.getClass() // attrSelectEvalClazz
+								.getName(), positiveClass,
+								validationSet.relationName() + ".arff"));
+				try {
+					Instances transformedSet = ((AttributeTransformer) eval)
+							.transformedData(validationSet);
+					ArffSaver trSaver = new ArffSaver();
+					trSaver.setDestination(trOut);
+					trSaver.setInstances(transformedSet);
+					trSaver.writeBatch();
+				} catch (Exception ignored) {
+					ignored.printStackTrace(new PrintStream(trOut));
+				} finally {
+					trOut.flush();
+					trOut.close();
+				}
+			}
 		}
 	}
 
@@ -907,21 +949,44 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	private final Map<String, Map<String, Writer>> cvFeatSelectAccuracyWr;
 
 	private Class<? extends Classifier> baseClassifierClazz;
-	private File[] classHierDirs = FileUtils.getFile(inPath).listFiles(
-			new FilenameFilter() {
+	private final boolean ignoreInstsWithMissingClass;
+	private final boolean classifyBinaryHierarchy;
+	private final boolean classifyMultiClass;
+	private final boolean featSelect;
+	private final Class[] attrSelectEvaluationClazzes;
 
-				@Override
-				public boolean accept(File arg0, String arg1) {
-					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
-						return arg1.startsWith("c");
-					} else {
-						return arg1.equals("ALL");
+	private File[] classHierDirs;
+	private double acrossPCsAllFeatAccuNumer;
+	private double acrossPCsAllFeatAccuDenim;
+
+	public ClassifyAndFeatSelect(
+			Class<? extends Classifier> baseClassifierClazz,
+			boolean pClassifyMultiClass, boolean pClassifyBinaryHierarchy,
+			boolean pFeatSelect, Class[] pAttrSelectEvaluationClazzes,
+			boolean pIgnoreInstsWithMissingClass) throws IOException {
+		this.classifyBinaryHierarchy = pClassifyBinaryHierarchy;
+		this.classifyMultiClass = pClassifyMultiClass;
+		this.ignoreInstsWithMissingClass = pIgnoreInstsWithMissingClass;
+		this.featSelect = pFeatSelect;
+		this.attrSelectEvaluationClazzes = pAttrSelectEvaluationClazzes;
+
+		classHierDirs = FileUtils.getFile(inPath).listFiles(
+				new FilenameFilter() {
+
+					@Override
+					public boolean accept(File arg0, String arg1) {
+						boolean result = false;
+						if (classifyBinaryHierarchy) {
+							result |= arg1.startsWith("c");
+						}
+						if (classifyMultiClass) {
+							result |= arg1
+									.equals(Config.LABELS_MULTICLASS_NAME);
+						}
+						return result;
 					}
-				}
-			});
+				});
 
-	public ClassifyAndFeatSelect(Class<? extends Classifier> baseClassifierClazz)
-			throws IOException {
 		this.baseClassifierClazz = baseClassifierClazz;
 
 		totalConfusionMatrix = Collections
@@ -961,7 +1026,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 			Map<String, Frequency[]> pcTotalFeatSelectCM = Collections
 					.synchronizedMap(new HashMap<String, Frequency[]>());
-			;
+
 			Map<String, Writer> pcCvFeatSelectAccuracyWr = Collections
 					.synchronizedMap(new HashMap<String, Writer>());
 			for (@SuppressWarnings("rawtypes")
@@ -1030,9 +1095,31 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		// app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
 		// app.call();
 
-		// // C4.5 decision tree
-		// app = new ClassifyAndFeatSelect(J48.class);
-		// app.call();
+		// Boosting
+		app = new ClassifyAndFeatSelect(
+				AdaBoostM1.class,
+				true,
+				false,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
+		app = new ClassifyAndFeatSelect(
+				MultiBoostAB.class,
+				true,
+				false,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
+
+		// C4.5 decision tree
+		app = new ClassifyAndFeatSelect(J48.class, true, false, true,
+				new Class[] { PrincipalComponents.class,
+						LatentSemanticAnalysis.class }, false);
+		app.call();
 
 		// // Bayes Net
 		// app = new ClassifyAndFeatSelect(BayesNet.class);
@@ -1046,7 +1133,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		// Exception: weka.classifiers.functions.Logistic: Not enough training
 		// SVM
-		app = new ClassifyAndFeatSelect(LibSVM.class);
+		app = new ClassifyAndFeatSelect(LibSVM.class, true, true, true,
+				new Class[] { SVMAttributeEval.class }, false);
 		app.call();
 
 		// // Cannot handle multinomial attrs
@@ -1119,10 +1207,38 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					continue;
 				}
 
-				gatherSummaryStats(accuracies, accuracySummaryAllFeatures,
-						accuracySummaryFeatSelected, false);
-				gatherSummaryStats(accuracies, internalDirSummaryAllFeatures,
-						internalDirSummaryFeatSelected, true);
+				if (Config.LABELS_MULTICLASS_NAME.equals(accuracies.getKey())) {
+					// Multiclass not part of the consensus
+					HashMap<String, SummaryStatistics> multicAccuracySummaryAllFeatures = new HashMap<String, SummaryStatistics>();
+					HashMap<String, HashMap<String, SummaryStatistics>> multicAccuracySummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
+					gatherSummaryStats(accuracies,
+							multicAccuracySummaryAllFeatures,
+							multicAccuracySummaryFeatSelected, false);
+
+					// There is no internal node, it's just multi-class
+					// HashMap<String, HashMap<String, SummaryStatistics>>
+					// multicInternalSummaryFeatSelected = new HashMap<String,
+					// HashMap<String, SummaryStatistics>>();
+					// HashMap<String, SummaryStatistics>
+					// multicInternalSummaryAllFeatures = new HashMap<String,
+					// SummaryStatistics>();
+					// gatherSummaryStats(accuracies,
+					// multicInternalSummaryAllFeatures,
+					// multicInternalSummaryFeatSelected, true);
+
+					printSummaryStats(Config.LABELS_MULTICLASS_NAME,
+							multicAccuracySummaryAllFeatures
+									.get(Config.LABELS_MULTICLASS_NAME),
+							multicAccuracySummaryFeatSelected
+									.get(Config.LABELS_MULTICLASS_NAME), null,
+							null, false);
+				} else {
+					gatherSummaryStats(accuracies, accuracySummaryAllFeatures,
+							accuracySummaryFeatSelected, false);
+					gatherSummaryStats(accuracies,
+							internalDirSummaryAllFeatures,
+							internalDirSummaryFeatSelected, true);
+				}
 			}
 			foldExecutors.shutdown();
 			while (!foldExecutors.isTerminated()) {
@@ -1145,127 +1261,38 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			}
 		}
 
-		double acrossPCsAllFeatAccuNumer = 0.0;
-		double acrossPCsAllFeatAccuDenim = 0.0;
-		for (File positiveClassDir : classHierDirs) {
-			String positiveClass = positiveClassDir.getName();
-			HashMap<String, SummaryStatistics> pcAccuracySummaryFeatSelected = accuracySummaryFeatSelected
-					.get(positiveClass);
-
-			FileUtils
-					.writeStringToFile(FileUtils.getFile(outputPath,
-							baseClassifierClazz.getName(), positiveClass
-									+ "_internal-dir-summary.txt"),
-							internalDirSummaryAllFeatures.get(positiveClass)
-									.toString());
-
-			SummaryStatistics pcAccuSummaryAllFeats = accuracySummaryAllFeatures
-					.get(positiveClass);
-			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-					baseClassifierClazz.getName(), positiveClass
-							+ "_accuracy-summary.txt"), pcAccuSummaryAllFeats
-					.toString());
-
-			// The Mean of Means.. the variance would be from the t distrib
-			// But many accuracies have n = 0, thus we shouldn't increase denim
-			// coz those means are meaningless
-			if (pcAccuSummaryAllFeats.getN() > 0) {
-				acrossPCsAllFeatAccuNumer += pcAccuSummaryAllFeats.getMean();
-				++acrossPCsAllFeatAccuDenim;
-			}
-
-			// // Grand Mean
-			// acrossPCsAllFeatAccuNumer += pcAccuSummaryAllFeats.getSum();
-			// //pcAccuSummaryAllFeats.getN() * pcAccuSummaryAllFeats.getMean();
-			// acrossPCsAllFeatAccuDenim += pcAccuSummaryAllFeats.getN();
-
-			// I don't know what should I do when variance is 0..
-			// /**
-			// * The Graybill-Deal method as explained in
-			// * http://www.itl.nist.gov/div898/software
-			// * /dataplot/refman1/auxillar/consmean.htm
-			// */
-			// This is wrong.. tha division must be before the addition
-			// double var = pcAccuSummaryAllFeats.getVariance();
-			// if(var > 0){
-			// acrossPCsAllFeatAccuNumer/=var;
-			// acrossPCsAllFeatAccuDenim/=var;
-			// }
-
-			for (@SuppressWarnings("rawtypes")
-			Class clazz : attrSelectEvaluationClazzes) {
-				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-						baseClassifierClazz.getName(), clazz.getName(),
-						positiveClass + "_feat-selected_accuracy-summary.txt"),
-						pcAccuracySummaryFeatSelected.get(clazz.getName())
-								.toString());
-				FileUtils
-						.writeStringToFile(
-								FileUtils
-										.getFile(
-												outputPath,
-												baseClassifierClazz.getName(),
-												clazz.getName(),
-												positiveClass
-														+ "_feat-selected_internal-dir-summary.txt"),
-								internalDirSummaryFeatSelected
-										.get(positiveClass)
-										.get(clazz.getName()).toString());
-			}
-
-			Writer totalConfusionWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(outputPath,
-									baseClassifierClazz.getName(),
-									positiveClass + "_confusion-matrix.txt"))
-							.getChannel(), Config.OUT_CHARSET);
-			try {
-				writeConfusionMatrix(totalConfusionWr,
-						totalConfusionMatrix.get(positiveClass));
-			} finally {
-				totalConfusionWr.flush();
-				totalConfusionWr.close();
-			}
-
-			for (@SuppressWarnings("rawtypes")
-			Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
-				Writer featSelectedConfusionWr = Channels
-						.newWriter(
-								FileUtils
-										.openOutputStream(
-												FileUtils
-														.getFile(
-																outputPath,
-																baseClassifierClazz
-																		.getName(),
-																attrSelectEvalClazz
-																		.getName(),
-																/*
-																 * searchClazz.
-																 * getName()
-																 */
-																positiveClass
-																		+ "_feat-selected-confusion-matrix.txt"))
-										.getChannel(), Config.OUT_CHARSET);
-				try {
-					writeConfusionMatrix(
-							featSelectedConfusionWr,
-							totalFeatSelectCM.get(positiveClass).get(
-									attrSelectEvalClazz.getName()/*
-																 * + searchClazz
-																 * . getName
-																 */));
-				} finally {
-					featSelectedConfusionWr.flush();
-					featSelectedConfusionWr.close();
+		if (classifyBinaryHierarchy) {
+			// keep the setting to 0 here,
+			// they could be messed up from earlier
+			acrossPCsAllFeatAccuNumer = 0.0;
+			acrossPCsAllFeatAccuDenim = 0.0;
+			for (File positiveClassDir : classHierDirs) {
+				String positiveClass = positiveClassDir.getName();
+				if (Config.LABELS_MULTICLASS_NAME.equals(positiveClass)) {
+					// Multiclass is not part of the ensemble
+					continue;
 				}
-			}
-		}
+				SummaryStatistics pcAccuSummaryAllFeats = accuracySummaryAllFeatures
+						.get(positiveClass);
+				HashMap<String, SummaryStatistics> pcAccuracySummaryFeatSelected = accuracySummaryFeatSelected
+						.get(positiveClass);
+				SummaryStatistics pcInternalDirSummaryAllFeatures = internalDirSummaryAllFeatures
+						.get(positiveClass);
+				HashMap<String, SummaryStatistics> pcInternalDirSummaryFeatSelected = internalDirSummaryFeatSelected
+						.get(positiveClass);
 
-		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-				baseClassifierClazz.getName(), "_consensus_accuracy-summary.txt"),
-				Double.toString(acrossPCsAllFeatAccuNumer
-						/ acrossPCsAllFeatAccuDenim));
+				printSummaryStats(positiveClass, pcAccuSummaryAllFeats,
+						pcAccuracySummaryFeatSelected,
+						pcInternalDirSummaryAllFeatures,
+						pcInternalDirSummaryFeatSelected, true);
+			}
+
+			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+					baseClassifierClazz.getName(),
+					"binary-ensemble_consensus_accuracy-summary.txt"), Double
+					.toString(acrossPCsAllFeatAccuNumer
+							/ acrossPCsAllFeatAccuDenim));
+		}
 
 		System.out.println(baseClassifierClazz.getSimpleName() + " - "
 				+ new Date().toString() + " (total): Done in "
@@ -1274,12 +1301,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	}
 
 	public static void writeConfusionMatrix(Writer foldConfusionWr,
-			Frequency[] foldConfusionMatrix) throws IOException {
+			Frequency[] foldConfusionMatrix, boolean classifyingBinary)
+			throws IOException {
 		if (foldConfusionMatrix.length == 0) {
 			foldConfusionWr.append("EMPTY");
 			return;
 		}
-		if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+		if (!classifyingBinary) {
 			foldConfusionWr.append("label\t0\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
 		} else {
 			foldConfusionWr.append("label\tTRUE\tFALSE\n");
@@ -1309,7 +1337,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			foldConfusionWr.append(Integer.toString(i));
 			long totalCount = 0;
 
-			if (!Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+			if (!classifyingBinary) {
 				for (int j = 0; j <= Config.LABELS_SINGLES.length; ++j) {
 					long cnt = foldConfusionMatrix[i].getCount(j); // valsIster.next());
 					totalCount += cnt;
@@ -1365,9 +1393,17 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						+ clazz.getName() + " for classifier "
 						+ this.baseClassifierClazz.getName());
 			} else {
-				SummaryStatistics accSumm = accuracySummaryFeatSelected.get(
-						accuracies.getKey()).get(
-						(internal ? INTERNAL_DIR_PFX : "") + clazz.getName());
+				HashMap<String, SummaryStatistics> accSummMap = accuracySummaryFeatSelected
+						.get(accuracies.getKey());
+				if (accSummMap == null) {
+					accSummMap = new HashMap<String, SummaryStatistics>();
+					accuracySummaryFeatSelected.put(accuracies.getKey(),
+							accSummMap);
+				}
+
+				SummaryStatistics accSumm = accSummMap
+						.get((internal ? INTERNAL_DIR_PFX : "")
+								+ clazz.getName());
 				if (accSumm == null) {
 					accSumm = new SummaryStatistics();
 					accuracySummaryFeatSelected.get(accuracies.getKey()).put(
@@ -1378,6 +1414,120 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				accSumm.addValue(accu);
 			}
 		}
+	}
+
+	void printSummaryStats(
+			String positiveClass,
+			SummaryStatistics pcAccuSummaryAllFeats,
+			HashMap<String, SummaryStatistics> pcAccuracySummaryFeatSelected,
+			SummaryStatistics pcInternalDirSummaryAllFeatures,
+			HashMap<String, SummaryStatistics> pcInternalDirSummaryFeatSelected,
+			boolean expectInternal) throws IOException {
+
+		if (expectInternal) {
+			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+					baseClassifierClazz.getName(), positiveClass
+							+ "_internal-dir-summary.txt"),
+					pcInternalDirSummaryAllFeatures.toString());
+		}
+
+		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+				baseClassifierClazz.getName(), positiveClass
+						+ "_accuracy-summary.txt"), pcAccuSummaryAllFeats
+				.toString());
+
+		// The Mean of Means.. the variance would be from the t distrib
+		// But many accuracies have n = 0, thus we shouldn't increase denim
+		// coz those means are meaningless
+		if (pcAccuSummaryAllFeats.getN() > 0) {
+			acrossPCsAllFeatAccuNumer += pcAccuSummaryAllFeats.getMean();
+			++acrossPCsAllFeatAccuDenim;
+		}
+
+		// // Grand Mean
+		// acrossPCsAllFeatAccuNumer += pcAccuSummaryAllFeats.getSum();
+		// //pcAccuSummaryAllFeats.getN() * pcAccuSummaryAllFeats.getMean();
+		// acrossPCsAllFeatAccuDenim += pcAccuSummaryAllFeats.getN();
+
+		// I don't know what should I do when variance is 0..
+		// /**
+		// * The Graybill-Deal method as explained in
+		// * http://www.itl.nist.gov/div898/software
+		// * /dataplot/refman1/auxillar/consmean.htm
+		// */
+		// This is wrong.. tha division must be before the addition
+		// double var = pcAccuSummaryAllFeats.getVariance();
+		// if(var > 0){
+		// acrossPCsAllFeatAccuNumer/=var;
+		// acrossPCsAllFeatAccuDenim/=var;
+		// }
+
+		for (@SuppressWarnings("rawtypes")
+		Class clazz : attrSelectEvaluationClazzes) {
+			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+					baseClassifierClazz.getName(), clazz.getName(),
+					positiveClass + "_feat-selected_accuracy-summary.txt"),
+					pcAccuracySummaryFeatSelected.get(clazz.getName())
+							.toString());
+			if (expectInternal) {
+				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+						baseClassifierClazz.getName(), clazz.getName(),
+						positiveClass
+								+ "_feat-selected_internal-dir-summary.txt"),
+						pcInternalDirSummaryFeatSelected.get(clazz.getName())
+								.toString());
+			}
+		}
+
+		Writer totalConfusionWr = Channels.newWriter(
+				FileUtils.openOutputStream(
+						FileUtils.getFile(outputPath,
+								baseClassifierClazz.getName(), positiveClass
+										+ "_confusion-matrix.txt"))
+						.getChannel(), Config.OUT_CHARSET);
+		try {
+			writeConfusionMatrix(totalConfusionWr,
+					totalConfusionMatrix.get(positiveClass),
+					!Config.LABELS_MULTICLASS_NAME.equals(positiveClass));
+		} finally {
+			totalConfusionWr.flush();
+			totalConfusionWr.close();
+		}
+
+		for (@SuppressWarnings("rawtypes")
+		Class attrSelectEvalClazz : attrSelectEvaluationClazzes) {
+			Writer featSelectedConfusionWr = Channels
+					.newWriter(
+							FileUtils
+									.openOutputStream(
+											FileUtils
+													.getFile(
+															outputPath,
+															baseClassifierClazz
+																	.getName(),
+															attrSelectEvalClazz
+																	.getName(),
+															/*
+															 * searchClazz.
+															 * getName()
+															 */
+															positiveClass
+																	+ "_feat-selected-confusion-matrix.txt"))
+									.getChannel(), Config.OUT_CHARSET);
+			try {
+				writeConfusionMatrix(featSelectedConfusionWr, totalFeatSelectCM
+						.get(positiveClass)
+						.get(attrSelectEvalClazz.getName()/*
+														 * + searchClazz .
+														 * getName
+														 */),
+						!Config.LABELS_MULTICLASS_NAME.equals(positiveClass));
+			} finally {
+				featSelectedConfusionWr.flush();
+				featSelectedConfusionWr.close();
+			}
+		}
+
 	}
 
 }

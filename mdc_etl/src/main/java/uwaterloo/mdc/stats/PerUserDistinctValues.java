@@ -173,7 +173,7 @@ public class PerUserDistinctValues extends
 					// because of the large number of different values
 					int uniqueCount = freq.getUniqueCount();
 					delta = System.currentTimeMillis();
-					freqWriter.append(userid).append('\t').append("ALL")
+					freqWriter.append(userid).append('\t').append(Config.LABELS_MULTICLASS_NAME)
 							.append('\t').append(Integer.toString(uniqueCount))
 							.append('\t').append("N/A").append('\n');
 					delta = System.currentTimeMillis() - delta;

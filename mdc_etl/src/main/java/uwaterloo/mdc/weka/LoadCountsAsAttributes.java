@@ -1206,7 +1206,7 @@ public class LoadCountsAsAttributes implements
 				String userid = userAppUsage.relationName();
 
 				Instances countsInsts = new Instances(Channels.newReader(
-						FileUtils.openInputStream(FileUtils.getFile(TEMP_PATH, // "ALL",
+						FileUtils.openInputStream(FileUtils.getFile(TEMP_PATH, // Config.LABELS_MULTICLASS_NAME,
 								userid + ".arff")).getChannel(),
 						Config.OUT_CHARSET));
 				Instances joinedInsts = Instances.mergeInstances(userAppUsage,
@@ -1239,7 +1239,7 @@ public class LoadCountsAsAttributes implements
 				copyInsts.setRelationName(joinedInsts.relationName());
 
 				printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils
-						.concat(OUTPUT_PATH, "ALL"),
+						.concat(OUTPUT_PATH, Config.LABELS_MULTICLASS_NAME),
 						!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
 
 				++printingJobs;
@@ -1415,7 +1415,7 @@ public class LoadCountsAsAttributes implements
 				}
 
 				// ArffSaverCallable arffSaveCall = new ArffSaverCallable(
-				// userAppUsage, "ALL", ".app");
+				// userAppUsage, Config.LABELS_MULTICLASS_NAME, ".app");
 				// // arffSaveCall.outPath = FilenameUtils
 				// // .removeExtension(arffSaveCall.outPath);
 				// // arffSaveCall.outPath += ".app";
