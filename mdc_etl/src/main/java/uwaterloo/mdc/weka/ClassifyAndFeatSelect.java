@@ -857,7 +857,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						synchronized (cvFeatSelectAccuracyWr) {
 
 							cvFeatSelectAccuracyWr
-							.get(positiveClass)
+									.get(positiveClass)
 									.get(eval.getClass() // attrSelectEvalClazz
 											.getName() /*
 														 * + searchClazz .
@@ -1091,37 +1091,42 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		ClassifyAndFeatSelect app;
 
+		// C4.5 decision tree
+		app = new ClassifyAndFeatSelect(
+				J48.class,
+				true,
+				false,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
+		
 		// // Naive Bayes
 		// app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
 		// app.call();
 
-		// Boosting
-		app = new ClassifyAndFeatSelect(
-				AdaBoostM1.class,
-				true,
-				false,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
-		app = new ClassifyAndFeatSelect(
-				MultiBoostAB.class,
-				true,
-				false,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
+//		// Boosting
+//		app = new ClassifyAndFeatSelect(
+//				AdaBoostM1.class,
+//				true,
+//				false,
+//				true,
+//				new Class[] { GainRatioAttributeEval.class,
+//						PrincipalComponents.class, LatentSemanticAnalysis.class },
+//				false);
+//		app.call();
+//		app = new ClassifyAndFeatSelect(
+//				MultiBoostAB.class,
+//				true,
+//				false,
+//				true,
+//				new Class[] { GainRatioAttributeEval.class,
+//						PrincipalComponents.class, LatentSemanticAnalysis.class },
+//				false);
+//		app.call();
 
-		// C4.5 decision tree
-		app = new ClassifyAndFeatSelect(J48.class, true, false, true,
-				new Class[] { PrincipalComponents.class,
-						LatentSemanticAnalysis.class }, false);
-		app.call();
-
-		// // Bayes Net
+			// // Bayes Net
 		// app = new ClassifyAndFeatSelect(BayesNet.class);
 		// app.call();
 
@@ -1131,11 +1136,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		// app = new ClassifyAndFeatSelect(Logistic.class);
 		// app.call();
 
-		// Exception: weka.classifiers.functions.Logistic: Not enough training
-		// SVM
-		app = new ClassifyAndFeatSelect(LibSVM.class, true, true, true,
-				new Class[] { SVMAttributeEval.class }, false);
-		app.call();
+//		// Sometimes: Exception: weka.classifiers.functions.Logistic: Not enough training
+//		// SVM
+//		app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
+//				new Class[] { SVMAttributeEval.class }, false);
+//		app.call();
 
 		// // Cannot handle multinomial attrs
 		// // Bayesian Logisitc Regression
@@ -1160,6 +1165,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		HashMap<String, HashMap<String, SummaryStatistics>> accuracySummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
 		HashMap<String, SummaryStatistics> internalDirSummaryAllFeatures = new HashMap<String, SummaryStatistics>();
 		HashMap<String, HashMap<String, SummaryStatistics>> internalDirSummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
+		HashMap<String, SummaryStatistics> multicAccuracySummaryAllFeatures = new HashMap<String, SummaryStatistics>();
+		HashMap<String, HashMap<String, SummaryStatistics>> multicAccuracySummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
+
 		try {
 
 			System.out.println(baseClassifierClazz.getSimpleName() + " - "
@@ -1209,29 +1217,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				if (Config.LABELS_MULTICLASS_NAME.equals(accuracies.getKey())) {
 					// Multiclass not part of the consensus
-					HashMap<String, SummaryStatistics> multicAccuracySummaryAllFeatures = new HashMap<String, SummaryStatistics>();
-					HashMap<String, HashMap<String, SummaryStatistics>> multicAccuracySummaryFeatSelected = new HashMap<String, HashMap<String, SummaryStatistics>>();
 					gatherSummaryStats(accuracies,
 							multicAccuracySummaryAllFeatures,
 							multicAccuracySummaryFeatSelected, false);
 
-					// There is no internal node, it's just multi-class
-					// HashMap<String, HashMap<String, SummaryStatistics>>
-					// multicInternalSummaryFeatSelected = new HashMap<String,
-					// HashMap<String, SummaryStatistics>>();
-					// HashMap<String, SummaryStatistics>
-					// multicInternalSummaryAllFeatures = new HashMap<String,
-					// SummaryStatistics>();
-					// gatherSummaryStats(accuracies,
-					// multicInternalSummaryAllFeatures,
-					// multicInternalSummaryFeatSelected, true);
-
-					printSummaryStats(Config.LABELS_MULTICLASS_NAME,
-							multicAccuracySummaryAllFeatures
-									.get(Config.LABELS_MULTICLASS_NAME),
-							multicAccuracySummaryFeatSelected
-									.get(Config.LABELS_MULTICLASS_NAME), null,
-							null, false);
 				} else {
 					gatherSummaryStats(accuracies, accuracySummaryAllFeatures,
 							accuracySummaryFeatSelected, false);
@@ -1259,6 +1248,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					wr.close();
 				}
 			}
+		}
+		if (classifyMultiClass) {
+			// There is no internal node, it's just multi-class
+			printSummaryStats(Config.LABELS_MULTICLASS_NAME,
+					multicAccuracySummaryAllFeatures
+							.get(Config.LABELS_MULTICLASS_NAME),
+					multicAccuracySummaryFeatSelected
+							.get(Config.LABELS_MULTICLASS_NAME), null, null,
+					false);
 		}
 
 		if (classifyBinaryHierarchy) {

@@ -40,6 +40,7 @@ import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.core.SparseInstance;
 import weka.core.converters.ArffSaver;
 import weka.core.converters.SVMLightSaver;
 import weka.filters.Filter;
@@ -300,7 +301,7 @@ public class LoadCountsAsAttributes implements
 				ArffSaver arffsaver = new ArffSaver();
 				arffsaver.setInstances(insts);
 				arffsaver.setDestination(FileUtils.openOutputStream(dest));
-				// arffsaver.setCompressOutput(true);
+				arffsaver.setCompressOutput(true);
 				arffsaver.writeBatch();
 			} else {
 				SVMLightSaver svmlightSave = new SVMLightSaver();
@@ -804,7 +805,7 @@ public class LoadCountsAsAttributes implements
 			String prevLabel = null;
 			String instLabel = null;
 			for (File microLocF : microLocsFiles) {
-				weka.core.Instance wekaInst = new weka.core.Instance(
+				SparseInstance wekaInst = new SparseInstance(
 						allAttributes.size());
 				wekaInst.setDataset(wekaDoc);
 
@@ -930,6 +931,8 @@ public class LoadCountsAsAttributes implements
 									if (!value
 											.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
 										wekaInst.setValue(attribute, value);
+									} else if (Config.LOAD_REPLACE_MISSING_VALUES) {
+										wekaInst.setValue(attribute, 0);
 									}
 									continue;
 								} else {
@@ -1022,14 +1025,14 @@ public class LoadCountsAsAttributes implements
 							count = count + 1;
 							countMap.put(attribute, count);
 
-							if (!Config.NORMALIZE_BY
+							if (!Config.LOAD_NORMALIZE_BY
 									.equals(NORMALIZE_BY_ENUM.NONE)) {
 								if (!attrPfxMap.containsKey(attribute)) {
 									attrPfxMap.put(attribute, pfx);
 								}
 							}
 
-							if (Config.NORMALIZE_BY
+							if (Config.LOAD_NORMALIZE_BY
 									.equals(NORMALIZE_BY_ENUM.SUM)) {
 								Integer featureCount = featureCountMap.get(pfx);
 								if (featureCount == null) {
@@ -1037,7 +1040,7 @@ public class LoadCountsAsAttributes implements
 								}
 
 								featureCountMap.put(pfx, featureCount + 1);
-							} else if (Config.NORMALIZE_BY
+							} else if (Config.LOAD_NORMALIZE_BY
 									.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
 								Integer featureMax = featureMaxMap.get(pfx);
 								if (featureMax == null || count > featureMax) {
@@ -1048,7 +1051,7 @@ public class LoadCountsAsAttributes implements
 					}
 				}
 
-				if(Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null){
+				if (Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null) {
 					instLabel = Config.LABELS_SINGLES[0];
 				}
 				if (instLabel != null) {
@@ -1062,9 +1065,10 @@ public class LoadCountsAsAttributes implements
 
 				if (prevLabel != null) {
 					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
-						// 1 means true, 0 flase.. or is missing better 
+						// 1 means true, 0 flase.. or is missing better
 						for (int i = 0; i < Config.LABELS_SINGLES.length; ++i) {
-							double val = (Config.SPREAD_NOMINAL_FEATURES_USE_MISSING?Double.NaN:0);
+							double val = (Config.SPREAD_NOMINAL_FEATURES_USE_MISSING ? Double.NaN
+									: 0);
 							if (Config.LABELS_SINGLES[i].equals(prevLabel)) {
 								val = 1.0;
 							}
@@ -1098,10 +1102,10 @@ public class LoadCountsAsAttributes implements
 					int count = countMap.get(attrib);
 					if (count > 0) {
 						double normalizer = 1;
-						if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+						if (Config.LOAD_NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
 							normalizer = featureCountMap.get(attrPfxMap
 									.get(attrib));
-						} else if (Config.NORMALIZE_BY
+						} else if (Config.LOAD_NORMALIZE_BY
 								.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
 							normalizer = featureMaxMap.get(attrPfxMap
 									.get(attrib)); // TODO??: * 0.01; // so that
@@ -1110,7 +1114,11 @@ public class LoadCountsAsAttributes implements
 						}
 						wekaInst.setValue(attrib, count / normalizer);
 					} else {
-						wekaInst.setMissing(attrib);
+						if (Config.LOAD_REPLACE_MISSING_VALUES) {
+							wekaInst.setValue(attrib, 0);
+						} else {
+							wekaInst.setMissing(attrib);
+						}
 					}
 
 				}
@@ -1154,11 +1162,11 @@ public class LoadCountsAsAttributes implements
 					HashMap<String, Integer> visitAppFreq = appFreqMap
 							.get(microLoc.getName() + visit.getName());
 					double normalizer = 1;
-					if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+					if (Config.LOAD_NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
 						for (String appUid : visitAppFreq.keySet()) {
 							normalizer += visitAppFreq.get(appUid);
 						}
-					} else if (Config.NORMALIZE_BY
+					} else if (Config.LOAD_NORMALIZE_BY
 							.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
 						normalizer = Integer.MIN_VALUE;
 						for (String appUid : visitAppFreq.keySet()) {
@@ -1173,10 +1181,10 @@ public class LoadCountsAsAttributes implements
 						if (appAttr == null) {
 							continue;
 						}
-						if (Config.NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+						if (Config.LOAD_NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
 							microLocAppUsage.setValue(appAttr,
 									visitAppFreq.get(appUid) / normalizer);
-						} else if (Config.NORMALIZE_BY
+						} else if (Config.LOAD_NORMALIZE_BY
 								.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
 							microLocAppUsage.setValue(appAttr,
 									MathUtil.tf(visitAppFreq.get(appUid))
@@ -1316,94 +1324,90 @@ public class LoadCountsAsAttributes implements
 						}
 					}
 
-//Prepare for all cases 
-//					if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
+					// Prepare for all cases
+					// if (Config.CLASSIFY_USING_BIANRY_ENSEMBLE) {
 
-						Add add = new Add();
-						add.setAttributeIndex("last");
-						add.setAttributeName("binary-label");
-						add.setNominalLabels(Config.LABELS_BINARY[0]+","+Config.LABELS_BINARY[1]);
-						add.setInputFormat(joinedInsts);
+					Add add = new Add();
+					add.setAttributeIndex("last");
+					add.setAttributeName("binary-label");
+					add.setNominalLabels(Config.LABELS_BINARY[0] + ","
+							+ Config.LABELS_BINARY[1]);
+					add.setInputFormat(joinedInsts);
 
-						copyInsts = new Instances(joinedInsts);
+					copyInsts = new Instances(joinedInsts);
 
-						copyInsts = Filter.useFilter(copyInsts, add);
+					copyInsts = Filter.useFilter(copyInsts, add);
 
-						AddID addId = new AddID();
-						addId.setInputFormat(copyInsts);
-						// addId.setIDIndex("first");
-						String idName = "ID";
-						addId.setAttributeName(idName);
-						copyInsts = Filter.useFilter(copyInsts, addId);
-						
-						Writer trueLableWr = Channels
-								.newWriter(
-										FileUtils
-												.openOutputStream(
-														FileUtils.getFile(
-																FilenameUtils
-																		.concat(OUTPUT_PATH,
-																				"c"
-																						+ positiveClass),
-																userid
-																		+ "_actual-labels.properties"))
-												.getChannel(),
-										Config.OUT_CHARSET);
+					AddID addId = new AddID();
+					addId.setInputFormat(copyInsts);
+					// addId.setIDIndex("first");
+					String idName = "ID";
+					addId.setAttributeName(idName);
+					copyInsts = Filter.useFilter(copyInsts, addId);
 
-						try {
-							@SuppressWarnings("rawtypes")
-							Enumeration instEnum = copyInsts
-									.enumerateInstances();
+					Writer trueLableWr = Channels
+							.newWriter(
+									FileUtils
+											.openOutputStream(
+													FileUtils.getFile(
+															FilenameUtils
+																	.concat(OUTPUT_PATH,
+																			"c"
+																					+ positiveClass),
+															userid
+																	+ "_actual-labels.properties"))
+											.getChannel(), Config.OUT_CHARSET);
 
-							while (instEnum.hasMoreElements()) {
-								Instance copyInst = (Instance) instEnum
-										.nextElement();
+					try {
+						@SuppressWarnings("rawtypes")
+						Enumeration instEnum = copyInsts.enumerateInstances();
 
-								String cls = Long.toString(Math.round(copyInst
-										.classValue()));
+						while (instEnum.hasMoreElements()) {
+							Instance copyInst = (Instance) instEnum
+									.nextElement();
 
-								long idVal = Math.round(copyInst.value(0));
-								trueLableWr.append(Long.toString(idVal))
-										.append("=").append(cls).append('\n');
+							String cls = Long.toString(Math.round(copyInst
+									.classValue()));
 
-								String binaryLabel = null;
-								if (positiveClass.contains("+" + cls + "+")) {
-									binaryLabel = "+1";
+							long idVal = Math.round(copyInst.value(0));
+							trueLableWr.append(Long.toString(idVal))
+									.append("=").append(cls).append('\n');
 
-								} else if (positiveClass.contains("-" + cls
-										+ "-")) {
-									binaryLabel = "-1";
-								}
+							String binaryLabel = null;
+							if (positiveClass.contains("+" + cls + "+")) {
+								binaryLabel = "+1";
 
-								if (binaryLabel != null) {
-									copyInst.setValue(
-											copyInst.numAttributes() - 1,
-											binaryLabel);
-								} else {
-									copyInst.setMissing(copyInst
-											.numAttributes() - 1);
-								}
-
-								copyInst.setDataset(copyInsts);
-
+							} else if (positiveClass.contains("-" + cls + "-")) {
+								binaryLabel = "-1";
 							}
-						} finally {
-							trueLableWr.flush();
-							trueLableWr.close();
+
+							if (binaryLabel != null) {
+								copyInst.setValue(copyInst.numAttributes() - 1,
+										binaryLabel);
+							} else {
+								copyInst.setMissing(copyInst.numAttributes() - 1);
+							}
+
+							copyInst.setDataset(copyInsts);
+
 						}
+					} finally {
+						trueLableWr.flush();
+						trueLableWr.close();
+					}
 
-						// Remove the multinomial class
-						Remove rem = new Remove();
-						// The index range starts from 1 here
-						rem.setAttributeIndices(Integer.toString(copyInsts
-								.numAttributes() - 1));
-						rem.setInputFormat(copyInsts);
-						copyInsts = Filter.useFilter(copyInsts, rem);
+					// Remove the multinomial class
+					Remove rem = new Remove();
+					// The index range starts from 1 here
+					rem.setAttributeIndices(Integer.toString(copyInsts
+							.numAttributes() - 1));
+					rem.setInputFormat(copyInsts);
+					copyInsts = Filter.useFilter(copyInsts, rem);
 
-						copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
-						// Will never happen, and we want to fix the ID
-						// copyInsts.deleteWithMissingClass();
-//					}
+					copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
+					// Will never happen, and we want to fix the ID
+					// copyInsts.deleteWithMissingClass();
+					// }
 
 					copyInsts.setRelationName(joinedInsts.relationName());
 

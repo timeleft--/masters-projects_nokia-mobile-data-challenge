@@ -8,8 +8,13 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 16;
+	public static final int NUM_THREADS = 4;
 	public static final int NUM_USERS_TO_PROCESS = 80;
+	
+	public static final int VALIDATION_FOLDS = 10; //Config.NUM_USERS_TO_PROCESS; 
+	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
+
+
 	
 	public static final String LOG_PATH = "C:\\mdc-datasets\\mallet\\log";
 
@@ -19,9 +24,6 @@ public class Config {
 	public static final String MISSING_VALUE_PLACEHOLDER = "?";
 	public static final Character MISSING_VALUE_PLACEHOLDER_CHAR = '?';
 
-
-	public static final int VALIDATION_FOLDS = Config.NUM_USERS_TO_PROCESS; //10;
-	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
 	public static final int NUMBER_TESTING_USERS = 20;
 
@@ -136,9 +138,13 @@ public class Config {
 	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 	public static final boolean SPREAD_NOMINAL_FEATURES_USE_MISSING = false;
 
+
+	public enum NORMALIZE_BY_ENUM {NONE, MAXIMUM, SUM};
+	public static final NORMALIZE_BY_ENUM LOAD_NORMALIZE_BY = NORMALIZE_BY_ENUM.NONE;
+
 	public static final boolean LOAD_MISSING_CLASS_AS_OTHER = true;
 	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = false;
-
+	public static final boolean LOAD_REPLACE_MISSING_VALUES = true;
 	public static final boolean LOAD_FEATSELECTED_ONLY = false;
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
@@ -163,9 +169,6 @@ public class Config {
 	public static final boolean RECORD_ONLY_USAGEFREQ_CHANGES = true;
 
 	
-	public enum NORMALIZE_BY_ENUM {NONE, MAXIMUM, SUM};
-	public static final NORMALIZE_BY_ENUM NORMALIZE_BY = NORMALIZE_BY_ENUM.MAXIMUM;
-
 	public static final boolean DROP_LOWEST_QUANTILE = false;
 
 	public static final boolean DROP_HIGHEST_QUANTILE = false;
@@ -173,8 +176,7 @@ public class Config {
 	public static final boolean MICROLOC_SPLITS_DOCS = true;
 
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
-
-	
+		
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
 	public static Properties placeLabels;
