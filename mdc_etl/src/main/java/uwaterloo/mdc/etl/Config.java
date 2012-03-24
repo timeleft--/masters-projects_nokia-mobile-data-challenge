@@ -8,10 +8,10 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 4;
-	public static final int NUM_USERS_TO_PROCESS = 2;
+	public static final int NUM_THREADS = 8;
+	public static final int NUM_USERS_TO_PROCESS = 80;
 	
-	public static final int VALIDATION_FOLDS = 2; //Config.NUM_USERS_TO_PROCESS; 
+	public static final int VALIDATION_FOLDS = 10; //Config.NUM_USERS_TO_PROCESS; 
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
 

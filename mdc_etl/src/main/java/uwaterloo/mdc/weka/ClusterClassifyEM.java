@@ -15,6 +15,7 @@ import java.util.concurrent.Callable;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import weka.attributeSelection.ASSearch;
@@ -66,15 +67,21 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 		});
 
-		for (int v = 0; v < Config.VALIDATION_FOLDS
-				- Config.VALIDATION_FOLD_WIDTH; v += Config.VALIDATION_FOLD_WIDTH) {
-			File[] testFiles = Arrays.copyOfRange(arffFiles, v, v
+		SummaryStatistics correctInitialSummary = new SummaryStatistics();
+		SummaryStatistics correctFinalSummary = new SummaryStatistics();
+		SummaryStatistics changedToCorrectSummary = new SummaryStatistics();
+		SummaryStatistics changedFrmCorrectSummary = new SummaryStatistics();
+		SummaryStatistics numThatChangedSummary = new SummaryStatistics();
+		
+		for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
+			int foldStartIx = v * Config.VALIDATION_FOLD_WIDTH;
+			File[] testFiles = Arrays.copyOfRange(arffFiles, foldStartIx, foldStartIx
 					+ Config.VALIDATION_FOLD_WIDTH);
 			File[] trainingFiles = new File[Config.NUM_USERS_TO_PROCESS
 					- Config.VALIDATION_FOLD_WIDTH];
 			int t = 0;
 			for (int f = 0; f < arffFiles.length; ++f) {
-				if (f >= v && f < v + Config.VALIDATION_FOLD_WIDTH) {
+				if (f >= foldStartIx && f < foldStartIx + Config.VALIDATION_FOLD_WIDTH) {
 					continue;
 				}
 				trainingFiles[t] = arffFiles[f];
@@ -110,6 +117,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 					int correctInit = 0;
 					int changedToCorrect = 0;
 					int changedFromCorrect = 0;
+					int totalChanged = 0;
 					Enumeration instEnum = userInsts.enumerateInstances();
 					while (instEnum.hasMoreElements()) {
 						Instance inst = (Instance) instEnum.nextElement();
@@ -138,7 +146,17 @@ public class ClusterClassifyEM implements Callable<Void> {
 						}
 						++confusionMatrixInitial[actualLabel][initialLabel];
 
+						if (!initialLabel.equals(finalLabel)) {
+							++totalChanged;
+						}
 					}
+					
+					correctInitialSummary.addValue(correctInit * 1.0 / userInsts.numInstances());
+					correctFinalSummary.addValue(correctFinal*1.0/userInsts.numInstances());
+					changedToCorrectSummary.addValue(changedToCorrect * 1.0/totalChanged);
+					changedFrmCorrectSummary.addValue(changedFromCorrect*1.0/totalChanged);
+					numThatChangedSummary.addValue(totalChanged);
+					
 					Writer userWr = Channels.newWriter(FileUtils
 							.openOutputStream(userResultFile, true)
 							.getChannel(), Config.OUT_CHARSET);
@@ -172,6 +190,20 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 		}
 
+		File summaryFile = FileUtils.getFile(outputPath,"summary.txt");
+		Writer summaryWr = Channels.newWriter(FileUtils.openOutputStream(summaryFile).getChannel(), Config.OUT_CHARSET);
+		try{
+			summaryWr.append("Number of labels that changed due to clustering Summary (across users):\n").append(numThatChangedSummary.toString()).append("\n\n");
+			summaryWr.append("Pct of changes TO CORRECT due to clustering Summary (across users):\n").append(changedToCorrectSummary.toString()).append("\n\n");
+			summaryWr.append("Pct of changes FROM CORRECT due to clustering Summary (across users):\n").append(changedFrmCorrectSummary.toString()).append("\n\n");
+			summaryWr.append("Initial accuracy Summary (across users):\n").append(correctInitialSummary.toString()).append("\n\n");
+			summaryWr.append("Final accuracy Summary (across users):\n").append(correctFinalSummary.toString()).append("\n\n");
+			
+		}finally{
+			summaryWr.flush();
+			summaryWr.close();
+		}
+		
 		return null;
 	}
 
@@ -405,7 +437,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 				int predictedLabel = -1;
 				double predictedLabelProb = Double.NEGATIVE_INFINITY;
 				for (int l = 0; l < instLabelDistrib.length; ++l) {
-					modifiedLabelDistrib[l] = // clusterWeights[c] *
+					modifiedLabelDistrib[l] =  clusterWeights[c] *
 					emWeights[c][l] * instLabelDistrib[l];
 					if (modifiedLabelDistrib[l] > predictedLabelProb) {
 						predictedLabelProb = modifiedLabelDistrib[l];
