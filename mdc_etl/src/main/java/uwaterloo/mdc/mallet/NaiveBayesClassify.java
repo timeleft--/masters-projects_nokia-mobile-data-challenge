@@ -297,7 +297,7 @@ public class NaiveBayesClassify implements Callable<Void> {
 		for (int i = 0; i < foldConfusionMatrix.length; ++i) {
 			foldConfusionWr.append(Integer.toString(i));
 			long totalCount = 0;
-			for (int j = 0; j <= Config.LABELS_SINGLES.length; ++j) {
+			for (int j = 0; j < Config.LABELS_SINGLES.length; ++j) {
 				long cnt = foldConfusionMatrix[i].getCount(j);
 				totalCount += cnt;
 				foldConfusionWr.append('\t').append(Long.toString(cnt));

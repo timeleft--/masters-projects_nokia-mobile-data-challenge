@@ -34,6 +34,6 @@ public class MathUtil {
 	}
 	
 	public static double lg2(double orig){
-		return (Math.log(orig) / LOG_OF_2);
+		return (Math.log10(orig) / LOG_OF_2);
 	}
 }

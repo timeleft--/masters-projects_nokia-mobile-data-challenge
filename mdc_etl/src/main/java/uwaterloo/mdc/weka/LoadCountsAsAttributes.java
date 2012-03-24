@@ -17,6 +17,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
@@ -471,8 +472,8 @@ public class LoadCountsAsAttributes implements
 		appUsageAttrsFV = new FastVector();
 		for (String appUid : aggregateAppFreq.keySet()) {
 			Integer appUsageOccurs = aggregateAppFreq.get(appUid);
-			if (appUsageOccurs > stopWordAppTh
-					|| appUsageOccurs < rareWordAppTh) {
+			if ((Config.LOAD_DROP_VERYFREQUENT_VALS && appUsageOccurs > stopWordAppTh)
+					|| (Config.LOAD_DROP_VERYRARE_VALS && appUsageOccurs < rareWordAppTh)) {
 				continue;
 			}
 
@@ -805,8 +806,12 @@ public class LoadCountsAsAttributes implements
 			String prevLabel = null;
 			String instLabel = null;
 			for (File microLocF : microLocsFiles) {
-				SparseInstance wekaInst = new SparseInstance(
-						allAttributes.size());
+				Instance wekaInst;
+				if (Config.LOAD_REPLACE_MISSING_VALUES) {
+					wekaInst = new Instance(allAttributes.size());
+				} else {
+					wekaInst = new SparseInstance(allAttributes.size());
+				}
 				wekaInst.setDataset(wekaDoc);
 
 				HashMap<Attribute, Integer> countMap = new HashMap<Attribute, Integer>();
@@ -905,16 +910,16 @@ public class LoadCountsAsAttributes implements
 								continue;
 							}
 
-							if (pfx.equals("si")
-									&& (value.equals("E") || value.equals("A"))) {
+							if (Config.LOAD_DROP_VERYFREQUENT_VALS && (pfx.equals("si")
+									&& (value.equals("E") || value.equals("A")))) {
 								// This is like a stop word that always
 								// happens..
 								// sure the user is actively using the mobile!
 								continue;
 							}
 
-							if (pfx.equals("aca")
-									&& (value.equals("E") || value.equals("S"))) {
+							if (Config.LOAD_DROP_VERYFREQUENT_VALS && (pfx.equals("aca")
+									&& (value.equals("E") || value.equals("S")))) {
 								// This is like a stop word that always
 								// happens..
 								// sure the mobile is left laying down!
@@ -932,7 +937,8 @@ public class LoadCountsAsAttributes implements
 											.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
 										wekaInst.setValue(attribute, value);
 									} else if (Config.LOAD_REPLACE_MISSING_VALUES) {
-										wekaInst.setValue(attribute, 0);
+										wekaInst.setValue(attribute,
+												Config.LOAD_MISSING_VALUE_REPLA);
 									}
 									continue;
 								} else {
@@ -1102,7 +1108,8 @@ public class LoadCountsAsAttributes implements
 					int count = countMap.get(attrib);
 					if (count > 0) {
 						double normalizer = 1;
-						if (Config.LOAD_NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+						if (Config.LOAD_NORMALIZE_BY
+								.equals(NORMALIZE_BY_ENUM.SUM)) {
 							normalizer = featureCountMap.get(attrPfxMap
 									.get(attrib));
 						} else if (Config.LOAD_NORMALIZE_BY
@@ -1115,7 +1122,8 @@ public class LoadCountsAsAttributes implements
 						wekaInst.setValue(attrib, count / normalizer);
 					} else {
 						if (Config.LOAD_REPLACE_MISSING_VALUES) {
-							wekaInst.setValue(attrib, 0);
+							wekaInst.setValue(attrib,
+									Config.LOAD_MISSING_VALUE_REPLA);
 						} else {
 							wekaInst.setMissing(attrib);
 						}
@@ -1176,12 +1184,20 @@ public class LoadCountsAsAttributes implements
 							}
 						}
 					}
-					for (String appUid : visitAppFreq.keySet()) {
+					for (String appUid : appUsageAttrs.keySet()) {
 						Attribute appAttr = appUsageAttrs.get(appUid);
-						if (appAttr == null) {
+						// if (appAttr == null) {
+						if (!visitAppFreq.containsKey(appUid)) {
+							if (Config.LOAD_REPLACE_MISSING_VALUES) {
+								microLocAppUsage.setValue(appAttr,
+										Config.LOAD_MISSING_VALUE_REPLA);
+							} else {
+								microLocAppUsage.setMissing(appAttr);
+							}
 							continue;
 						}
-						if (Config.LOAD_NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
+						if (Config.LOAD_NORMALIZE_BY
+								.equals(NORMALIZE_BY_ENUM.SUM)) {
 							microLocAppUsage.setValue(appAttr,
 									visitAppFreq.get(appUid) / normalizer);
 						} else if (Config.LOAD_NORMALIZE_BY
@@ -1229,7 +1245,16 @@ public class LoadCountsAsAttributes implements
 					// actually
 					joinedInsts.deleteWithMissingClass();
 				}
+				
+				AddID addId = new AddID();
+				addId.setInputFormat(joinedInsts);
+				// addId.setIDIndex("first");
+				String idName = "ID";
+				addId.setAttributeName(idName);
+				joinedInsts = Filter.useFilter(joinedInsts, addId);
 
+				joinedInsts.setRelationName(userid);
+				
 				Instances copyInsts = joinedInsts;
 				Remove generalRemove;
 				if (Config.LOAD_FEATSELECTED_ONLY) {
@@ -1338,12 +1363,12 @@ public class LoadCountsAsAttributes implements
 
 					copyInsts = Filter.useFilter(copyInsts, add);
 
-					AddID addId = new AddID();
-					addId.setInputFormat(copyInsts);
-					// addId.setIDIndex("first");
-					String idName = "ID";
-					addId.setAttributeName(idName);
-					copyInsts = Filter.useFilter(copyInsts, addId);
+//					AddID addId = new AddID();
+//					addId.setInputFormat(copyInsts);
+//					// addId.setIDIndex("first");
+//					String idName = "ID";
+//					addId.setAttributeName(idName);
+//					copyInsts = Filter.useFilter(copyInsts, addId);
 
 					Writer trueLableWr = Channels
 							.newWriter(

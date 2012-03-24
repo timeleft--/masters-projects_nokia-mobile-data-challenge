@@ -35,11 +35,12 @@ import weka.attributeSelection.GreedyStepwise;
 import weka.attributeSelection.LatentSemanticAnalysis;
 import weka.attributeSelection.PrincipalComponents;
 import weka.attributeSelection.Ranker;
-import weka.attributeSelection.SVMAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
+import weka.classifiers.bayes.NaiveBayesUpdateable;
 import weka.classifiers.functions.LibSVM;
+import weka.classifiers.functions.Logistic;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.meta.MultiBoostAB;
@@ -136,7 +137,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				Instances trainingSet = null;
 
 				// train Classifier
-//				boolean firstUser = true;
+				// boolean firstUser = true;
 				int userIx = 0;
 				for (File userData : positiveClassDir
 						.listFiles(new FilenameFilter() {
@@ -940,7 +941,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	}
 
 	private String outputPath = "C:\\mdc-datasets\\weka\\validation";
-	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user";
+	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user_laplace";
 
 	private final Map<String, Frequency[]> totalConfusionMatrix;
 	private final Map<String, Map<String, Frequency[]>> totalFeatSelectCM;
@@ -1099,36 +1100,43 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		app = new ClassifyAndFeatSelect(
 				J48.class,
 				true,
-				false,
+				true,
 				true,
 				new Class[] { GainRatioAttributeEval.class,
 						PrincipalComponents.class, LatentSemanticAnalysis.class },
 				false);
 		app.call();
 
-		// // Naive Bayes
-		// app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class);
-		// app.call();
+		// Naive Bayes
+		app = new ClassifyAndFeatSelect(
+				NaiveBayesUpdateable.class,
+				true,
+				true,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
 
-		// // Boosting
-		// app = new ClassifyAndFeatSelect(
-		// AdaBoostM1.class,
-		// true,
-		// false,
-		// true,
-		// new Class[] { GainRatioAttributeEval.class,
-		// PrincipalComponents.class, LatentSemanticAnalysis.class },
-		// false);
-		// app.call();
-		// app = new ClassifyAndFeatSelect(
-		// MultiBoostAB.class,
-		// true,
-		// false,
-		// true,
-		// new Class[] { GainRatioAttributeEval.class,
-		// PrincipalComponents.class, LatentSemanticAnalysis.class },
-		// false);
-		// app.call();
+		// Boosting
+		app = new ClassifyAndFeatSelect(
+				AdaBoostM1.class,
+				true,
+				false,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
+		app = new ClassifyAndFeatSelect(
+				MultiBoostAB.class,
+				true,
+				false,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
 
 		// // Bayes Net
 		// app = new ClassifyAndFeatSelect(BayesNet.class);
@@ -1137,8 +1145,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		// Exception: weka.classifiers.functions.Logistic: Not enough training
 		// instances with class labels (required: 1, provided: 0)!
 		// Logistic Regression
-		// app = new ClassifyAndFeatSelect(Logistic.class);
-		// app.call();
+		app = new ClassifyAndFeatSelect(
+				Logistic.class,
+				false,
+				true,
+				true,
+				new Class[] { GainRatioAttributeEval.class,
+						PrincipalComponents.class, LatentSemanticAnalysis.class },
+				false);
+		app.call();
 
 		// // Sometimes: Exception: weka.classifiers.functions.Logistic: Not
 		// enough training
@@ -1341,7 +1356,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			long totalCount = 0;
 
 			if (!classifyingBinary) {
-				for (int j = 0; j <= Config.LABELS_SINGLES.length; ++j) {
+				for (int j = 0; j < Config.LABELS_SINGLES.length; ++j) {
 					long cnt = foldConfusionMatrix[i].getCount(j); // valsIster.next());
 					totalCount += cnt;
 					foldConfusionWr.append('\t').append(Long.toString(cnt));
