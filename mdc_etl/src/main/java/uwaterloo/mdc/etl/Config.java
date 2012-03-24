@@ -181,7 +181,8 @@ public class Config {
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 	
 	public static final int CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS = 1000;
-	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS = 8;
+	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 11;
+	public static final int CLUSTERCLASSIFY_NUM_KMEAN_RUNS = 3;
 		
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.

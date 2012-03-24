@@ -48,12 +48,15 @@ public class ClusterClassifyEM implements Callable<Void> {
 	private boolean ignoreInstsWithMissingClass;
 	private File dataDir;
 	private boolean validate = true;
+	private final int numClusters;
 
-	public ClusterClassifyEM() {
-		this(false, FileUtils.getFile(inPath));
+	public ClusterClassifyEM(int numClusters) {
+		this(numClusters, false, FileUtils.getFile(inPath));
 	}
 
-	public ClusterClassifyEM(boolean ignoreInstsWithMissingClass, File dataDir) {
+	public ClusterClassifyEM(int numClusters,
+			boolean ignoreInstsWithMissingClass, File dataDir) {
+		this.numClusters = numClusters;
 		this.ignoreInstsWithMissingClass = ignoreInstsWithMissingClass;
 		this.dataDir = dataDir;
 	}
@@ -72,16 +75,17 @@ public class ClusterClassifyEM implements Callable<Void> {
 		SummaryStatistics changedToCorrectSummary = new SummaryStatistics();
 		SummaryStatistics changedFrmCorrectSummary = new SummaryStatistics();
 		SummaryStatistics numThatChangedSummary = new SummaryStatistics();
-		
+
 		for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
 			int foldStartIx = v * Config.VALIDATION_FOLD_WIDTH;
-			File[] testFiles = Arrays.copyOfRange(arffFiles, foldStartIx, foldStartIx
-					+ Config.VALIDATION_FOLD_WIDTH);
+			File[] testFiles = Arrays.copyOfRange(arffFiles, foldStartIx,
+					foldStartIx + Config.VALIDATION_FOLD_WIDTH);
 			File[] trainingFiles = new File[Config.NUM_USERS_TO_PROCESS
 					- Config.VALIDATION_FOLD_WIDTH];
 			int t = 0;
 			for (int f = 0; f < arffFiles.length; ++f) {
-				if (f >= foldStartIx && f < foldStartIx + Config.VALIDATION_FOLD_WIDTH) {
+				if (f >= foldStartIx
+						&& f < foldStartIx + Config.VALIDATION_FOLD_WIDTH) {
 					continue;
 				}
 				trainingFiles[t] = arffFiles[f];
@@ -105,7 +109,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 				UserPrediction uesrPrediction = this.predict(userInsts);
 
-				File userResultFile = FileUtils.getFile(outputPath, userId
+				File userResultFile = FileUtils.getFile(outputPath, "n" + numClusters+ "_" + userId
 						+ ".txt");
 				FileUtils.writeStringToFile(userResultFile,
 						uesrPrediction.toString());
@@ -150,13 +154,17 @@ public class ClusterClassifyEM implements Callable<Void> {
 							++totalChanged;
 						}
 					}
-					
-					correctInitialSummary.addValue(correctInit * 1.0 / userInsts.numInstances());
-					correctFinalSummary.addValue(correctFinal*1.0/userInsts.numInstances());
-					changedToCorrectSummary.addValue(changedToCorrect * 1.0/totalChanged);
-					changedFrmCorrectSummary.addValue(changedFromCorrect*1.0/totalChanged);
+
+					correctInitialSummary.addValue(correctInit * 1.0
+							/ userInsts.numInstances());
+					correctFinalSummary.addValue(correctFinal * 1.0
+							/ userInsts.numInstances());
+					changedToCorrectSummary.addValue(changedToCorrect * 1.0
+							/ totalChanged);
+					changedFrmCorrectSummary.addValue(changedFromCorrect * 1.0
+							/ totalChanged);
 					numThatChangedSummary.addValue(totalChanged);
-					
+
 					Writer userWr = Channels.newWriter(FileUtils
 							.openOutputStream(userResultFile, true)
 							.getChannel(), Config.OUT_CHARSET);
@@ -190,20 +198,30 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 		}
 
-		File summaryFile = FileUtils.getFile(outputPath,"summary.txt");
-		Writer summaryWr = Channels.newWriter(FileUtils.openOutputStream(summaryFile).getChannel(), Config.OUT_CHARSET);
-		try{
-			summaryWr.append("Number of labels that changed due to clustering Summary (across users):\n").append(numThatChangedSummary.toString()).append("\n\n");
-			summaryWr.append("Pct of changes TO CORRECT due to clustering Summary (across users):\n").append(changedToCorrectSummary.toString()).append("\n\n");
-			summaryWr.append("Pct of changes FROM CORRECT due to clustering Summary (across users):\n").append(changedFrmCorrectSummary.toString()).append("\n\n");
-			summaryWr.append("Initial accuracy Summary (across users):\n").append(correctInitialSummary.toString()).append("\n\n");
-			summaryWr.append("Final accuracy Summary (across users):\n").append(correctFinalSummary.toString()).append("\n\n");
-			
-		}finally{
+		File summaryFile = FileUtils.getFile(outputPath, "n" + numClusters+ "_" + "summary.txt");
+		Writer summaryWr = Channels.newWriter(
+				FileUtils.openOutputStream(summaryFile).getChannel(),
+				Config.OUT_CHARSET);
+		try {
+			summaryWr
+					.append("Number of labels that changed due to clustering Summary (across users):\n")
+					.append(numThatChangedSummary.toString()).append("\n\n");
+			summaryWr
+					.append("Pct of changes TO CORRECT due to clustering Summary (across users):\n")
+					.append(changedToCorrectSummary.toString()).append("\n\n");
+			summaryWr
+					.append("Pct of changes FROM CORRECT due to clustering Summary (across users):\n")
+					.append(changedFrmCorrectSummary.toString()).append("\n\n");
+			summaryWr.append("Initial accuracy Summary (across users):\n")
+					.append(correctInitialSummary.toString()).append("\n\n");
+			summaryWr.append("Final accuracy Summary (across users):\n")
+					.append(correctFinalSummary.toString()).append("\n\n");
+
+		} finally {
 			summaryWr.flush();
 			summaryWr.close();
 		}
-		
+
 		return null;
 	}
 
@@ -240,13 +258,13 @@ public class ClusterClassifyEM implements Callable<Void> {
 		Instances noClassSet = Filter.useFilter(testSet, remClass);
 		noClassSet.setClassIndex(-1);
 
-		// run k means 10 times and choose best solution
+		// run k means a few times and choose best solution
 		SimpleKMeans clusterer = null;
 		double bestSqE = Double.MAX_VALUE;
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < Config.CLUSTERCLASSIFY_NUM_KMEAN_RUNS; i++) {
 			SimpleKMeans sk = new SimpleKMeans();
 			sk.setSeed(rand.nextInt());
-			sk.setNumClusters(Config.CLUSTERCLASSIFY_NUM_CLUSTERS);
+			sk.setNumClusters(numClusters);
 			sk.setDisplayStdDevs(true);
 			sk.buildClusterer(noClassSet);
 			if (sk.getSquaredError() < bestSqE) {
@@ -255,7 +273,6 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 		}
 
-		int numClusters = Config.CLUSTERCLASSIFY_NUM_CLUSTERS;
 		double[] clusterWeights = new double[numClusters];
 		for (int i = 0; i < clusterWeights.length; ++i) {
 			clusterWeights[i] = 1.0 / clusterWeights.length;
@@ -437,8 +454,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 				int predictedLabel = -1;
 				double predictedLabelProb = Double.NEGATIVE_INFINITY;
 				for (int l = 0; l < instLabelDistrib.length; ++l) {
-					modifiedLabelDistrib[l] =  clusterWeights[c] *
-					emWeights[c][l] * instLabelDistrib[l];
+					modifiedLabelDistrib[l] = clusterWeights[c]
+							* emWeights[c][l] * instLabelDistrib[l];
 					if (modifiedLabelDistrib[l] > predictedLabelProb) {
 						predictedLabelProb = modifiedLabelDistrib[l];
 						predictedLabel = l;
@@ -613,9 +630,10 @@ public class ClusterClassifyEM implements Callable<Void> {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ClusterClassifyEM app = new ClusterClassifyEM();
-		app.call();
-
+		for (int c = 2; c <= Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX; ++c) {
+			ClusterClassifyEM app = new ClusterClassifyEM(c);
+			app.call();
+		}
 		// How to save classifier while it is not serializable?
 		// ObjectOutputStream classifierStreamer = new ObjectOutputStream(
 		// FileUtils.openOutputStream(FileUtils.getFile(outputPath,
