@@ -301,6 +301,10 @@ public class ClusterClassifyEM implements Callable<Void> {
 		Frequency[] clusterLabelFreq = new Frequency[numClusters];
 		for (int i = 0; i < clusterLabelFreq.length; ++i) {
 			clusterLabelFreq[i] = new Frequency();
+			// Laplace way of smoothing (i.e. prevent 0 prob)
+			for(int l = 0; l< Config.LABELS_SINGLES.length; ++l){
+				clusterLabelFreq[i].addValue(l);
+			}
 		}
 
 		TreeMap<Double, double[]> instPredictionMap = new TreeMap<Double, double[]>();
@@ -470,8 +474,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 				// Update weights
 				emWeights[c] = new double[Config.LABELS_SINGLES.length];
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					emWeights[c][l] = Math.exp(logJointProbForCluster[l]
-							- logJointProbForCluster[maxLIx]);
+					emWeights[c][l] = (Math.exp(logJointProbForCluster[l]
+							- logJointProbForCluster[maxLIx]))/sum;
 				}
 			}
 
@@ -487,23 +491,26 @@ public class ClusterClassifyEM implements Callable<Void> {
 			clusterLabelFreq = new Frequency[numClusters];
 			for (int c = 0; c < clusterLabelFreq.length; ++c) {
 				clusterLabelFreq[c] = new Frequency();
+				// Laplace way of smoothing (i.e. prevent 0 prob)
+				for(int l = 0; l< Config.LABELS_SINGLES.length; ++l){
+					clusterLabelFreq[i].addValue(l);
+				}
 			}
 
 			instEnum = testSet.enumerateInstances();
 			while (instEnum.hasMoreElements()) {
 				Instance inst = (Instance) instEnum.nextElement();
 				int c = instClusterMap.get(inst.value(0));
-				double[] instLabelDistrib = instPredictionMap
-						.get(inst.value(0));
-				double[] modifiedLabelDistrib = new double[instLabelDistrib.length];
+//				double[] instLabelDistrib = instPredictionMap.get(inst.value(0));
+				double[] modifiedLabelDistrib = new double[Config.LABELS_SINGLES.length];
 
 				int predictedLabel = -1;
 				double predictedLabelProb = Double.NEGATIVE_INFINITY;
-				for (int l = 0; l < instLabelDistrib.length; ++l) {
+				for (int l = 0; l < modifiedLabelDistrib.length; ++l) {
 					
 					// The restimation is here!
 					modifiedLabelDistrib[l] = clusterWeights[c]
-							* emWeights[c][l] * instLabelDistrib[l];
+							* emWeights[c][l]; // * instLabelDistrib[l];
 					
 					
 					if (modifiedLabelDistrib[l] > predictedLabelProb) {
