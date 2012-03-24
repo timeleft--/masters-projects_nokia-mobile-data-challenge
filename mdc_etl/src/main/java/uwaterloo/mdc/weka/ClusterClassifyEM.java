@@ -8,10 +8,13 @@ import java.io.Writer;
 import java.nio.channels.Channels;
 import java.util.Arrays;
 import java.util.Enumeration;
-import java.util.HashMap;
+import java.util.TreeMap;
 import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math.stat.Frequency;
@@ -109,8 +112,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 				UserPrediction uesrPrediction = this.predict(userInsts);
 
-				File userResultFile = FileUtils.getFile(outputPath, "n" + numClusters+ "_" + userId
-						+ ".txt");
+				File userResultFile = FileUtils.getFile(outputPath, "n"
+						+ numClusters + "_" + userId + ".txt");
 				FileUtils.writeStringToFile(userResultFile,
 						uesrPrediction.toString());
 
@@ -198,7 +201,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 		}
 
-		File summaryFile = FileUtils.getFile(outputPath, "n" + numClusters+ "_" + "summary.txt");
+		File summaryFile = FileUtils.getFile(outputPath, "n" + numClusters
+				+ "_" + "summary.txt");
 		Writer summaryWr = Channels.newWriter(
 				FileUtils.openOutputStream(summaryFile).getChannel(),
 				Config.OUT_CHARSET);
@@ -275,7 +279,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 		double[] clusterWeights = new double[numClusters];
 		for (int i = 0; i < clusterWeights.length; ++i) {
-			clusterWeights[i] = 1.0 / clusterWeights.length;
+			clusterWeights[i] = 1.0;
 		}
 
 		// The idea was to sample the instances starting from centroids
@@ -299,11 +303,11 @@ public class ClusterClassifyEM implements Callable<Void> {
 			clusterLabelFreq[i] = new Frequency();
 		}
 
-		HashMap<Double, double[]> instPredictionMap = new HashMap<Double, double[]>();
-		HashMap<Double, Integer> instInitialLabelMap = new HashMap<Double, Integer>();
-		HashMap<Double, Integer> instClusterMap = new HashMap<Double, Integer>();
+		TreeMap<Double, double[]> instPredictionMap = new TreeMap<Double, double[]>();
+		TreeMap<Double, Integer> instInitialLabelMap = new TreeMap<Double, Integer>();
+		TreeMap<Double, Integer> instClusterMap = new TreeMap<Double, Integer>();
 
-		double[][] logDensityPerLabelForClusterPriors = new double[numClusters][Config.LABELS_SINGLES.length];
+//		double[][] logDensityPerLabelForClusterParameters = new double[numClusters][Config.LABELS_SINGLES.length];
 		// Enumeration instEnum = testSet.enumerateInstances();
 		// while (instEnum.hasMoreElements()) {
 		for (int i = 0; i < testSet.numInstances(); ++i) {
@@ -335,6 +339,13 @@ public class ClusterClassifyEM implements Callable<Void> {
 				if (labelDistribution[l] > predictionProb) {
 					predictionProb = labelDistribution[l];
 					predictedLabel = l;
+				} else if (labelDistribution[l] == predictionProb) {
+					// randomly break tie
+					if (rand.nextBoolean()) {
+						predictionProb = labelDistribution[l];
+						predictedLabel = l;
+
+					}
 				}
 			}
 
@@ -350,12 +361,12 @@ public class ClusterClassifyEM implements Callable<Void> {
 					// predictedLabel));
 					predictedLabel);
 
-			for (int l = 0; l < labelDistribution.length; ++l) {
-				if (labelDistribution[l] > 0) {
-					logDensityPerLabelForClusterPriors[c][l] += Math
-							.log(labelDistribution[l]);
-				}
-			}
+			// for (int l = 0; l < labelDistribution.length; ++l) {
+			// if (labelDistribution[l] > 0) {
+			// logDensityPerLabelForClusterPriors[c][l] += Math
+			// .log(labelDistribution[l]);
+			// }
+			// }
 		}
 
 		// Keep a copy for history
@@ -389,44 +400,79 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 			System.out.println(report.toString());
 
-			double[][] logDensityPerLabelForCluster = new double[numClusters][Config.LABELS_SINGLES.length];
+			// Start by calculate the log likelihood for each cluster
+			double[][] logProbPerLabelForCluster = new double[numClusters][Config.LABELS_SINGLES.length];
 
+			instEnum = testSet.enumerateInstances();
+			while (instEnum.hasMoreElements()) {
+				Instance inst = (Instance) instEnum.nextElement();
+				int c = instClusterMap.get(inst.value(0));
+				double[] instLabelDistrib = instPredictionMap
+						.get(inst.value(0));
+				for (int l = 0; l < instLabelDistrib.length; ++l) {
+					if (instLabelDistrib[l] > 0) {
+						logProbPerLabelForCluster[c][l] += Math
+								.log(instLabelDistrib[l]);
+					}
+				}
+			}
+			// double[][] logDensityPerLabelForCluster = new
+			// double[numClusters][Config.LABELS_SINGLES.length];
+			//
 			// Estimate the labels of the clusters (E in the EM)
 			double logLkhood = 0.0;
 			double sumOfWeights = 0.0;
 			for (int c = 0; c < numClusters; ++c) {
 
-				logDensityPerLabelForCluster[c] = Arrays.copyOf(
-						logDensityPerLabelForClusterPriors[c],
-						Config.LABELS_SINGLES.length);
+				// logDensityPerLabelForCluster[c] = Arrays.copyOf(
+				// logDensityPerLabelForClusterPriors[c],
+				// Config.LABELS_SINGLES.length);
 
+				// For this cluster, what is the joint probability
+				double[] logJointProbForCluster = logProbPerLabelForCluster[c];
+				//
 				int maxLIx = 0;
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					logDensityPerLabelForCluster[c][l] += clusterLabelFreq[c]
-							.getPct(l);
+					double prior = clusterLabelFreq[c].getPct(l);
+					if (prior > 0) {
+						logJointProbForCluster[l] += Math.log(prior);
 
-					if (logDensityPerLabelForCluster[c][l] > logDensityPerLabelForCluster[c][maxLIx]) {
-						maxLIx = l;
+						if (logJointProbForCluster[l] > logJointProbForCluster[maxLIx]) {
+							maxLIx = l;
+						}
+						// Not needed.. since the index itself will not be used,
+						// just the max
+						// else if (logJointProbForCluster[l] ==
+						// logJointProbForCluster[maxLIx]) {
+						// // randomly break tie
+						// if(rand.nextBoolean()){
+						// maxLIx = l;
+						// }
+						// }
 					}
 				}
 
 				double sum = 0.0;
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					sum += Math.exp(logDensityPerLabelForCluster[c][l]
-							- logDensityPerLabelForCluster[c][maxLIx]);
+					sum += Math.exp(logJointProbForCluster[l]
+							- logJointProbForCluster[maxLIx]);
 				}
 
-				double logDensityForCluster = logDensityPerLabelForCluster[c][maxLIx];
+				double logProbForCluster = logJointProbForCluster[maxLIx];
 				if (sum > 0) {
-					logDensityForCluster += Math.log(sum);
+					logProbForCluster += Math.log(sum);
 				}
 				// Add
 
-				logLkhood += clusterWeights[c] * logDensityForCluster;
+				logLkhood += clusterWeights[c] * logProbForCluster;
 				sumOfWeights += clusterWeights[c];
 
 				// Update weights
-				emWeights[c] = logDensityPerLabelForCluster[c];
+				emWeights[c] = new double[Config.LABELS_SINGLES.length];
+				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+					emWeights[c][l] = Math.exp(logJointProbForCluster[l]
+							- logJointProbForCluster[maxLIx]);
+				}
 			}
 
 			expectationOld = expectation;
@@ -454,16 +500,25 @@ public class ClusterClassifyEM implements Callable<Void> {
 				int predictedLabel = -1;
 				double predictedLabelProb = Double.NEGATIVE_INFINITY;
 				for (int l = 0; l < instLabelDistrib.length; ++l) {
+					
+					// The restimation is here!
 					modifiedLabelDistrib[l] = clusterWeights[c]
 							* emWeights[c][l] * instLabelDistrib[l];
+					
+					
 					if (modifiedLabelDistrib[l] > predictedLabelProb) {
 						predictedLabelProb = modifiedLabelDistrib[l];
 						predictedLabel = l;
+					} else if (modifiedLabelDistrib[l] == predictedLabelProb) {
+						if (rand.nextBoolean()) {
+							predictedLabelProb = modifiedLabelDistrib[l];
+							predictedLabel = l;
+						}
 					}
 				}
 
+				// And it carries over to the next iteration here
 				instPredictionMap.put(inst.value(0), modifiedLabelDistrib);
-
 				clusterLabelFreq[c].addValue(predictedLabel);
 			}
 		}
@@ -475,17 +530,17 @@ public class ClusterClassifyEM implements Callable<Void> {
 			double lPct = Double.NEGATIVE_INFINITY;
 			while (valsIter.hasNext()) {
 				Long l = (Long) valsIter.next();
-				if (clusterLabelFreq[c].getPct(l) > lPct) {
+				if (clusterLabelFreq[c].getPct(l) > lPct || (clusterLabelFreq[c].getPct(l) == lPct && rand.nextBoolean())) {
 					clusterLabels[c] = l;
 					lPct = clusterLabelFreq[c].getPct(l);
-				}
+				} 
 			}
 		}
-		HashMap<Double, Integer> instTrueLabelMap = null;
+		TreeMap<Double, Integer> instTrueLabelMap = null;
 		if (validate) {
-			instTrueLabelMap = new HashMap<Double, Integer>();
+			instTrueLabelMap = new TreeMap<Double, Integer>();
 		}
-		HashMap<Double, Integer> instFinalLabelMap = new HashMap<Double, Integer>();
+		TreeMap<Double, Integer> instFinalLabelMap = new TreeMap<Double, Integer>();
 		instEnum = testSet.enumerateInstances();
 		while (instEnum.hasMoreElements()) {
 			Instance inst = (Instance) instEnum.nextElement();
@@ -515,14 +570,14 @@ public class ClusterClassifyEM implements Callable<Void> {
 	}
 
 	public class UserPrediction {
-		public HashMap<Double, Integer> instTrueLabelMap;
+		public TreeMap<Double, Integer> instTrueLabelMap;
 		public int numClusters;
 		public double[][] clusterLabelPriors;
 		public Frequency[] clusterLabelFreq;
 		public long[] clusterLabels;
-		public HashMap<Double, Integer> instClusterMap;
-		public HashMap<Double, Integer> instInitialLabelMap;
-		public HashMap<Double, Integer> instFinalLabelMap;
+		public TreeMap<Double, Integer> instClusterMap;
+		public TreeMap<Double, Integer> instInitialLabelMap;
+		public TreeMap<Double, Integer> instFinalLabelMap;
 
 		@Override
 		public String toString() {
@@ -630,10 +685,24 @@ public class ClusterClassifyEM implements Callable<Void> {
 	}
 
 	public static void main(String[] args) throws Exception {
-		for (int c = 2; c <= Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX; ++c) {
+		ExecutorService diffClusterNumExecutor = Executors.newFixedThreadPool(Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX - Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MIN + 1);
+		// TODO: iterate over folds here, and train classifier once for each fold
+		Future<Void> lastFuture = null;
+		for (int c = Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MIN; c <= Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX; ++c) {
 			ClusterClassifyEM app = new ClusterClassifyEM(c);
-			app.call();
+			lastFuture = diffClusterNumExecutor.submit(app);
 		}
+		
+		// I bet their implementation of waiting is smarter
+		// that the busy wait below (but don't remove it)
+		lastFuture.get();
+		
+		diffClusterNumExecutor.shutdown();
+		
+		while(!diffClusterNumExecutor.isTerminated()){
+			Thread.sleep(5000);
+		}
+		
 		// How to save classifier while it is not serializable?
 		// ObjectOutputStream classifierStreamer = new ObjectOutputStream(
 		// FileUtils.openOutputStream(FileUtils.getFile(outputPath,

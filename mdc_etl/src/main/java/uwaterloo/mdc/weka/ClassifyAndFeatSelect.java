@@ -403,9 +403,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							// Get the true label from the properties file,
 							// Using the value of the ID attribute as key
 							// ID is at index 0
-							trueLabelCfMIx = Long.parseLong(validationActualCs
-									.getProperty(Long.toString(Math.round(vInst
-											.value(0)))));
+							try {
+								trueLabelCfMIx = Long
+										.parseLong(validationActualCs.getProperty(Long
+												.toString(Math.round(vInst
+														.value(0)))));
+							} catch (NumberFormatException ignored) {
+								trueLabelCfMIx = 0;
+								System.err
+										.println("Cannot get true label for instance ID "
+												+ vInst.value(0)
+												+ " in positive class "
+												+ positiveClass);
+							}
 						} else {
 							trueLabelCfMIx = Math.round(vInst.classValue());
 						}
@@ -941,7 +951,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	}
 
 	private String outputPath = "C:\\mdc-datasets\\weka\\validation";
-	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user_laplace";
+	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user";
 
 	private final Map<String, Frequency[]> totalConfusionMatrix;
 	private final Map<String, Map<String, Frequency[]>> totalFeatSelectCM;
@@ -1076,14 +1086,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	 * @param args
 	 * @throws Exception
 	 */
-	public static void main(String[] args) throws Exception {
+	public static void main(String[] args) {
 		Config.placeLabels = new Properties();
-		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
-				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-		Config.quantizedFields = new Properties();
-		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
-				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		try {
+			Config.placeLabels.load(FileUtils.openInputStream(FileUtils
+					.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
 
+			Config.quantizedFields = new Properties();
+			Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
+					.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 		// CalcCutPoints.main(args);
 		// ImportIntoMallet.main(args);
 		// //
@@ -1096,47 +1111,53 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		ClassifyAndFeatSelect app;
 
-		// C4.5 decision tree
-		app = new ClassifyAndFeatSelect(
-				J48.class,
-				true,
-				true,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
+		try {
+			// C4.5 decision tree
+			app = new ClassifyAndFeatSelect(J48.class, true, true,
+					true,
+					new Class[] {// GainRatioAttributeEval.class,
+					LatentSemanticAnalysis.class, PrincipalComponents.class, },
+					false);
 
-		// Naive Bayes
-		app = new ClassifyAndFeatSelect(
-				NaiveBayesUpdateable.class,
-				true,
-				true,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
+			app.call();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
-		// Boosting
-		app = new ClassifyAndFeatSelect(
-				AdaBoostM1.class,
-				true,
-				false,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
-		app = new ClassifyAndFeatSelect(
-				MultiBoostAB.class,
-				true,
-				false,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
+		try {
+			// Naive Bayes
+			app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class, true,
+					true, true,
+					new Class[] {// GainRatioAttributeEval.class,
+					LatentSemanticAnalysis.class, PrincipalComponents.class, },
+					false);
+			app.call();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			// Boosting
+			app = new ClassifyAndFeatSelect(AdaBoostM1.class, true, false,
+					true,
+					new Class[] { // GainRatioAttributeEval.class,
+					LatentSemanticAnalysis.class, PrincipalComponents.class, },
+					false);
+			app.call();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		// app = new ClassifyAndFeatSelect(
+		// MultiBoostAB.class,
+		// true,
+		// false,
+		// true,
+		// new Class[] { GainRatioAttributeEval.class,
+		// LatentSemanticAnalysis.class, PrincipalComponents.class, },
+		// false);
+		// app.call();
 
 		// // Bayes Net
 		// app = new ClassifyAndFeatSelect(BayesNet.class);
@@ -1145,15 +1166,18 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		// Exception: weka.classifiers.functions.Logistic: Not enough training
 		// instances with class labels (required: 1, provided: 0)!
 		// Logistic Regression
-		app = new ClassifyAndFeatSelect(
-				Logistic.class,
-				false,
-				true,
-				true,
-				new Class[] { GainRatioAttributeEval.class,
-						PrincipalComponents.class, LatentSemanticAnalysis.class },
-				false);
-		app.call();
+		try {
+
+			app = new ClassifyAndFeatSelect(Logistic.class, false, true,
+					true,
+					new Class[] {// GainRatioAttributeEval.class,
+					LatentSemanticAnalysis.class, PrincipalComponents.class, },
+					false);
+			app.call();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 		// // Sometimes: Exception: weka.classifiers.functions.Logistic: Not
 		// enough training
@@ -1482,18 +1506,49 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		for (@SuppressWarnings("rawtypes")
 		Class clazz : attrSelectEvaluationClazzes) {
-			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-					baseClassifierClazz.getName(), clazz.getName(),
-					positiveClass + "_feat-selected_accuracy-summary.txt"),
-					pcAccuracySummaryFeatSelected.get(clazz.getName())
-							.toString());
-			if (expectInternal) {
+			if (pcAccuracySummaryFeatSelected == null) {
+				System.err.println("Null accuracy map for "
+						+ baseClassifierClazz.getSimpleName() + positiveClass);
+			} else if (pcAccuracySummaryFeatSelected.containsKey(clazz
+					.getName())) {
+
+				System.err.println("Null summary for "
+						+ baseClassifierClazz.getSimpleName() + positiveClass
+						+ "/" + clazz.getSimpleName());
+
+			} else {
 				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
 						baseClassifierClazz.getName(), clazz.getName(),
-						positiveClass
-								+ "_feat-selected_internal-dir-summary.txt"),
-						pcInternalDirSummaryFeatSelected.get(clazz.getName())
+						positiveClass + "_feat-selected_accuracy-summary.txt"),
+						pcAccuracySummaryFeatSelected.get(clazz.getName())
 								.toString());
+			}
+			if (expectInternal) {
+				if (pcInternalDirSummaryFeatSelected == null) {
+					System.err.println("Null InternalDir map for "
+							+ baseClassifierClazz.getSimpleName()
+							+ positiveClass);
+				} else if (pcInternalDirSummaryFeatSelected.containsKey(clazz
+						.getName())) {
+
+					System.err.println("Null summary for "
+							+ baseClassifierClazz.getSimpleName()
+							+ positiveClass + "/" + clazz.getSimpleName());
+
+				} else {
+					FileUtils
+							.writeStringToFile(
+									FileUtils
+											.getFile(
+													outputPath,
+													baseClassifierClazz
+															.getName(),
+													clazz.getName(),
+													positiveClass
+															+ "_feat-selected_internal-dir-summary.txt"),
+									pcInternalDirSummaryFeatSelected.get(
+											clazz.getName()).toString());
+				}
 			}
 		}
 

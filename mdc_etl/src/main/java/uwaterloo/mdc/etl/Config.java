@@ -9,9 +9,9 @@ public class Config {
 
 	public static final String USERID_COLNAME = "userid";
 	public static final int NUM_THREADS = 8;
-	public static final int NUM_USERS_TO_PROCESS = 80;
+	public static final int NUM_USERS_TO_PROCESS = 8;
 	
-	public static final int VALIDATION_FOLDS = 10; //Config.NUM_USERS_TO_PROCESS; 
+	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
 
@@ -181,7 +181,8 @@ public class Config {
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 	
 	public static final int CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS = 1000;
-	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 11;
+	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MIN = 8;
+	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 8;
 	public static final int CLUSTERCLASSIFY_NUM_KMEAN_RUNS = 3;
 		
 	// This class is thread-safe: multiple threads can share a single Properties
