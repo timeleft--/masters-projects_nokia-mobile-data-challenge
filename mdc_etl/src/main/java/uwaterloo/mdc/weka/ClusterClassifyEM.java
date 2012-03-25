@@ -21,6 +21,7 @@ import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.Config.CLUSTER_CLASSIFY_METRIC_ENUM;
 import uwaterloo.mdc.etl.util.StringUtils;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.PrincipalComponents;
@@ -354,6 +355,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 		remClass.setAttributeIndices("last"); // Integer.toString(testSet.numAttributes());
 		Instances noClassSet = Filter.useFilter(testSet, remClass);
 		noClassSet.setClassIndex(-1);
+		noClassSet.deleteAttributeAt(noClassSet.numAttributes()-1);
 
 		// run k means a few times and choose best solution
 		SimpleKMeans clusterer = null;
@@ -457,8 +459,14 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 			for (int l = 0; l < labelDistribution.length; ++l) {
 				if (labelDistribution[l] > 0) {
-					logProbPerLabelForCluster[c][l] += Math
+					if(Config.CLUSTER_CLASSIFY_METRIC.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)){
+						logProbPerLabelForCluster[c][l] +=  Math
 							.log(labelDistribution[l]);
+					}else	if(Config.CLUSTER_CLASSIFY_METRIC.equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)){
+						logProbPerLabelForCluster[c][l] += labelDistribution[l] *  Math
+								.log(1/labelDistribution[l]);
+					}
+					
 				}
 			}
 		}
@@ -551,7 +559,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 					if (prior > 0) {
 						logJointProbForCluster[l] += Math.log(prior);
 
-						if (logJointProbForCluster[l] > logJointProbForCluster[maxLIx]) {
+						if (logJointProbForCluster[l]<logJointProbForCluster[maxLIx]) {
 							maxLIx = l;
 						}
 						// Not needed.. since the index itself will not be used,
@@ -712,15 +720,15 @@ public class ClusterClassifyEM implements Callable<Void> {
 			clusterLabels[c] = new LinkedList<Integer>();
 			Iterator<Comparable<?>> valsIter = clusterLabelFreq[c]
 					.valuesIterator();
-			clusterLabels[c].add(((Long)valsIter.next()).intValue());
+			clusterLabels[c].add(((Long) valsIter.next()).intValue());
 			double lPct = clusterLabelFreq[c].getPct(clusterLabels[c].get(0));
 			while (valsIter.hasNext()) {
 				Long l = (Long) valsIter.next();
 				double probDiv = clusterLabelFreq[c].getPct(l) / lPct;
-				if (probDiv>1) {
-					if(probDiv > Config.CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV){
-					// This is a pure cluster
-					clusterLabels[c].clear();
+				if (probDiv > 1) {
+					if (probDiv > Config.CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV) {
+						// This is a pure cluster
+						clusterLabels[c].clear();
 					}
 					clusterLabels[c].add(l.intValue());
 					lPct = clusterLabelFreq[c].getPct(l);
@@ -750,22 +758,37 @@ public class ClusterClassifyEM implements Callable<Void> {
 		public String toString() {
 
 			StringBuffer result = new StringBuffer();
-			result.append("Cluster Labels:\n").append("=================\n")
-					.append("Cluster");
+			result.append("Cluster Prior Label Distrib:\n")
+					.append("=================\n").append("Cluster");
 			for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-				result.append('\t').append("priorLabel=" + l);
-				result.append('\t').append("posteriorLabel=" + l);
+				result.append('\t').append(l);
+
 			}
 			result.append('\n');
 			for (int c = 0; c < numClusters; ++c) {
 				result.append(c);
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					result.append('\t')
-							.append(Double.toString(clusterLabelPriors[c]
-									.getPct(l)))
-							.append('\t')
-							.append(Double.toString(clusterLabelFreq[c]
-									.getPct(l)));
+					result.append('\t').append(
+							Double.toString(clusterLabelPriors[c].getPct(l)));
+
+				}
+				result.append('\n');
+			}
+			result.append('\n');
+
+			result.append("Cluster Final Label Distrib:\n")
+					.append("=================\n").append("Cluster");
+			for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+				result.append('\t').append(l);
+
+			}
+			result.append('\n');
+			for (int c = 0; c < numClusters; ++c) {
+				result.append(c);
+				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+					result.append('\t').append(
+							Double.toString(clusterLabelFreq[c].getPct(l)));
+
 				}
 				result.append('\n');
 			}
@@ -773,14 +796,12 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 			result.append("\nCluster\tinitialLabelling\tfinalLabelling\n");
 			for (int c = 0; c < numClusters; ++c) {
-				result.append(c);
-				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					result.append('\t')
-							.append("{" + clusterLabelsClustered[c].toString() + "}")
-							.append('\t')
-							.append("{" + clusterLabelsFinal[c].toString() + "}");
-				}
-				result.append('\n');
+				result.append(c)
+						.append('\t')
+						.append("{" + clusterLabelsClustered[c].toString()
+								+ "}").append('\t')
+						.append("{" + clusterLabelsFinal[c].toString() + "}")
+						.append('\n');
 			}
 
 			result.append("Instances Clusters and Labels:\n")
