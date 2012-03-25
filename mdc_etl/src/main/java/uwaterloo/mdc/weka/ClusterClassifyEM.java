@@ -3,14 +3,14 @@ package uwaterloo.mdc.weka;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.io.Writer;
 import java.nio.channels.Channels;
 import java.util.Arrays;
 import java.util.Enumeration;
-import java.util.TreeMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,6 +21,7 @@ import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
+import uwaterloo.mdc.etl.util.StringUtils;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.PrincipalComponents;
 import weka.attributeSelection.Ranker;
@@ -74,10 +75,17 @@ public class ClusterClassifyEM implements Callable<Void> {
 		});
 
 		SummaryStatistics correctInitialSummary = new SummaryStatistics();
+		SummaryStatistics correctClusteredSummary = new SummaryStatistics();
 		SummaryStatistics correctFinalSummary = new SummaryStatistics();
-		SummaryStatistics changedToCorrectSummary = new SummaryStatistics();
-		SummaryStatistics changedFrmCorrectSummary = new SummaryStatistics();
-		SummaryStatistics numThatChangedSummary = new SummaryStatistics();
+		SummaryStatistics changedToCorrectSummaryFinal = new SummaryStatistics();
+		SummaryStatistics changedFrmCorrectSummaryFinal = new SummaryStatistics();
+		SummaryStatistics numThatChangedSummaryFinal = new SummaryStatistics();
+		int[][] totalConfusionMatrixInitial = new int[Config.LABELS_SINGLES.length][Config.LABELS_SINGLES.length];
+		int[][] totalConfusionMatrixFinal = new int[Config.LABELS_SINGLES.length][Config.LABELS_SINGLES.length];
+		SummaryStatistics changedToCorrectSummaryClustered = new SummaryStatistics();
+		SummaryStatistics changedFrmCorrectSummaryClustered = new SummaryStatistics();
+		SummaryStatistics numThatChangedSummaryClustered = new SummaryStatistics();
+		int[][] totalConfusionMatrixClustered = new int[Config.LABELS_SINGLES.length][Config.LABELS_SINGLES.length];
 
 		for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
 			int foldStartIx = v * Config.VALIDATION_FOLD_WIDTH;
@@ -119,12 +127,17 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 				if (validate) {
 					int confusionMatrixInitial[][] = new int[Config.LABELS_SINGLES.length][Config.LABELS_SINGLES.length];
+					int confusionMatrixClustered[][] = new int[Config.LABELS_SINGLES.length][Config.LABELS_SINGLES.length];
 					int confusionMatrixFinal[][] = new int[Config.LABELS_SINGLES.length][Config.LABELS_SINGLES.length];
 					int correctFinal = 0;
+					int correctClustered = 0;
 					int correctInit = 0;
-					int changedToCorrect = 0;
-					int changedFromCorrect = 0;
-					int totalChanged = 0;
+					int changedToCorrectFinal = 0;
+					int changedFromCorrectFinal = 0;
+					int totalChangedFinal = 0;
+					int changedToCorrectClustered = 0;
+					int changedFromCorrectClustered = 0;
+					int totalChangedClustered = 0;
 					Enumeration instEnum = userInsts.enumerateInstances();
 					while (instEnum.hasMoreElements()) {
 						Instance inst = (Instance) instEnum.nextElement();
@@ -137,24 +150,42 @@ public class ClusterClassifyEM implements Callable<Void> {
 								.get(inst.value(0));
 						Integer finalLabel = uesrPrediction.instFinalLabelMap
 								.get(inst.value(0));
+						Integer clusteredLabel = uesrPrediction.instClusteredLabelMap
+								.get(inst.value(0));
 						if (finalLabel.equals(actualLabel)) {
 							++correctFinal;
 							if (!initialLabel.equals(finalLabel)) {
-								++changedToCorrect;
+								++changedToCorrectFinal;
 							}
 						}
 						++confusionMatrixFinal[actualLabel][finalLabel];
+						++totalConfusionMatrixFinal[actualLabel][finalLabel];
+						if (clusteredLabel.equals(actualLabel)) {
+							++correctClustered;
+							if (!initialLabel.equals(clusteredLabel)) {
+								++changedToCorrectClustered;
+							}
+						}
+						++confusionMatrixClustered[actualLabel][clusteredLabel];
+						++totalConfusionMatrixClustered[actualLabel][clusteredLabel];
 
 						if (initialLabel.equals(actualLabel)) {
 							++correctInit;
 							if (!initialLabel.equals(finalLabel)) {
-								++changedFromCorrect;
+								++changedFromCorrectFinal;
+							}
+							if (!initialLabel.equals(clusteredLabel)) {
+								++changedFromCorrectClustered;
 							}
 						}
 						++confusionMatrixInitial[actualLabel][initialLabel];
+						++totalConfusionMatrixInitial[actualLabel][initialLabel];
 
 						if (!initialLabel.equals(finalLabel)) {
-							++totalChanged;
+							++totalChangedFinal;
+						}
+						if (!initialLabel.equals(clusteredLabel)) {
+							++totalChangedClustered;
 						}
 					}
 
@@ -162,22 +193,49 @@ public class ClusterClassifyEM implements Callable<Void> {
 							/ userInsts.numInstances());
 					correctFinalSummary.addValue(correctFinal * 1.0
 							/ userInsts.numInstances());
-					changedToCorrectSummary.addValue(changedToCorrect * 1.0
-							/ totalChanged);
-					changedFrmCorrectSummary.addValue(changedFromCorrect * 1.0
-							/ totalChanged);
-					numThatChangedSummary.addValue(totalChanged);
+					correctClusteredSummary.addValue(correctClustered * 1.0
+							/ userInsts.numInstances());
+					changedToCorrectSummaryFinal.addValue(changedToCorrectFinal
+							* 1.0 / totalChangedFinal);
+					changedFrmCorrectSummaryFinal
+							.addValue(changedFromCorrectFinal * 1.0
+									/ totalChangedFinal);
+					numThatChangedSummaryFinal.addValue(totalChangedFinal);
+					changedToCorrectSummaryClustered
+							.addValue(changedToCorrectClustered * 1.0
+									/ totalChangedClustered);
+					changedFrmCorrectSummaryClustered
+							.addValue(changedFromCorrectClustered * 1.0
+									/ totalChangedClustered);
+					numThatChangedSummaryClustered
+							.addValue(totalChangedClustered);
 
 					Writer userWr = Channels.newWriter(FileUtils
 							.openOutputStream(userResultFile, true)
 							.getChannel(), Config.OUT_CHARSET);
 					try {
-						userWr.append("\n\nChanged To Correct Label: ")
-								.append(Integer.toString(changedToCorrect))
+						userWr.append(
+								"\n\nChanged To Correct Label Clustered: ")
+								.append(Integer
+										.toString(changedToCorrectClustered))
 								.append('\n');
-						userWr.append("\nChanged FROM Correct Label: ")
-								.append(Integer.toString(changedFromCorrect))
+						userWr.append(
+								"\nChanged FROM Correct Label Clustered: ")
+								.append(Integer
+										.toString(changedFromCorrectClustered))
 								.append('\n');
+						userWr.append("\nNum changed Clustered: ").append(
+								Integer.toString(totalChangedClustered));
+
+						userWr.append("\n\nChanged To Correct Label Final: ")
+								.append(Integer.toString(changedToCorrectFinal))
+								.append('\n');
+						userWr.append("\nChanged FROM Correct Label Final: ")
+								.append(Integer
+										.toString(changedFromCorrectFinal))
+								.append('\n');
+						userWr.append("\nNum changed Final: ").append(
+								Integer.toString(totalChangedFinal));
 
 						userWr.append("\nTotal Instances: ")
 								.append(Integer.toString(userInsts
@@ -187,6 +245,11 @@ public class ClusterClassifyEM implements Callable<Void> {
 								.append(Integer.toString(correctInit))
 								.append("\n\nInitial Confusion Matrix:\n");
 						writeConfusionMatrix(userWr, confusionMatrixInitial);
+
+						userWr.append("\n\nClustered correct classifications: ")
+								.append(Integer.toString(correctClustered))
+								.append("\n\nClustered Confusion Matrix:\n");
+						writeConfusionMatrix(userWr, confusionMatrixClustered);
 
 						userWr.append("\n\nFinal correct classifications: ")
 								.append(Integer.toString(correctFinal))
@@ -209,17 +272,47 @@ public class ClusterClassifyEM implements Callable<Void> {
 		try {
 			summaryWr
 					.append("Number of labels that changed due to clustering Summary (across users):\n")
-					.append(numThatChangedSummary.toString()).append("\n\n");
+					.append(numThatChangedSummaryClustered.toString())
+					.append("\n\n");
 			summaryWr
 					.append("Pct of changes TO CORRECT due to clustering Summary (across users):\n")
-					.append(changedToCorrectSummary.toString()).append("\n\n");
+					.append(changedToCorrectSummaryClustered.toString())
+					.append("\n\n");
 			summaryWr
 					.append("Pct of changes FROM CORRECT due to clustering Summary (across users):\n")
-					.append(changedFrmCorrectSummary.toString()).append("\n\n");
+					.append(changedFrmCorrectSummaryClustered.toString())
+					.append("\n\n");
+
+			summaryWr
+					.append("Number of labels that changed due to EM Summary (across users):\n")
+					.append(numThatChangedSummaryFinal.toString())
+					.append("\n\n");
+			summaryWr
+					.append("Pct of changes TO CORRECT due to EM Summary (across users):\n")
+					.append(changedToCorrectSummaryFinal.toString())
+					.append("\n\n");
+			summaryWr
+					.append("Pct of changes FROM CORRECT due toEM Summary (across users):\n")
+					.append(changedFrmCorrectSummaryFinal.toString())
+					.append("\n\n");
+
 			summaryWr.append("Initial accuracy Summary (across users):\n")
 					.append(correctInitialSummary.toString()).append("\n\n");
+
+			summaryWr.append("Clustered accuracy Summary (across users):\n")
+					.append(correctClusteredSummary.toString()).append("\n\n");
+
 			summaryWr.append("Final accuracy Summary (across users):\n")
 					.append(correctFinalSummary.toString()).append("\n\n");
+
+			summaryWr.append("Total confusion matrix INITIAL:\n");
+			writeConfusionMatrix(summaryWr, totalConfusionMatrixInitial);
+
+			summaryWr.append("\n\nTotal confusion matrix Clustered:\n");
+			writeConfusionMatrix(summaryWr, totalConfusionMatrixClustered);
+
+			summaryWr.append("\n\nTotal confusion matrix FINAL:\n");
+			writeConfusionMatrix(summaryWr, totalConfusionMatrixFinal);
 
 		} finally {
 			summaryWr.flush();
@@ -276,11 +369,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 				clusterer = sk;
 			}
 		}
-
 		double[] clusterWeights = new double[numClusters];
-		for (int i = 0; i < clusterWeights.length; ++i) {
-			clusterWeights[i] = 1.0;
-		}
 
 		// The idea was to sample the instances starting from centroids
 		// Enumeration centroidEmum =
@@ -302,7 +391,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 		for (int i = 0; i < clusterLabelFreq.length; ++i) {
 			clusterLabelFreq[i] = new Frequency();
 			// Laplace way of smoothing (i.e. prevent 0 prob)
-			for(int l = 0; l< Config.LABELS_SINGLES.length; ++l){
+			for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
 				clusterLabelFreq[i].addValue(l);
 			}
 		}
@@ -311,7 +400,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 		TreeMap<Double, Integer> instInitialLabelMap = new TreeMap<Double, Integer>();
 		TreeMap<Double, Integer> instClusterMap = new TreeMap<Double, Integer>();
 
-//		double[][] logDensityPerLabelForClusterParameters = new double[numClusters][Config.LABELS_SINGLES.length];
+		double[][] logProbPerLabelForCluster = new double[numClusters][Config.LABELS_SINGLES.length];
 		// Enumeration instEnum = testSet.enumerateInstances();
 		// while (instEnum.hasMoreElements()) {
 		for (int i = 0; i < testSet.numInstances(); ++i) {
@@ -356,6 +445,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 			Instance noClassInst = noClassSet.instance(i);
 			int c = clusterer.clusterInstance(noClassInst);
 			instClusterMap.put(noClassInst.value(0), c);
+			++clusterWeights[c];
 
 			clusterLabelFreq[c].addValue(predictedLabel);
 			instPredictionMap.put(noClassInst.value(0), // ID
@@ -365,61 +455,79 @@ public class ClusterClassifyEM implements Callable<Void> {
 					// predictedLabel));
 					predictedLabel);
 
-			// for (int l = 0; l < labelDistribution.length; ++l) {
-			// if (labelDistribution[l] > 0) {
-			// logDensityPerLabelForClusterPriors[c][l] += Math
-			// .log(labelDistribution[l]);
-			// }
-			// }
-		}
-
-		// Keep a copy for history
-		double[][] labelPriors = new double[numClusters][Config.LABELS_SINGLES.length];
-		for (int c = 0; c < labelPriors.length; ++c) {
-			for (int l = 0; l < labelPriors[c].length; ++l) {
-				labelPriors[c][l] = clusterLabelFreq[c].getPct(l);
+			for (int l = 0; l < labelDistribution.length; ++l) {
+				if (labelDistribution[l] > 0) {
+					logProbPerLabelForCluster[c][l] += Math
+							.log(labelDistribution[l]);
+				}
 			}
 		}
 
+		// Keep a copy for history.. a shallow copy is enough since they
+		// are updated by creating new objects
+		Frequency[] labelPriors = Arrays.copyOf(clusterLabelFreq, numClusters);
+		// new double[numClusters][Config.LABELS_SINGLES.length];
+		// for (int c = 0; c < labelPriors.length; ++c) {
+		// for (int l = 0; l < labelPriors[c].length; ++l) {
+		// labelPriors[c][l] = clusterLabelFreq[c].getPct(l);
+		// }
+		// }
+
+		// Normalize cluster weights
+		for (int c = 0; c < clusterWeights.length; ++c) {
+			clusterWeights[c] /= testSet.numInstances();
+		}
+
+		Enumeration instEnum;
 		// Maximize expectation of clusters label assignment
 		double[][] emWeights = new double[numClusters][];
 		double expectation = 0, expectationOld;
-		Enumeration instEnum;
+
+		boolean doMaximizationAndReportingThenBreak = false;
+
 		for (int i = 0; i < Config.CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS; ++i) {
 			StringBuffer report = new StringBuffer();
 			report.append("=============================\n")
-					.append("Iteration: " + i).append('\n').append("Cluster");
+					.append("Iteration: " + i).append('\n')
+					.append("Expectation: " + expectation).append('\n')
+					.append("C");
 			for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-				report.append('\t').append("probLabel=" + l);
+				report.append('\t').append("L" + l);
 			}
 			report.append('\n');
 			for (int c = 0; c < numClusters; ++c) {
 				report.append("Cluster" + c);
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					report.append('\t').append(
-							Double.toString(clusterLabelFreq[c].getPct(l)));
+					report.append('\t')
+							.append(StringUtils.limitLength(Double
+									.toString(clusterLabelFreq[c].getPct(l)), 5));
 				}
 				report.append('\n');
 
 			}
 			System.out.println(report.toString());
 
-			// Start by calculate the log likelihood for each cluster
-			double[][] logProbPerLabelForCluster = new double[numClusters][Config.LABELS_SINGLES.length];
-
-			instEnum = testSet.enumerateInstances();
-			while (instEnum.hasMoreElements()) {
-				Instance inst = (Instance) instEnum.nextElement();
-				int c = instClusterMap.get(inst.value(0));
-				double[] instLabelDistrib = instPredictionMap
-						.get(inst.value(0));
-				for (int l = 0; l < instLabelDistrib.length; ++l) {
-					if (instLabelDistrib[l] > 0) {
-						logProbPerLabelForCluster[c][l] += Math
-								.log(instLabelDistrib[l]);
-					}
-				}
+			if (doMaximizationAndReportingThenBreak) {
+				break;
 			}
+
+			// // Start by calculate the log likelihood for each cluster
+			// double[][] logProbPerLabelForCluster = new
+			// double[numClusters][Config.LABELS_SINGLES.length];
+			//
+			// instEnum = testSet.enumerateInstances();
+			// while (instEnum.hasMoreElements()) {
+			// Instance inst = (Instance) instEnum.nextElement();
+			// int c = instClusterMap.get(inst.value(0));
+			// double[] instLabelDistrib = instPredictionMap
+			// .get(inst.value(0));
+			// for (int l = 0; l < instLabelDistrib.length; ++l) {
+			// if (instLabelDistrib[l] > 0) {
+			// logProbPerLabelForCluster[c][l] += Math
+			// .log(instLabelDistrib[l]);
+			// }
+			// }
+			// }
 			// double[][] logDensityPerLabelForCluster = new
 			// double[numClusters][Config.LABELS_SINGLES.length];
 			//
@@ -433,7 +541,9 @@ public class ClusterClassifyEM implements Callable<Void> {
 				// Config.LABELS_SINGLES.length);
 
 				// For this cluster, what is the joint probability
-				double[] logJointProbForCluster = logProbPerLabelForCluster[c];
+				double[] logJointProbForCluster = Arrays.copyOf(
+						logProbPerLabelForCluster[c],
+						Config.LABELS_SINGLES.length);
 				//
 				int maxLIx = 0;
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
@@ -475,7 +585,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 				emWeights[c] = new double[Config.LABELS_SINGLES.length];
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
 					emWeights[c][l] = (Math.exp(logJointProbForCluster[l]
-							- logJointProbForCluster[maxLIx]))/sum;
+							- logJointProbForCluster[maxLIx]))
+							/ sum;
 				}
 			}
 
@@ -483,7 +594,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 			expectation = logLkhood / sumOfWeights;
 			if (i > 0) {
 				if ((expectation - expectationOld) < 1e-6) {
-					break;
+					doMaximizationAndReportingThenBreak = true;
 				}
 			}
 
@@ -492,8 +603,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 			for (int c = 0; c < clusterLabelFreq.length; ++c) {
 				clusterLabelFreq[c] = new Frequency();
 				// Laplace way of smoothing (i.e. prevent 0 prob)
-				for(int l = 0; l< Config.LABELS_SINGLES.length; ++l){
-					clusterLabelFreq[i].addValue(l);
+				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+					clusterLabelFreq[c].addValue(l);
 				}
 			}
 
@@ -501,18 +612,18 @@ public class ClusterClassifyEM implements Callable<Void> {
 			while (instEnum.hasMoreElements()) {
 				Instance inst = (Instance) instEnum.nextElement();
 				int c = instClusterMap.get(inst.value(0));
-//				double[] instLabelDistrib = instPredictionMap.get(inst.value(0));
+				double[] instLabelDistrib = instPredictionMap
+						.get(inst.value(0));
 				double[] modifiedLabelDistrib = new double[Config.LABELS_SINGLES.length];
 
 				int predictedLabel = -1;
 				double predictedLabelProb = Double.NEGATIVE_INFINITY;
 				for (int l = 0; l < modifiedLabelDistrib.length; ++l) {
-					
+
 					// The restimation is here!
 					modifiedLabelDistrib[l] = clusterWeights[c]
-							* emWeights[c][l]; // * instLabelDistrib[l];
-					
-					
+							* emWeights[c][l] * instLabelDistrib[l];
+
 					if (modifiedLabelDistrib[l] > predictedLabelProb) {
 						predictedLabelProb = modifiedLabelDistrib[l];
 						predictedLabel = l;
@@ -530,32 +641,48 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 		}
 
-		long[] clusterLabels = new long[numClusters];
-		for (int c = 0; c < clusterLabels.length; ++c) {
-			Iterator<Comparable<?>> valsIter = clusterLabelFreq[c]
-					.valuesIterator();
-			double lPct = Double.NEGATIVE_INFINITY;
-			while (valsIter.hasNext()) {
-				Long l = (Long) valsIter.next();
-				if (clusterLabelFreq[c].getPct(l) > lPct || (clusterLabelFreq[c].getPct(l) == lPct && rand.nextBoolean())) {
-					clusterLabels[c] = l;
-					lPct = clusterLabelFreq[c].getPct(l);
-				} 
-			}
-		}
+		// long[] clusterLabels = new long[numClusters];
+		// for (int c = 0; c < clusterLabels.length; ++c) {
+		// Iterator<Comparable<?>> valsIter = clusterLabelFreq[c]
+		// .valuesIterator();
+		// double lPct = Double.NEGATIVE_INFINITY;
+		// while (valsIter.hasNext()) {
+		// Long l = (Long) valsIter.next();
+		// if (clusterLabelFreq[c].getPct(l) > lPct
+		// || (clusterLabelFreq[c].getPct(l) == lPct && rand
+		// .nextBoolean())) {
+		// clusterLabels[c] = l;
+		// lPct = clusterLabelFreq[c].getPct(l);
+		// }
+		// }
+		// }
+		LinkedList<Integer>[] clusterLabelsClustered = assignClusterLabels(labelPriors);
+		LinkedList<Integer>[] clusterLabelsFinal = assignClusterLabels(clusterLabelFreq);
+
 		TreeMap<Double, Integer> instTrueLabelMap = null;
 		if (validate) {
 			instTrueLabelMap = new TreeMap<Double, Integer>();
 		}
+		TreeMap<Double, Integer> instClusteredLabelMap = new TreeMap<Double, Integer>();
 		TreeMap<Double, Integer> instFinalLabelMap = new TreeMap<Double, Integer>();
 		instEnum = testSet.enumerateInstances();
 		while (instEnum.hasMoreElements()) {
 			Instance inst = (Instance) instEnum.nextElement();
 			int c = instClusterMap.get(inst.value(0));
 
-			instFinalLabelMap.put(inst.value(0),
-			// inst.attribute(inst.numAttributes() - 1).value(
-					(int) clusterLabels[c]);
+			Integer label = instInitialLabelMap.get(inst.value(0));
+			if (!clusterLabelsFinal[c].contains(label)) {
+				label = clusterLabelsFinal[c].get(rand
+						.nextInt(clusterLabelsFinal[c].size()));
+			}
+			instFinalLabelMap.put(inst.value(0), label);
+
+			label = instInitialLabelMap.get(inst.value(0));
+			if (!clusterLabelsClustered[c].contains(label)) {
+				label = clusterLabelsClustered[c].get(rand
+						.nextInt(clusterLabelsClustered[c].size()));
+			}
+			instClusteredLabelMap.put(inst.value(0), label);
 
 			if (validate) {
 				instTrueLabelMap.put(inst.value(0),
@@ -566,9 +693,11 @@ public class ClusterClassifyEM implements Callable<Void> {
 		UserPrediction result = new UserPrediction();
 		result.numClusters = numClusters;
 		result.instFinalLabelMap = instFinalLabelMap;
+		result.instClusteredLabelMap = instClusteredLabelMap;
 		result.instInitialLabelMap = instInitialLabelMap;
 		result.instClusterMap = instClusterMap;
-		result.clusterLabels = clusterLabels;
+		result.clusterLabelsFinal = clusterLabelsFinal;
+		result.clusterLabelsClustered = clusterLabelsClustered;
 		result.clusterLabelFreq = clusterLabelFreq;
 		result.clusterLabelPriors = labelPriors;
 		result.instTrueLabelMap = instTrueLabelMap;
@@ -576,15 +705,46 @@ public class ClusterClassifyEM implements Callable<Void> {
 		return result;
 	}
 
+	private LinkedList<Integer>[] assignClusterLabels(
+			Frequency[] clusterLabelFreq) {
+		LinkedList<Integer>[] clusterLabels = new LinkedList[numClusters];
+		for (int c = 0; c < clusterLabels.length; ++c) {
+			clusterLabels[c] = new LinkedList<Integer>();
+			Iterator<Comparable<?>> valsIter = clusterLabelFreq[c]
+					.valuesIterator();
+			clusterLabels[c].add(((Long)valsIter.next()).intValue());
+			double lPct = clusterLabelFreq[c].getPct(clusterLabels[c].get(0));
+			while (valsIter.hasNext()) {
+				Long l = (Long) valsIter.next();
+				double probDiv = clusterLabelFreq[c].getPct(l) / lPct;
+				if (probDiv>1) {
+					if(probDiv > Config.CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV){
+					// This is a pure cluster
+					clusterLabels[c].clear();
+					}
+					clusterLabels[c].add(l.intValue());
+					lPct = clusterLabelFreq[c].getPct(l);
+				} else if (Math.abs(clusterLabelFreq[c].getPct(l) - lPct) < Config.CLASSIFY_CLUSTER_SMALL_PROB_DIFF) {
+					// This cluster is not pure
+					clusterLabels[c].add(l.intValue());
+					// lPct = clusterLabelFreq[c].getPct(l);
+				}
+			}
+		}
+		return clusterLabels;
+	}
+
 	public class UserPrediction {
 		public TreeMap<Double, Integer> instTrueLabelMap;
 		public int numClusters;
-		public double[][] clusterLabelPriors;
-		public Frequency[] clusterLabelFreq;
-		public long[] clusterLabels;
 		public TreeMap<Double, Integer> instClusterMap;
+		public Frequency[] clusterLabelPriors;
+		public Frequency[] clusterLabelFreq;
+		public LinkedList<Integer>[] clusterLabelsFinal;
+		public LinkedList<Integer>[] clusterLabelsClustered;
 		public TreeMap<Double, Integer> instInitialLabelMap;
 		public TreeMap<Double, Integer> instFinalLabelMap;
+		public TreeMap<Double, Integer> instClusteredLabelMap;
 
 		@Override
 		public String toString() {
@@ -598,10 +758,11 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 			result.append('\n');
 			for (int c = 0; c < numClusters; ++c) {
-				result.append("Cluster" + c + "=" + clusterLabels[c]);
+				result.append(c);
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
 					result.append('\t')
-							.append(Double.toString(clusterLabelPriors[c][l]))
+							.append(Double.toString(clusterLabelPriors[c]
+									.getPct(l)))
 							.append('\t')
 							.append(Double.toString(clusterLabelFreq[c]
 									.getPct(l)));
@@ -610,19 +771,33 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 			result.append('\n');
 
+			result.append("\nCluster\tinitialLabelling\tfinalLabelling\n");
+			for (int c = 0; c < numClusters; ++c) {
+				result.append(c);
+				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+					result.append('\t')
+							.append("{" + clusterLabelsClustered[c].toString() + "}")
+							.append('\t')
+							.append("{" + clusterLabelsFinal[c].toString() + "}");
+				}
+				result.append('\n');
+			}
+
 			result.append("Instances Clusters and Labels:\n")
 					.append("====================================\n")
-					.append("InstID\tCluster\tinitialLabel\tfinalLabel");
+					.append("InstID\tCluster\tinitialLabel\tclusteredLabel\tfinalLabel");
 			if (validate) {
 				result.append("\ttrueLabel");
 			}
 			result.append('\n');
 
-			int countChangedLabels = 0;
+			int countChangedLabelsFinal = 0;
+			int countChangedLabelsClustering = 0;
 			for (Double instID : instClusterMap.keySet()) {
 				result.append(instID).append('\t')
 						.append(instClusterMap.get(instID)).append('\t')
 						.append(instInitialLabelMap.get(instID)).append('\t')
+						.append(instClusteredLabelMap.get(instID)).append('\t')
 						.append(instFinalLabelMap.get(instID));
 				if (validate) {
 					result.append('\t').append(instTrueLabelMap.get(instID));
@@ -631,18 +806,30 @@ public class ClusterClassifyEM implements Callable<Void> {
 
 				if (instInitialLabelMap.get(instID) != instFinalLabelMap
 						.get(instID)) {
-					++countChangedLabels;
+					++countChangedLabelsFinal;
+				}
+				if (instInitialLabelMap.get(instID) != instClusteredLabelMap
+						.get(instID)) {
+					++countChangedLabelsClustering;
 				}
 			}
 			result.append('\n');
 
-			result.append("Instances That Changed Label: ")
-					.append(countChangedLabels)
+			result.append("Instances That Changed Label after Clustering: ")
+					.append(countChangedLabelsClustering)
 					.append(" / ")
 					.append(instClusterMap.keySet().size())
 					.append(" = ")
-					.append(countChangedLabels * 1.0
-							/ instClusterMap.keySet().size());
+					.append(countChangedLabelsClustering * 1.0
+							/ instClusterMap.keySet().size()).append('\n');
+
+			result.append("Instances That ULTIMATELY Changed Label: ")
+					.append(countChangedLabelsFinal)
+					.append(" / ")
+					.append(instClusterMap.keySet().size())
+					.append(" = ")
+					.append(countChangedLabelsFinal * 1.0
+							/ instClusterMap.keySet().size()).append('\n');
 
 			return result.toString();
 		}
@@ -692,24 +879,27 @@ public class ClusterClassifyEM implements Callable<Void> {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ExecutorService diffClusterNumExecutor = Executors.newFixedThreadPool(Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX - Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MIN + 1);
-		// TODO: iterate over folds here, and train classifier once for each fold
+		ExecutorService diffClusterNumExecutor = Executors
+				.newFixedThreadPool(Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX
+						- Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MIN + 1);
+		// TODO: iterate over folds here, and train classifier once for each
+		// fold
 		Future<Void> lastFuture = null;
 		for (int c = Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MIN; c <= Config.CLUSTERCLASSIFY_NUM_CLUSTERS_MAX; ++c) {
 			ClusterClassifyEM app = new ClusterClassifyEM(c);
 			lastFuture = diffClusterNumExecutor.submit(app);
 		}
-		
+
 		// I bet their implementation of waiting is smarter
 		// that the busy wait below (but don't remove it)
 		lastFuture.get();
-		
+
 		diffClusterNumExecutor.shutdown();
-		
-		while(!diffClusterNumExecutor.isTerminated()){
+
+		while (!diffClusterNumExecutor.isTerminated()) {
 			Thread.sleep(5000);
 		}
-		
+
 		// How to save classifier while it is not serializable?
 		// ObjectOutputStream classifierStreamer = new ObjectOutputStream(
 		// FileUtils.openOutputStream(FileUtils.getFile(outputPath,

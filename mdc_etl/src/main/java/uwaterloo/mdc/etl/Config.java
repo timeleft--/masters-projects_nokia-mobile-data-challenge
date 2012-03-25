@@ -184,6 +184,8 @@ public class Config {
 	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MIN = 8;
 	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 8;
 	public static final int CLUSTERCLASSIFY_NUM_KMEAN_RUNS = 3;
+	public static final double CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV = 1.75;
+	public static final double CLASSIFY_CLUSTER_SMALL_PROB_DIFF = 0.05;
 		
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
