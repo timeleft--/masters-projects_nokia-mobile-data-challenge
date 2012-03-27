@@ -52,6 +52,11 @@
 			<artifactId>LibSVM</artifactId>
 			<version>3.11</version>
 		</dependency>
+		<dependency>
+			<groupId>mdc2012</groupId>
+			<artifactId>notifier-writer</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>

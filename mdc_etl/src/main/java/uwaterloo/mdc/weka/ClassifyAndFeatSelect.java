@@ -28,6 +28,7 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.util.KeyValuePair;
+import uwaterloo.util.NotifyStream;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.AttributeTransformer;
@@ -44,6 +45,7 @@ import weka.classifiers.functions.LibSVM;
 import weka.classifiers.functions.Logistic;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
+import weka.classifiers.meta.ClassificationViaClustering;
 import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -107,8 +109,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						LibSVM.KERNELTYPE_RBF, LibSVM.TAGS_KERNELTYPE));
 				// WARNING: using -h 0 may be faster
 				((LibSVM) baseClassifier).setShrinking(false);
-			} else if(baseClassifier instanceof J48){
-//				((J48) baseClassifier).setConfidenceFactor(0.TODO How to prevent over fitting??)
+			} else if (baseClassifier instanceof J48) {
+				// ((J48) baseClassifier).setConfidenceFactor(0.TODO How to
+				// prevent over fitting??)
 			}
 
 			classifyingBinary = classifyBinaryHierarchy
@@ -133,7 +136,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					foldFeactSelectCM[i] = new Frequency();
 				}
 
-				int foldStart = v * 1; //FIXME:Config.VALIDATION_FOLD_WIDTH;
+				int foldStart = v * 1; // FIXME:Config.VALIDATION_FOLD_WIDTH;
 
 				Instances validationSet = null;
 				Instances trainingSet = null;
@@ -186,8 +189,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							trainingSet = new Instances(dataStruct); // joinedStruct);
 						}
 						validationSet = new Instances(dataStruct); // joinedStruct);
-						// FIXME: We don't support anything but LOO-CV with this code.. 
-						validationSet.setRelationName(FilenameUtils.removeExtension(userData.getName()));
+						// FIXME: We don't support anything but LOO-CV with this
+						// code..
+						validationSet.setRelationName(FilenameUtils
+								.removeExtension(userData.getName()));
 					}
 
 					// if (userIx == (foldStart + inFoldTestIx)) {
@@ -265,6 +270,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				if (baseClassifier instanceof UpdateableClassifier) {
 					// already trained
 				} else {
+					if (baseClassifier instanceof ClassificationViaClustering) {
+						trainingSet.setClassIndex(-1);
+					}
 					baseClassifier.buildClassifier(trainingSet);
 					trainingSet = null;
 				}
@@ -995,7 +1003,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	private long startTime = System.currentTimeMillis();
 
 	private final int inFoldTestIx = new Random(System.currentTimeMillis())
-			.nextInt(1); //FIXME:Config.VALIDATION_FOLD_WIDTH);
+			.nextInt(1); // FIXME:Config.VALIDATION_FOLD_WIDTH);
 
 	private final Map<String, Writer> cvClassificationAccuracyWr;
 	private final Map<String, Map<String, Writer>> cvFeatSelectAccuracyWr;
@@ -1124,121 +1132,145 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	 * @throws Exception
 	 */
 	public static void main(String[] args) {
-		Config.placeLabels = new Properties();
+
+		PrintStream errOrig = System.err;
+		NotifyStream notifyStream = new NotifyStream(errOrig,
+				"ClassifyAndFeatSelect");
 		try {
-			Config.placeLabels.load(FileUtils.openInputStream(FileUtils
-					.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
+			System.setErr(new PrintStream(notifyStream));
 
-			Config.quantizedFields = new Properties();
-			Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
-					.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
+			Config.placeLabels = new Properties();
+			try {
+				Config.placeLabels.load(FileUtils.openInputStream(FileUtils
+						.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
+
+				Config.quantizedFields = new Properties();
+				Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
+						.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			// CalcCutPoints.main(args);
+			// ImportIntoMallet.main(args);
+			// //
+			// // Still cannot handle quantized vals
+			// // CountConditionalFreqs countCond = new CountConditionalFreqs();
+			// // ExecutorService countExec =
+			// Executors.newSingleThreadExecutor();
+			// // countExec.submit(countCond);
+			//
+			// LoadCountsAsAttributes.main(args);
+
+			ClassifyAndFeatSelect app;
+
+			// try {
+			// // C4.5 decision tree
+			// app = new ClassifyAndFeatSelect(J48.class, true, true,
+			// true,
+			// new Class[] {// GainRatioAttributeEval.class,
+			// LatentSemanticAnalysis.class, PrincipalComponents.class, },
+			// false);
+			//
+			// app.call();
+			// } catch (Exception e) {
+			// // TODO Auto-generated catch block
+			// e.printStackTrace();
+			// }
+
+			// Exception: weka.classifiers.functions.Logistic: Not enough
+			// training
+			// instances with class labels (required: 1, provided: 0)!
+			// Logistic Regression
+			try {
+
+				app = new ClassifyAndFeatSelect(Logistic.class, false, true,
+						true, new Class[] { GainRatioAttributeEval.class,
+								LatentSemanticAnalysis.class,
+								PrincipalComponents.class, }, false);
+				app.call();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+			try {
+				// Naive Bayes
+				app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class,
+						true, true, true, new Class[] {// GainRatioAttributeEval.class,
+						LatentSemanticAnalysis.class,
+								PrincipalComponents.class, }, false);
+				app.call();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			try {
+				// Boosting
+				app = new ClassifyAndFeatSelect(AdaBoostM1.class, true, false,
+						true, new Class[] { // GainRatioAttributeEval.class,
+						LatentSemanticAnalysis.class,
+								PrincipalComponents.class, }, false);
+				app.call();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			// app = new ClassifyAndFeatSelect(
+			// MultiBoostAB.class,
+			// true,
+			// false,
+			// true,
+			// new Class[] { GainRatioAttributeEval.class,
+			// LatentSemanticAnalysis.class, PrincipalComponents.class, },
+			// false);
+			// app.call();
+
+			// // Bayes Net
+			// app = new ClassifyAndFeatSelect(BayesNet.class);
+			// app.call();
+
+			// // Sometimes: Exception: weka.classifiers.functions.Logistic: Not
+			// enough training
+			// // SVM
+			// app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
+			// new Class[] { SVMAttributeEval.class }, false);
+			// app.call();
+
+			// // Cannot handle multinomial attrs
+			// // Bayesian Logisitc Regression
+			// app = new
+			// ClassifyAndFeatSelect(BayesianLogisticRegression.class);
+			// app.call();
+
+			try {
+				// weka.clusterers.SimpleKMeans: Cannot handle missing class
+				// values!
+				// By clustering
+				app = new ClassifyAndFeatSelect(
+						ClassificationViaClustering.class, true, true, true,
+						new Class[] { GainRatioAttributeEval.class,
+								LatentSemanticAnalysis.class,
+								PrincipalComponents.class, }, false);
+				app.call();
+
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			// countExec.shutdown();
+			// while (!countExec.isTerminated()) {
+			// Thread.sleep(5000);
+			// }
+			System.err.println("Finished running at " + new Date());
+		} finally {
+			try {
+				notifyStream.close();
+			} catch (IOException ignored) {
+				
+			}
+			System.setErr(errOrig);
 		}
-		// CalcCutPoints.main(args);
-		// ImportIntoMallet.main(args);
-		// //
-		// // Still cannot handle quantized vals
-		// // CountConditionalFreqs countCond = new CountConditionalFreqs();
-		// // ExecutorService countExec = Executors.newSingleThreadExecutor();
-		// // countExec.submit(countCond);
-		//
-		// LoadCountsAsAttributes.main(args);
-
-		ClassifyAndFeatSelect app;
-
-		try {
-			// C4.5 decision tree
-			app = new ClassifyAndFeatSelect(J48.class, true, true,
-					true,
-					new Class[] {// GainRatioAttributeEval.class,
-					LatentSemanticAnalysis.class, PrincipalComponents.class, },
-					false);
-
-			app.call();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-
-		try {
-			// Naive Bayes
-			app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class, true,
-					true, true,
-					new Class[] {// GainRatioAttributeEval.class,
-					LatentSemanticAnalysis.class, PrincipalComponents.class, },
-					false);
-			app.call();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		try {
-			// Boosting
-			app = new ClassifyAndFeatSelect(AdaBoostM1.class, true, false,
-					true,
-					new Class[] { // GainRatioAttributeEval.class,
-					LatentSemanticAnalysis.class, PrincipalComponents.class, },
-					false);
-			app.call();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		// app = new ClassifyAndFeatSelect(
-		// MultiBoostAB.class,
-		// true,
-		// false,
-		// true,
-		// new Class[] { GainRatioAttributeEval.class,
-		// LatentSemanticAnalysis.class, PrincipalComponents.class, },
-		// false);
-		// app.call();
-
-		// // Bayes Net
-		// app = new ClassifyAndFeatSelect(BayesNet.class);
-		// app.call();
-
-		// Exception: weka.classifiers.functions.Logistic: Not enough training
-		// instances with class labels (required: 1, provided: 0)!
-		// Logistic Regression
-		try {
-
-			app = new ClassifyAndFeatSelect(Logistic.class, false, true,
-					true,
-					new Class[] {// GainRatioAttributeEval.class,
-					LatentSemanticAnalysis.class, PrincipalComponents.class, },
-					false);
-			app.call();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-
-		// // Sometimes: Exception: weka.classifiers.functions.Logistic: Not
-		// enough training
-		// // SVM
-		// app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
-		// new Class[] { SVMAttributeEval.class }, false);
-		// app.call();
-
-		// // Cannot handle multinomial attrs
-		// // Bayesian Logisitc Regression
-		// app = new ClassifyAndFeatSelect(BayesianLogisticRegression.class);
-		// app.call();
-
-		// // weka.clusterers.SimpleKMeans: Cannot handle missing class values!
-		// // By clustering
-		// app = new ClassifyAndFeatSelect(ClassificationViaClustering.class);
-		// app.call();
-		//
-
-		// countExec.shutdown();
-		// while (!countExec.isTerminated()) {
-		// Thread.sleep(5000);
-		// }
-
 	}
 
 	public Void call() throws Exception {
@@ -1254,8 +1286,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			System.out.println(baseClassifierClazz.getSimpleName() + " - "
 					+ new Date().toString()
 					+ " (total): Validating with every user number "
-					+ inFoldTestIx + " within every "
-					+ 1 /*FIXME:Config.VALIDATION_FOLD_WIDTH*/ + " users");
+					+ inFoldTestIx + " within every " + 1 /*
+														 * FIXME:Config.
+														 * VALIDATION_FOLD_WIDTH
+														 */+ " users");
 			ExecutorService foldExecutors = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
 			ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>> foldFutures = new ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>>();
@@ -1277,7 +1311,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// accuracySummaryAllFeatures.put(positiveClass,
 				// new SummaryStatistics());
 
-				for (int v = 0; v < Config.NUM_USERS_TO_PROCESS /* FIXME:VALIDATION_FOLDS*/; ++v) {
+				for (int v = 0; v < Config.NUM_USERS_TO_PROCESS /*
+																 * FIXME:
+																 * VALIDATION_FOLDS
+																 */; ++v) {
 					FoldCallable FoldCallable = new FoldCallable(
 							positiveClassDir, v);
 					foldFutures.add(foldExecutors.submit(FoldCallable));
@@ -1510,13 +1547,17 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					pcInternalDirSummaryAllFeatures.toString());
 		}
 
-		if(pcAccuSummaryAllFeats!=null){
-		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-				baseClassifierClazz.getName(), positiveClass
-						+ "_accuracy-summary.txt"), pcAccuSummaryAllFeats
-				.toString());
+		if (pcAccuSummaryAllFeats != null) {
+			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+					baseClassifierClazz.getName(), positiveClass
+							+ "_accuracy-summary.txt"), pcAccuSummaryAllFeats
+					.toString());
 		} else {
-			System.err.println("pcAccuSummaryAllFeats is null for positive class:" + positiveClass + " and base classifier: " + baseClassifierClazz.getName());
+			System.err
+					.println("pcAccuSummaryAllFeats is null for positive class:"
+							+ positiveClass
+							+ " and base classifier: "
+							+ baseClassifierClazz.getName());
 		}
 
 		// The Mean of Means.. the variance would be from the t distrib
