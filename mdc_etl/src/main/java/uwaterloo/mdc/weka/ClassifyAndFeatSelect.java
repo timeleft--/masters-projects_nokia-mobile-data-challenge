@@ -273,9 +273,6 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				if (baseClassifier instanceof UpdateableClassifier) {
 					// already trained
 				} else {
-					if (baseClassifier instanceof ClassificationViaClustering) {
-						trainingSet.setClassIndex(-1);
-					}
 					baseClassifier.buildClassifier(trainingSet);
 					trainingSet = null;
 				}
@@ -349,7 +346,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 							Instance classMissing = (Instance) vInst.copy();
 							classMissing.setDataset(vInst.dataset());
-							classMissing.setClassMissing();
+							if (!(baseClassifier instanceof ClassificationViaClustering)) {
+								classMissing.setClassMissing();
+							}
+
 
 							double[] vClassDist = baseClassifier
 									.distributionForInstance(classMissing);
@@ -994,6 +994,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					+ "): Finished feature selection for " + filenamePfx);
 
 			if (eval instanceof AttributeTransformer) {
+				
 				System.out.println(baseClassifierClazz.getSimpleName() + "/"
 						+ eval.getClass() // attrSelectEvalClazz
 								.getSimpleName() + " - "
@@ -1014,7 +1015,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					trSaver.setInstances(transformedSet);
 					trSaver.writeBatch();
 				} catch (Exception ignored) {
-					ignored.printStackTrace(new PrintStream(trOut));
+					ignored.printStackTrace();
 				} finally {
 					trOut.flush();
 					trOut.close();
@@ -1173,8 +1174,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
 						.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 			} catch (IOException e1) {
-				// TODO Auto-generated catch block
 				e1.printStackTrace();
+				return;
 			}
 			// CalcCutPoints.main(args);
 			// ImportIntoMallet.main(args);
@@ -1211,7 +1212,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 				app = new ClassifyAndFeatSelect(Logistic.class, false, true,
 						true, new Class[] { GainRatioAttributeEval.class,
-								LatentSemanticAnalysis.class,
+//								LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
 				app.call();
 			} catch (Exception e) {
@@ -1223,7 +1224,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// Naive Bayes
 				app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class,
 						true, true, true, new Class[] {// GainRatioAttributeEval.class,
-						LatentSemanticAnalysis.class,
+//						LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
 				app.call();
 			} catch (Exception e) {
@@ -1234,7 +1235,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// Boosting
 				app = new ClassifyAndFeatSelect(AdaBoostM1.class, true, false,
 						true, new Class[] { // GainRatioAttributeEval.class,
-						LatentSemanticAnalysis.class,
+//						LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
 				app.call();
 			} catch (Exception e) {
@@ -1268,21 +1269,21 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// ClassifyAndFeatSelect(BayesianLogisticRegression.class);
 			// app.call();
 
-			try {
-				// weka.clusterers.SimpleKMeans: Cannot handle missing class
-				// values!
-				// By clustering
-				app = new ClassifyAndFeatSelect(
-						ClassificationViaClustering.class, true, true, true,
-						new Class[] { GainRatioAttributeEval.class,
-								LatentSemanticAnalysis.class,
-								PrincipalComponents.class, }, false);
-				app.call();
-
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+//			try {
+//				// weka.clusterers.SimpleKMeans: Cannot handle missing class
+//				// values!
+//				// By clustering
+//				app = new ClassifyAndFeatSelect(
+//						ClassificationViaClustering.class, true, true, true,
+//						new Class[] { GainRatioAttributeEval.class,
+////								LatentSemanticAnalysis.class,
+//								PrincipalComponents.class, }, false);
+//				app.call();
+//
+//			} catch (Exception e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
 			// countExec.shutdown();
 			// while (!countExec.isTerminated()) {
 			// Thread.sleep(5000);

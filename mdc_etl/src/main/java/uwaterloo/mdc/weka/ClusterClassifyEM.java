@@ -486,13 +486,23 @@ public class ClusterClassifyEM implements Callable<Void> {
 		TreeMap<Double, double[]> instPredictionMap = new TreeMap<Double, double[]>();
 		TreeMap<Double, Integer> instInitialLabelMap = new TreeMap<Double, Integer>();
 		TreeMap<Double, Integer> instClusterMap = new TreeMap<Double, Integer>();
-
-//		double[][] metricPerLabelForCluster = new double[numClusters][Config.LABELS_SINGLES.length];
-		// Enumeration instEnum = testSet.enumerateInstances();
+		TreeMap<Double, Integer> instTrueLabelMap = null;
+		if (validate) {
+			instTrueLabelMap = new TreeMap<Double, Integer>();
+		}
+		// double[][] metricPerLabelForCluster = new
+		// double[numClusters][Config.LABELS_SINGLES.length];
+		Enumeration instEnum;
+		// = testSet.enumerateInstances();
 		// while (instEnum.hasMoreElements()) {
 
 		for (int i = 0; i < testSet.numInstances(); ++i) {
 			Instance testInst = testSet.instance(i);
+
+			if (validate) {
+				instTrueLabelMap.put(testInst.value(0), (int) Math
+						.round(testInst.value(testInst.numAttributes() - 1)));
+			}
 
 			double[] labelDistribution = new double[Config.LABELS_SINGLES.length];
 			for (int l = 0; l < labelDistribution.length; ++l) {
@@ -578,6 +588,21 @@ public class ClusterClassifyEM implements Callable<Void> {
 		// Keep a copy for history.. a shallow copy is enough since they
 		// are updated by creating new objects
 		Frequency[] labelPriors = Arrays.copyOf(clusterLabelFreq, numClusters);
+		LinkedList<Integer>[] clusterLabelsClustered = assignClusterLabels(labelPriors);
+		TreeMap<Double, Integer> instClusteredLabelMap = new TreeMap<Double, Integer>();
+		instEnum = testSet.enumerateInstances();
+		while (instEnum.hasMoreElements()) {
+			Instance inst = (Instance) instEnum.nextElement();
+			int c = instClusterMap.get(inst.value(0));
+
+			Integer label = instInitialLabelMap.get(inst.value(0));
+			if (!clusterLabelsClustered[c].contains(label)) {
+				label = clusterLabelsClustered[c].get(rand
+						.nextInt(clusterLabelsClustered[c].size()));
+			}
+			instClusteredLabelMap.put(inst.value(0), label);
+
+		}
 
 		// Normalize cluster weights
 		if (useSizeAsWeigtht) {
@@ -585,14 +610,37 @@ public class ClusterClassifyEM implements Callable<Void> {
 				clusterWeights[c] /= testSet.numInstances();
 			}
 		}
-		Enumeration instEnum;
+
+		// Those will be return values
+		LinkedList<Integer>[] clusterLabelsFinal = null;
+		TreeMap<Double, Integer> instFinalLabelMap = null;
 		// Maximize expectation of clusters label assignment
 		double[][] emWeights = new double[numClusters][Config.LABELS_SINGLES.length];
 		double expectation = 0, expectationOld;
 
+		// For debug only
 		boolean doMaximizationAndReportingThenBreak = false;
 
 		for (int i = 0; i < Config.CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS; ++i) {
+
+			clusterLabelsFinal = assignClusterLabels(clusterLabelFreq);
+			instFinalLabelMap = new TreeMap<Double, Integer>();
+
+			Frequency marginalLabelProbabilit = new Frequency();
+			instEnum = testSet.enumerateInstances();
+			while (instEnum.hasMoreElements()) {
+				Instance inst = (Instance) instEnum.nextElement();
+				int c = instClusterMap.get(inst.value(0));
+
+				Integer label = instInitialLabelMap.get(inst.value(0));
+				if (!clusterLabelsFinal[c].contains(label)) {
+					label = clusterLabelsFinal[c].get(rand
+							.nextInt(clusterLabelsFinal[c].size()));
+				}
+				instFinalLabelMap.put(inst.value(0), label);
+				marginalLabelProbabilit.addValue(label.intValue());
+			}
+
 			StringBuffer report = new StringBuffer();
 			report.append("=============================\n")
 					.append("Iteration: " + i).append('\n')
@@ -603,7 +651,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 			report.append('\n');
 			for (int c = 0; c < numClusters; ++c) {
-				report.append("Cluster" + c);
+				report.append(c);
 				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
 					report.append('\t')
 							.append(StringUtils.limitLength(Double
@@ -612,6 +660,13 @@ public class ClusterClassifyEM implements Callable<Void> {
 				report.append('\n');
 
 			}
+			report.append(
+					"Label Marginal probabilities:\n"
+							+ marginalLabelProbabilit.toString()).append('\n');
+			report.append(
+					"Cluster label assignments:\n"
+							+ Arrays.toString(clusterLabelsFinal)).append('\n');
+
 			System.out.println(report.toString());
 
 			if (doMaximizationAndReportingThenBreak) {
@@ -619,119 +674,144 @@ public class ClusterClassifyEM implements Callable<Void> {
 			}
 
 			// Start by calculate the log likelihood for each cluster
-			double[][] metricPerLabelForCluster = new double[numClusters][Config.LABELS_SINGLES.length];
 
-			instEnum = testSet.enumerateInstances();
-			while (instEnum.hasMoreElements()) {
-				Instance inst = (Instance) instEnum.nextElement();
-				int c = instClusterMap.get(inst.value(0));
-				double[] instLabelDistrib = instPredictionMap
-						.get(inst.value(0));
-				for (int l = 0; l < instLabelDistrib.length; ++l) {
-					if (instLabelDistrib[l] > 0) {
+			double logLkhood = 0.0;
+			double sumOfWeights = 0.0;
+			if (!Config.CLUSTER_CLASSIFY_METRIC
+					.equals(Config.CLUSTER_CLASSIFY_METRIC_ENUM.ERROR)) {
+				double[] metricPerLabel = new double[Config.LABELS_SINGLES.length];
+				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+					double probLabel = marginalLabelProbabilit.getPct(l);
+					if (Config.CLUSTER_CLASSIFY_METRIC
+							.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
+						if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE) {
+							if (probLabel > 0) {
+								metricPerLabel[l] += Math.log(probLabel);
+							}
+						} else {
+							if (metricPerLabel[l] == 0) {
+								metricPerLabel[l] = 1;
+							}
+							metricPerLabel[l] *= probLabel;
+						}
+					} else if (Config.CLUSTER_CLASSIFY_METRIC
+							.equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
+
+						if (probLabel != 0) {
+							metricPerLabel[l] += probLabel
+									* Math.log(1 / probLabel);
+						}
+					}
+				}
+
+				// Estimate the labels of the clusters (E in the EM)
+
+				for (int c = 0; c < numClusters; ++c) {
+
+					// For this cluster, what is the joint probability
+					double[] logJointProbForCluster = new double[Config.LABELS_SINGLES.length];
+					int maxLIx = 0;
+
+					for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+						double labelProbPerCluster = clusterLabelFreq[c]
+								.getPct(l);
+
+						if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE
+								&& Config.CLUSTER_CLASSIFY_METRIC
+										.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
+							if (labelProbPerCluster > 0) {
+								logJointProbForCluster[l] = metricPerLabel[l]
+										+ Math.log(labelProbPerCluster);
+							}
+						} else {
+							if (logJointProbForCluster[l] == 0) {
+								logJointProbForCluster[l] = 1;
+							}
+							logJointProbForCluster[l] *= labelProbPerCluster;
+						}
+
+						if (logJointProbForCluster[l] > logJointProbForCluster[maxLIx]) {
+							maxLIx = l;
+						}
+					}
+
+					// MathUtil.normalizeProbabilities(logJointProbForCluster);
+
+					double sum = 0.0;
+					for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+
 						if (Config.CLUSTER_CLASSIFY_METRIC
 								.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
 							if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE) {
-								metricPerLabelForCluster[c][l] += Math
-										.log(instLabelDistrib[l]);
+								sum += Math.exp(logJointProbForCluster[l]
+										- logJointProbForCluster[maxLIx]);
 							} else {
-								metricPerLabelForCluster[c][l] *= instLabelDistrib[l];
+								sum += logJointProbForCluster[l]
+										/ logJointProbForCluster[maxLIx];
 							}
-						} else if (Config.CLUSTER_CLASSIFY_METRIC
-								.equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
-							double jointP = clusterLabelFreq[c].getPct(l) * instLabelDistrib[l];
-							if (jointP != 0) {
-								metricPerLabelForCluster[c][l] += jointP
-										* Math.log(1 / jointP);
-							}
+						} else {
+							// if (Config.CLUSTER_CLASSIFY_METRIC
+							// .equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
+							sum += logJointProbForCluster[l];
 						}
 
 					}
-				}
-			}
 
-			// Estimate the labels of the clusters (E in the EM)
-			double logLkhood = 0.0;
-			double sumOfWeights = 0.0;
-			for (int c = 0; c < numClusters; ++c) {
-
-				 // For this cluster, what is the joint probability
-				 double[] logJointProbForCluster = Arrays.copyOf(
-				 metricPerLabelForCluster[c],
-				 Config.LABELS_SINGLES.length);
-				
-				int maxLIx = 0;
-				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					double prior = clusterLabelFreq[c].getPct(l);
-
-					if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE
-							&& Config.CLUSTER_CLASSIFY_METRIC
-									.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
-
-						logJointProbForCluster[l] += Math.log(prior);
-
-					} else {
-//						logJointProbForCluster[l] *= prior;
+					if (sum == 0) {
+						// FIXME: this cluster contains no instances???FI
+						// proceeding will lead to NaNs and exceptions :(
+						continue;
 					}
 
-					if (logJointProbForCluster[l] > logJointProbForCluster[maxLIx]) {
-						maxLIx = l;
-					}
-				}
-
-				// MathUtil.normalizeProbabilities(logJointProbForCluster);
-
-				double sum = 0.0;
-				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-
-					if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE
-							&& Config.CLUSTER_CLASSIFY_METRIC
-									.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
-						sum += Math.exp(logJointProbForCluster[l]
-								- logJointProbForCluster[maxLIx]);
+					// This is the argmax equation
+					double logProbForCluster = logJointProbForCluster[maxLIx];
+					if (Config.CLUSTER_CLASSIFY_METRIC
+							.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
+						if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE) {
+							logProbForCluster += Math.log(sum);
+						} else {
+							logProbForCluster *= sum;
+						}
 					} else {
 						// if (Config.CLUSTER_CLASSIFY_METRIC
 						// .equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
-						sum += logJointProbForCluster[l];
+						logProbForCluster *= sum;
 					}
 
-				}
+					// Add
 
-				if(sum == 0){
-					// FIXME: this cluster contains no instances???FI
-					// proceeding will lead to NaNs and exceptions :(
-					continue;
-				}
-				
-				double logProbForCluster = logJointProbForCluster[maxLIx];
-				if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE
-						&& Config.CLUSTER_CLASSIFY_METRIC
+					logLkhood += clusterWeights[c] * logProbForCluster;
+					sumOfWeights += clusterWeights[c];
+
+					// Update weights
+					for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
+						if (Config.CLUSTER_CLASSIFY_METRIC
 								.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
-					logProbForCluster += Math.log(sum);
-				} else {
-					// if (Config.CLUSTER_CLASSIFY_METRIC
-					// .equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
-					logProbForCluster *= sum;
-				}
-
-				// Add
-
-				logLkhood += clusterWeights[c] * logProbForCluster;
-				sumOfWeights += clusterWeights[c];
-
-				// Update weights
-				for (int l = 0; l < Config.LABELS_SINGLES.length; ++l) {
-					if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE
-							&& Config.CLUSTER_CLASSIFY_METRIC
-									.equals(CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD)) {
-						emWeights[c][l] = (Math.exp(logJointProbForCluster[l]
-								- logJointProbForCluster[maxLIx]))
-								/ sum;
-					} else {
-						// if (Config.CLUSTER_CLASSIFY_METRIC
-						// .equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
-						emWeights[c][l] = logJointProbForCluster[l] / sum;
+							if (Config.CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE) {
+								emWeights[c][l] = (Math
+										.exp(logJointProbForCluster[l]
+												- logJointProbForCluster[maxLIx]))
+										/ sum;
+							} else {
+								emWeights[c][l] = logJointProbForCluster[l];
+							}
+						} else {
+							// if (Config.CLUSTER_CLASSIFY_METRIC
+							// .equals(CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY)) {
+							emWeights[c][l] = logJointProbForCluster[l] / sum;
+						}
 					}
+				}
+			} else {
+				
+				for(int c=0; c<numClusters; ++c){
+					double error = 0;
+					for(int l=0; l<Config.LABELS_SINGLES.length; ++l){
+						emWeights[c][l] = 1 - (clusterLabelFreq[c].getPct(l) * marginalLabelProbabilit.getPct(l));
+						 error += emWeights[c][l];
+					}
+					logLkhood += clusterWeights[c] * error;
+					sumOfWeights += clusterWeights[c];
 				}
 			}
 
@@ -739,8 +819,9 @@ public class ClusterClassifyEM implements Callable<Void> {
 			expectation = logLkhood / sumOfWeights;
 			if (i > 0) {
 				if ((expectation - expectationOld) < Config.CLUSTERCLASSIFY_EPSILON) {
-					break; // for debugging: doMaximizationAndReportingThenBreak
-							// = true;
+					break; // for debugging:
+					// doMaximizationAndReportingThenBreak
+					// = true;
 				}
 			}
 
@@ -769,8 +850,8 @@ public class ClusterClassifyEM implements Callable<Void> {
 				for (int l = 0; l < modifiedLabelDistrib.length; ++l) {
 
 					// The restimation is here!
-					modifiedLabelDistrib[l] = clusterWeights[c]
-							* emWeights[c][l] * instLabelDistrib[l]; // +Config.CLUSTERCLASSIFY_EPSILON);
+					modifiedLabelDistrib[l] = //marginalLabelProbabilit.getPct(l) * //clusterWeights[c] *
+							 emWeights[c][l] * instLabelDistrib[l]; // +Config.CLUSTERCLASSIFY_EPSILON);
 
 					if (modifiedLabelDistrib[l] > predictedLabelProb) {
 						predictedLabelProb = modifiedLabelDistrib[l];
@@ -791,7 +872,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 					System.err
 							.println("Maximazation lead to -1 classification for instance: "
 									+ inst.toString());
-				
+
 				} else {
 					instPredictionMap.put(inst.value(0), modifiedLabelDistrib);
 					clusterLabelFreq[c].addValue(predictedLabel);
@@ -814,39 +895,6 @@ public class ClusterClassifyEM implements Callable<Void> {
 		// }
 		// }
 		// }
-		LinkedList<Integer>[] clusterLabelsClustered = assignClusterLabels(labelPriors);
-		LinkedList<Integer>[] clusterLabelsFinal = assignClusterLabels(clusterLabelFreq);
-
-		TreeMap<Double, Integer> instTrueLabelMap = null;
-		if (validate) {
-			instTrueLabelMap = new TreeMap<Double, Integer>();
-		}
-		TreeMap<Double, Integer> instClusteredLabelMap = new TreeMap<Double, Integer>();
-		TreeMap<Double, Integer> instFinalLabelMap = new TreeMap<Double, Integer>();
-		instEnum = testSet.enumerateInstances();
-		while (instEnum.hasMoreElements()) {
-			Instance inst = (Instance) instEnum.nextElement();
-			int c = instClusterMap.get(inst.value(0));
-
-			Integer label = instInitialLabelMap.get(inst.value(0));
-			if (!clusterLabelsFinal[c].contains(label)) {
-				label = clusterLabelsFinal[c].get(rand
-						.nextInt(clusterLabelsFinal[c].size()));
-			}
-			instFinalLabelMap.put(inst.value(0), label);
-
-			label = instInitialLabelMap.get(inst.value(0));
-			if (!clusterLabelsClustered[c].contains(label)) {
-				label = clusterLabelsClustered[c].get(rand
-						.nextInt(clusterLabelsClustered[c].size()));
-			}
-			instClusteredLabelMap.put(inst.value(0), label);
-
-			if (validate) {
-				instTrueLabelMap.put(inst.value(0),
-						(int) Math.round(inst.value(inst.numAttributes() - 1)));
-			}
-		}
 
 		UserPrediction result = new UserPrediction();
 		result.numClusters = numClusters;
