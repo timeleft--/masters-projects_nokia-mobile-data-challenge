@@ -43,6 +43,8 @@ public class RefineDocumentsFromWlan
 
 	protected static final String COLNAME_AVG_NUM_APS = " avgaps";
 	protected static final String COLNAME_STDDEV_NUM_APS = " sdvaps";
+	protected static final String COLNAME_AVG_NUM_SSIDS = " avgssid";
+	protected static final String COLNAME_STDDEV_NUM_SSIDS = " sdvssid";
 
 	// protected static final String READINGS_AT_SAME_TIME =
 	// "TIME_CARDINALITY_";
@@ -84,12 +86,12 @@ public class RefineDocumentsFromWlan
 	protected SummaryStatistics apsStat = new SummaryStatistics();
 	protected Frequency frequentlySeenAps = new Frequency();
 	protected SummaryStatistics ssidStats = new SummaryStatistics();
-	
+
 	protected Pattern tabSplit = Pattern.compile("\\t");
 	protected long pendingEndTims = -1;
 
 	protected Visit<FileStringPair> pendingVisit;
-//	protected SummaryStatistics pendingStats;
+	// protected SummaryStatistics pendingStats;
 
 	protected final UserVisitHierarchy userVisitHier;
 
@@ -178,7 +180,7 @@ public class RefineDocumentsFromWlan
 			currMacAddr = currValue;
 		} else if ("ssid".equals(currKey)) {
 			currSSIDs.add(currValue);
-			
+
 		} else if ("rx".equals(currKey)) {
 			if (currStartDir == null) {
 				// store the reading only if it is within some visit
@@ -235,7 +237,7 @@ public class RefineDocumentsFromWlan
 			// //We are now tracking a new microlocation
 			// apsStat = new SummaryStatistics();
 			// prevAccessPointsHistory.clear();
-//			ssidStats = new SummaryStatistics();
+			// ssidStats = new SummaryStatistics();
 			return true;
 		} // else {
 			// Try to refine from WiFi
@@ -375,15 +377,10 @@ public class RefineDocumentsFromWlan
 			}
 
 			StringBuilder doc1 = new StringBuilder();
-			doc1.append(placeId)
-					.append('\t')
-					.append(doc1StartTime)
-					.append('\t')
-					.append(doc1EndTime)
-					.append('\t')
-					.append(Long.toString(Math.round(ssidStats.getMean()))) //apsStat.getMean())))
-					.append('\t')
-					.append(Long.toString(Math.round(ssidStats //apsStat
+			doc1.append(placeId).append('\t').append(doc1StartTime)
+					.append('\t').append(doc1EndTime).append('\t')
+					.append(Long.toString(Math.round(ssidStats.getMean()))) // apsStat.getMean())))
+					.append('\t').append(Long.toString(Math.round(ssidStats // apsStat
 							.getStandardDeviation())));
 
 			doc1.append('\t').append(consumeFrequentlySeenMacAddrs());
@@ -399,7 +396,11 @@ public class RefineDocumentsFromWlan
 							.ordinal()])
 					.append('\t')
 					.append(relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
-
+  
+			doc1.append('\t')
+			.append(ssidStats.getMean()).append('\t')
+			.append(ssidStats.getStandardDeviation());
+			
 			FileStringPair newDoc = new FileStringPair(FileUtils.getFile(
 					prevStartDir, doc1Key), doc1.toString());
 			userVisitHier.addMicroLoc(prevVisit, prevTime,
@@ -451,7 +452,7 @@ public class RefineDocumentsFromWlan
 		// iteration force will be called if needed.
 		pendingEndTims = visitEndTime;
 		pendingVisit = prevVisit;
-//		pendingStats = apsStat;
+		// pendingStats = apsStat;
 
 		return true;
 	}
@@ -461,12 +462,12 @@ public class RefineDocumentsFromWlan
 			// in case this call is extra
 			return;
 		}
-//		if (pendingStats == null
-//				|| (/* pendingStats == apsStat && */pendingStats.getN() == 0)) {
-//			if (apsStat == null
-//					|| (/* pendingStats == apsStat && */apsStat.getN() == 0)) {
-				if (ssidStats == null
-						|| (/* pendingStats == apsStat && */ssidStats.getN() == 0)) {
+		// if (pendingStats == null
+		// || (/* pendingStats == apsStat && */pendingStats.getN() == 0)) {
+		// if (apsStat == null
+		// || (/* pendingStats == apsStat && */apsStat.getN() == 0)) {
+		if (ssidStats == null
+				|| (/* pendingStats == apsStat && */ssidStats.getN() == 0)) {
 			// log("\tDEBUG\tCalling force for a stat with no datapoints, supposedly pending: "
 			// + visitHierarchy.get(0));
 			pendingEndTims = -1;
@@ -481,8 +482,8 @@ public class RefineDocumentsFromWlan
 				lastTimeSlot.getKey().getName(), 5));
 
 		// stats
-		String mean = Long.toString(Math.round(ssidStats.getMean())); //apsStat//pendingStats.getMean()));
-		String stder = Long.toString(Math.round(ssidStats //apsStat//pendingStats
+		String meanAps = Long.toString(Math.round(apsStat.getMean())); // apsStat//pendingStats.getMean()));
+		String stdvAps = Long.toString(Math.round(apsStat // apsStat//pendingStats
 				.getStandardDeviation()));
 
 		StringBuilder doc = new StringBuilder();
@@ -490,14 +491,14 @@ public class RefineDocumentsFromWlan
 		if (docFields.length == 1) {
 			// only the place id.. visit not split at all
 			doc.append(docFields[0]).append('\t').append(pendingVisit.getKey())
-					.append('\t').append(lastEndTime).append('\t').append(mean)
-					.append('\t').append(stder);
+					.append('\t').append(lastEndTime).append('\t')
+					.append(meanAps).append('\t').append(stdvAps);
 		} else if (docFields.length == 3) {
 			// has already updated the time.. leave time itact
 			doc.append(docFields[0]).append('\t').append(docFields[1])
 					.append('\t').append(docFields[2]).append('\t')
-					.append(mean).append('\t').append(stder);
-		} else if (docFields.length == 10) {
+					.append(meanAps).append('\t').append(stdvAps);
+		} else if (docFields.length == 12) {
 			// This is the case when the document was already updated
 			// because of an earlier change of mac address, but then
 			// the last few readings needs some place to go. (Why?)
@@ -510,21 +511,21 @@ public class RefineDocumentsFromWlan
 						+ pendingEndTims);
 			}
 			// This doesn't happen any more anyway
-//			if (apsStat != pendingStats) {
-//				double avg = apsStat.getMean() * apsStat.getN()
-//						+ pendingStats.getMean() * pendingStats.getN();
-//				avg /= (apsStat.getN() + pendingStats.getN());
-//
-//				mean = Long.toString(Math.round(avg));
-//
-//				// We use the avg of the two, even though that's not right
-//				double var = (pendingStats.getStandardDeviation() + apsStat
-//						.getStandardDeviation()) / 2;
-//				stder = Long.toString(Math.round(var));
-//			}
+			// if (apsStat != pendingStats) {
+			// double avg = apsStat.getMean() * apsStat.getN()
+			// + pendingStats.getMean() * pendingStats.getN();
+			// avg /= (apsStat.getN() + pendingStats.getN());
+			//
+			// mean = Long.toString(Math.round(avg));
+			//
+			// // We use the avg of the two, even though that's not right
+			// double var = (pendingStats.getStandardDeviation() + apsStat
+			// .getStandardDeviation()) / 2;
+			// stder = Long.toString(Math.round(var));
+			// }
 			doc.append(docFields[0]).append('\t').append(docFields[1])
 					.append('\t').append(docFields[2]).append('\t')
-					.append(mean).append('\t').append(stder);
+					.append(meanAps).append('\t').append(stdvAps);
 		} else {
 			KeyValuePair<Long, FileStringPair> badMicroLoc = pendingVisit
 					.getValue().remove(0);
@@ -561,6 +562,11 @@ public class RefineDocumentsFromWlan
 				.append(relTimeAndWeather[RelTimeNWeatherElts.TEMPRATURE
 						.ordinal()]).append('\t')
 				.append(relTimeAndWeather[RelTimeNWeatherElts.SKY.ordinal()]);
+
+		String meanSsid = Long.toString(Math.round(ssidStats.getMean())); // apsStat//pendingStats.getMean()));
+		String stdvSsid = Long.toString(Math.round(ssidStats // apsStat//pendingStats
+				.getStandardDeviation()));
+		doc.append('\t').append(meanSsid).append('\t').append(stdvSsid);
 
 		lastTimeSlot.setValue(doc.toString());
 
@@ -613,7 +619,9 @@ public class RefineDocumentsFromWlan
 		String wifiReadingFormat = COLNAME_AVG_NUM_APS
 				+ Config.DELIMITER_COLNAME_VALUE + "%s"
 				+ COLNAME_STDDEV_NUM_APS + Config.DELIMITER_COLNAME_VALUE
-				+ "%s";
+				+ "%s" + COLNAME_AVG_NUM_SSIDS + Config.DELIMITER_COLNAME_VALUE
+				+ "%s" + COLNAME_STDDEV_NUM_SSIDS
+				+ Config.DELIMITER_COLNAME_VALUE + "%s";
 		String relTimeWeatherFormat = COLNAME_DAY_OF_WEEK
 				+ Config.DELIMITER_COLNAME_VALUE + "%s" + COLNAME_HOUR_OF_DAY
 				+ Config.DELIMITER_COLNAME_VALUE + "%s" + COLNAME_TEMPRATURE
@@ -638,12 +646,13 @@ public class RefineDocumentsFromWlan
 			for (KeyValuePair<Long, FileStringPair> microLoc : microLocList) {
 				FileStringPair microLocDoc = microLoc.getValue();
 				String[] instFields = tabSplit.split(microLocDoc.getValue());
-				if (instFields.length == 10) {
+				if (instFields.length == 12) {
 
 					visitWithWLANFreq.addValue(VisitWithReadingEnum.B);
 
 					String wifi = String.format(wifiReadingFormat,
-							instFields[3], instFields[4]);
+							instFields[3], instFields[4], instFields[10],
+							instFields[11]);
 					avgApsFreq.addValue(Integer.parseInt(instFields[3]));
 					// frequenty seen macs
 					wifi += instFields[5];
@@ -728,7 +737,7 @@ public class RefineDocumentsFromWlan
 				Integer numml = nummlMap.get(visit.getKey());
 				if (numml == null) {
 					numml = 0; // 0 not 1 so that it is not included as a
-								// feature, later when loading 
+								// feature, later when loading
 				}
 				writeMallet(startTime, endTime, malletInst, FileUtils.getFile(
 						malletDir, visitName, microLocDoc.getKey().getName()),

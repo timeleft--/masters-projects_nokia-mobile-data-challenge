@@ -56,8 +56,13 @@ public class LoadInputsIntoDocs_application extends LoadInputsIntoDocs {
 				// In case of num > 1024, that's a stop word!
 				return null;
 			}
-			long lgEnc = MathUtil.tf(encounters);
-			
+			// This is now obsolete because we record the actual
+			// usage of each application.. istead we use this
+			// feature to report the number of apps being used
+			//	i.e. unique count below
+//			long lgEnc = MathUtil.tf(encounters);
+			long lgEnc = MathUtil.tf(appUsageFreq.getUniqueCount());
+					
 			return Long.toString(lgEnc) + " aid" + Config.DELIMITER_COLNAME_VALUE + currValue.toString(); // The UID
 		} else {
 			return Config.MISSING_VALUE_PLACEHOLDER;

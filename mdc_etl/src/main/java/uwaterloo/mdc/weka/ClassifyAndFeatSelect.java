@@ -22,6 +22,7 @@ import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
@@ -43,7 +44,6 @@ import weka.classifiers.functions.LibSVM;
 import weka.classifiers.functions.Logistic;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
-import weka.classifiers.meta.MultiBoostAB;
 import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -107,6 +107,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						LibSVM.KERNELTYPE_RBF, LibSVM.TAGS_KERNELTYPE));
 				// WARNING: using -h 0 may be faster
 				((LibSVM) baseClassifier).setShrinking(false);
+			} else if(baseClassifier instanceof J48){
+//				((J48) baseClassifier).setConfidenceFactor(0.TODO How to prevent over fitting??)
 			}
 
 			classifyingBinary = classifyBinaryHierarchy
@@ -131,7 +133,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					foldFeactSelectCM[i] = new Frequency();
 				}
 
-				int foldStart = v * Config.VALIDATION_FOLD_WIDTH;
+				int foldStart = v * 1; //FIXME:Config.VALIDATION_FOLD_WIDTH;
 
 				Instances validationSet = null;
 				Instances trainingSet = null;
@@ -184,6 +186,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							trainingSet = new Instances(dataStruct); // joinedStruct);
 						}
 						validationSet = new Instances(dataStruct); // joinedStruct);
+						// FIXME: We don't support anything but LOO-CV with this code.. 
+						validationSet.setRelationName(FilenameUtils.removeExtension(userData.getName()));
 					}
 
 					// if (userIx == (foldStart + inFoldTestIx)) {
@@ -322,6 +326,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					int totalClassificationsCount = (classifyingBinary ? 0
 							: validationSet.numInstances());
 					int totalInternalDirections = 0;
+
+					// FIXME: I don't know how some data still have missing
+					// class
+					validationSet.deleteWithMissingClass();
+
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
@@ -405,9 +414,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							// ID is at index 0
 							try {
 								trueLabelCfMIx = Long
-										.parseLong(validationActualCs.getProperty(Long
-												.toString(Math.round(vInst
-														.value(0)))));
+										.parseLong(validationActualCs
+												.getProperty(Double.toString(
+												// Long.toString(Math.round(
+														vInst.value(0))));
 							} catch (NumberFormatException ignored) {
 								trueLabelCfMIx = 0;
 								System.err
@@ -807,13 +817,25 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						}
 						long trueLabelCfMIx;
 						if (classifyingBinary) {
-							// Get the true class from the properties file
-							// Using the .. oh, why did I copy paste..look above
-							// :(
-							// 0 is the index of the ID attrib
-							trueLabelCfMIx = Long.parseLong(validationActualCs
-									.getProperty(Long.toString(Math.round(vInst
-											.value(0)))));
+							try {
+								// Get the true class from the properties file
+								// Using the .. oh, why did I copy paste..look
+								// above
+								// :(
+								// 0 is the index of the ID attrib
+								trueLabelCfMIx = Long
+										.parseLong(validationActualCs
+												.getProperty(Double.toString(
+												// Long.toString(Math.round(\
+														vInst.value(0))));
+							} catch (NumberFormatException ignored) {
+								trueLabelCfMIx = 0;
+								System.err
+										.println("Cannot get true label for instance ID "
+												+ vInst.value(0)
+												+ " in positive class "
+												+ positiveClass);
+							}
 						} else {
 							trueLabelCfMIx = Math.round(vInst.classValue());
 						}
@@ -909,10 +931,25 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				featSelectWr.close();
 			}
 
-			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-					baseClassifier.getClass().getName(), eval.getClass() // attrSelectEvalClazz
-							.getName(), filenamePfx + "_feat-selection.txt"),
-					featSelector.toString());
+			if (featSelector == null) {
+				System.err.println("featSelector is null for "
+						+ baseClassifier.getClass().getName()
+						+ " "
+						+ (eval != null ? eval.getClass().getName()
+								: "eval is also null") + " " + filenamePfx);
+			} else if (eval == null) {
+				System.err.println("eval is null for "
+						+ baseClassifier.getClass().getName() + " "
+						+ featSelector + " " + filenamePfx);
+			} else {
+				FileUtils.writeStringToFile(
+						FileUtils
+								.getFile(outputPath, baseClassifier.getClass()
+										.getName(), eval.getClass() // attrSelectEvalClazz
+										.getName(), filenamePfx
+										+ "_feat-selection.txt"), featSelector
+								.toString());
+			}
 			// algo name
 			System.out.println(baseClassifierClazz.getSimpleName() + "/"
 					+ eval.getClass() // attrSelectEvalClazz
@@ -958,7 +995,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 	private long startTime = System.currentTimeMillis();
 
 	private final int inFoldTestIx = new Random(System.currentTimeMillis())
-			.nextInt(Config.VALIDATION_FOLD_WIDTH);
+			.nextInt(1); //FIXME:Config.VALIDATION_FOLD_WIDTH);
 
 	private final Map<String, Writer> cvClassificationAccuracyWr;
 	private final Map<String, Map<String, Writer>> cvFeatSelectAccuracyWr;
@@ -1218,7 +1255,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					+ new Date().toString()
 					+ " (total): Validating with every user number "
 					+ inFoldTestIx + " within every "
-					+ Config.VALIDATION_FOLD_WIDTH + " users");
+					+ 1 /*FIXME:Config.VALIDATION_FOLD_WIDTH*/ + " users");
 			ExecutorService foldExecutors = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
 			ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>> foldFutures = new ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>>();
@@ -1240,7 +1277,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// accuracySummaryAllFeatures.put(positiveClass,
 				// new SummaryStatistics());
 
-				for (int v = 0; v < Config.VALIDATION_FOLDS; ++v) {
+				for (int v = 0; v < Config.NUM_USERS_TO_PROCESS /* FIXME:VALIDATION_FOLDS*/; ++v) {
 					FoldCallable FoldCallable = new FoldCallable(
 							positiveClassDir, v);
 					foldFutures.add(foldExecutors.submit(FoldCallable));
@@ -1350,7 +1387,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			return;
 		}
 		if (!classifyingBinary) {
-			foldConfusionWr.append("label\t0\t1t\2\t3\t4\t5\t6\t7\t8\t9\t10\n");
+			foldConfusionWr.append("label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\n");
 		} else {
 			foldConfusionWr.append("label\tTRUE\tFALSE\n");
 			// Iterator<Comparable<?>> valsIster = foldConfusionMatrix[0]
@@ -1473,10 +1510,14 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					pcInternalDirSummaryAllFeatures.toString());
 		}
 
+		if(pcAccuSummaryAllFeats!=null){
 		FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
 				baseClassifierClazz.getName(), positiveClass
 						+ "_accuracy-summary.txt"), pcAccuSummaryAllFeats
 				.toString());
+		} else {
+			System.err.println("pcAccuSummaryAllFeats is null for positive class:" + positiveClass + " and base classifier: " + baseClassifierClazz.getName());
+		}
 
 		// The Mean of Means.. the variance would be from the t distrib
 		// But many accuracies have n = 0, thus we shouldn't increase denim
@@ -1602,5 +1643,4 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 
 	}
-
 }

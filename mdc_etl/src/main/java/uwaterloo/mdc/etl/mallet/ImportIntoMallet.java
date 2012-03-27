@@ -2,6 +2,7 @@ package uwaterloo.mdc.etl.mallet;
 
 import java.io.File;
 import java.io.FileFilter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.channels.Channels;
@@ -72,8 +73,13 @@ public class ImportIntoMallet {
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
 
-		Config.appUidDictionary.store(FileUtils.openOutputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE)), null);
-		
+		FileOutputStream os =  FileUtils.openOutputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE));
+		try{
+		Config.appUidDictionary.store(os, null);
+		}finally{
+			os.flush();
+			os.close();
+		}
 //		CountConditionalFreqs countCond = new CountConditionalFreqs();
 //		ExecutorService countExec = Executors.newSingleThreadExecutor();
 //		countExec.submit(countCond);

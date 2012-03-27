@@ -8,7 +8,7 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 8;
+	public static final int NUM_THREADS = 4;
 	public static final int NUM_USERS_TO_PROCESS = 80;
 	
 	public static final int VALIDATION_FOLDS = 80; //Config.NUM_USERS_TO_PROCESS; 
@@ -147,8 +147,8 @@ public class Config {
 	public static final boolean LOAD_REPLACE_MISSING_VALUES = true;
 	public static final double LOAD_MISSING_VALUE_REPLA = 0.0; //Laplace = 1.0; regular = 0.0
 	public static final boolean LOAD_FEATSELECTED_ONLY = false;
-	public static final boolean LOAD_DROP_VERYFREQUENT_VALS = false;
-	public static final boolean LOAD_DROP_VERYRARE_VALS = false;
+	public static final boolean LOAD_DROP_VERYFREQUENT_VALS = true;
+	public static final boolean LOAD_DROP_VERYRARE_VALS = true;
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;
@@ -180,14 +180,18 @@ public class Config {
 
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 	
-	public static final int CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS = 1000;
-	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MIN = 4;
+	public static final int CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS = 10;
+	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MIN = 6;
 	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 11;
-	public static final int CLUSTERCLASSIFY_NUM_KMEAN_RUNS = 3;
-	public static final double CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV = 1.75;
+	public static final int CLUSTERCLASSIFY_NUM_KMEAN_RUNS = 7;
+	public static final double CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV = 1.5;
 	public static final double CLASSIFY_CLUSTER_SMALL_PROB_DIFF = 0.05;
 	public enum CLUSTER_CLASSIFY_METRIC_ENUM {LIKELIHOOD, ENTROPY};
 	public static final CLUSTER_CLASSIFY_METRIC_ENUM CLUSTER_CLASSIFY_METRIC = CLUSTER_CLASSIFY_METRIC_ENUM.ENTROPY;
+	public static final double CLUSTERCLASSIFY_EPSILON = 1e-6;
+	public static final boolean CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE = false;
+	public static final boolean CLUSTERCLASSIFY_CLUSTER_IN_DIMREDUCED = true;
+	public static final boolean CLUSTERCLASSIFY_LAPALCAE_SMOOTH_LABEL_PROBS = true;
 		
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.

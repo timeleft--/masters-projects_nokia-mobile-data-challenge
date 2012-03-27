@@ -49,6 +49,11 @@ public class DiscritizeTest {
 		}
 		
 		OutputStream out = FileUtils.openOutputStream(FileUtils.getFile(outPath, "short-col-names.properties"));
+		try{
 		shortColNameDict.store(out, "");
+		}finally{
+			out.flush();
+			out.close();
+		}
 	}
 }

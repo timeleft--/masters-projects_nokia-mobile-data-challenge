@@ -1,9 +1,12 @@
 package uwaterloo.mdc.etl.operations;
 
+import java.io.File;
+import java.io.FilenameFilter;
 import java.io.Writer;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
@@ -51,6 +54,9 @@ public class PrintStatsCallable implements Callable<Void> {
 		return null;
 	}
 
+	private String quantizationPath = (Config.WEKA_DISCRETIZE ? "C:\\mdc-datasets\\weka\\cutpoints"
+			: "P:\\mdc-datasets\\quantization");
+
 	private void writeStats(String userid, String statKey,
 			SummaryStatistics stat) throws Exception {
 
@@ -81,15 +87,30 @@ public class PrintStatsCallable implements Callable<Void> {
 		}
 	}
 
-	private void writeStats(String userid, String statKey, Frequency stat)
+	private void writeStats(String userid, final String statKey, Frequency stat)
 			throws Exception {
 
 		Comparable<?>[] valsArr;
 		synchronized (Discretize.enumsMap) {
 			if (Config.QUANTIZE_NOT_DISCRETIZE || Config.WEKA_DISCRETIZE) {
+				// FIXME: if percentile quantizations are ever used again.. this
+				// overwrited nominal values
+				File[] quantFile = FileUtils.getFile(quantizationPath)
+						.listFiles(new FilenameFilter() {
+
+							@Override
+							public boolean accept(File arg0, String arg1) {
+								return arg1.contains(statKey);
+							}
+						});
+
 				if (Discretize.enumsMap.containsKey(statKey)) {
-					valsArr = Discretize.QuantilesEnum.values();
-					assert Config.NUM_QUANTILES + 1 == valsArr.length : "Generalize this code.. but don't use digits only";
+					if (quantFile != null && quantFile.length > 0) {
+						valsArr = Discretize.QuantilesEnum.values();
+						assert Config.NUM_QUANTILES + 1 == valsArr.length : "Generalize this code.. but don't use digits only";
+					} else {
+						valsArr = Discretize.enumsMap.get(statKey);
+					}
 				} else {
 					valsArr = null;
 				}

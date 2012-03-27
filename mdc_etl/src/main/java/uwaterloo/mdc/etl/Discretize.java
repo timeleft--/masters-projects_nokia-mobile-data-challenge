@@ -273,7 +273,9 @@ public class Discretize {
 			result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = weather.temprature;
 			result[RelTimeNWeatherElts.SKY.ordinal()] = weather.sky;
 		} else {
-			//TODO: get the weather from elsewhere!
+			// According to an e-mail from Nokia, this could be a glitch in the 
+			// time zone reporting software... TODO: discard all of the result???
+			//TODONOT: get the weather from elsewhere!
 			result[RelTimeNWeatherElts.TEMPRATURE.ordinal()] = Temprature.Missing;
 			result[RelTimeNWeatherElts.SKY.ordinal()] = Sky.Abroad;
 		}

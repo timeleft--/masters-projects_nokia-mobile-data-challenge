@@ -805,6 +805,9 @@ public class LoadCountsAsAttributes implements
 			Long prevEndTime = null;
 			String prevLabel = null;
 			String instLabel = null;
+			String placeID = null;
+			double instId = 1.0;
+			Properties instIDPlaceID = new Properties();
 			for (File microLocF : microLocsFiles) {
 				Instance wekaInst;
 				if (Config.LOAD_REPLACE_MISSING_VALUES) {
@@ -850,8 +853,8 @@ public class LoadCountsAsAttributes implements
 							} else {
 								prevLabel = null;
 							}
-							instLabel = Config.placeLabels.getProperty(header
-									.toString());
+							placeID = header.toString();
+							instLabel = Config.placeLabels.getProperty(placeID);
 						}
 						header.setLength(0);
 						++numTabs;
@@ -904,22 +907,26 @@ public class LoadCountsAsAttributes implements
 								continue;
 							}
 
-							if (pfx.equals("apu")) {
-								// redundant feature, because we now store use
-								// of every app
-								continue;
-							}
+							// It's not used to report the number of aps being
+							// used
+							// if (pfx.equals("apu")) {
+							// // redundant feature, because we now store use
+							// // of every app
+							// continue;
+							// }
 
-							if (Config.LOAD_DROP_VERYFREQUENT_VALS && (pfx.equals("si")
-									&& (value.equals("E") || value.equals("A")))) {
+							if (Config.LOAD_DROP_VERYFREQUENT_VALS
+									&& (pfx.equals("si") && (value.equals("E") || value
+											.equals("A")))) {
 								// This is like a stop word that always
 								// happens..
 								// sure the user is actively using the mobile!
 								continue;
 							}
 
-							if (Config.LOAD_DROP_VERYFREQUENT_VALS && (pfx.equals("aca")
-									&& (value.equals("E") || value.equals("S")))) {
+							if (Config.LOAD_DROP_VERYFREQUENT_VALS
+									&& (pfx.equals("aca") && (value.equals("E") || value
+											.equals("S")))) {
 								// This is like a stop word that always
 								// happens..
 								// sure the mobile is left laying down!
@@ -953,6 +960,8 @@ public class LoadCountsAsAttributes implements
 										if (pfx.startsWith("avg")
 												|| pfx.startsWith("sdv")) {
 											// numeric value that need smoothing
+											// TODO: Apply a weaker smoothing...
+											// the range isn't that high
 											value = Long.toString(MathUtil
 													.tf(numVal));
 										}
@@ -1060,6 +1069,7 @@ public class LoadCountsAsAttributes implements
 				if (Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null) {
 					instLabel = Config.LABELS_SINGLES[0];
 				}
+
 				if (instLabel != null) {
 					wekaInst.setClassValue(instLabel);
 					synchronized (userClassCount) {
@@ -1132,6 +1142,24 @@ public class LoadCountsAsAttributes implements
 				}
 
 				wekaDoc.add(wekaInst);
+				instIDPlaceID.setProperty(Double.toString(instId), placeID);
+				++instId;
+			}
+			
+			if(instIDPlaceID.size() != wekaDoc.numInstances()){
+				throw new AssertionError("There must be one record per instance that maps it to a visit!");
+			}
+			
+			Writer instIdPlaceIdWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(OUTPUT_PATH, relName
+									+ "_instid-placeid_map.properties", null))
+							.getChannel(), Config.OUT_CHARSET);
+			try {
+				instIDPlaceID.store(instIdPlaceIdWr, null);
+			} finally {
+				instIdPlaceIdWr.flush();
+				instIdPlaceIdWr.close();
 			}
 			System.out.println((System.currentTimeMillis() - time)
 					+ ": Finished reading user " + relName);
@@ -1240,12 +1268,6 @@ public class LoadCountsAsAttributes implements
 				countsInsts = null;
 				userAppUsage = null;
 
-				if (Config.LOADCOUNTS_DELETE_MISSING_CLASS) {
-					// Should have done this earlier
-					// actually
-					joinedInsts.deleteWithMissingClass();
-				}
-				
 				AddID addId = new AddID();
 				addId.setInputFormat(joinedInsts);
 				// addId.setIDIndex("first");
@@ -1253,8 +1275,14 @@ public class LoadCountsAsAttributes implements
 				addId.setAttributeName(idName);
 				joinedInsts = Filter.useFilter(joinedInsts, addId);
 
+				if (Config.LOADCOUNTS_DELETE_MISSING_CLASS) {
+					// Should have done this earlier
+					// actually
+					joinedInsts.deleteWithMissingClass();
+				}
+
 				joinedInsts.setRelationName(userid);
-				
+
 				Instances copyInsts = joinedInsts;
 				Remove generalRemove;
 				if (Config.LOAD_FEATSELECTED_ONLY) {
@@ -1304,7 +1332,9 @@ public class LoadCountsAsAttributes implements
 							existingNEgative += numForUser;
 						}
 					}
-					if (existingNEgative == 0 || existingPositive == 0) {
+					if (existingNEgative == 0 // || OR throws away positive
+												// samples, wrong??
+							&& existingPositive == 0) {
 						// not a usefule user for this positive class
 						System.out
 								.println(userid + " is not useful for classes "
@@ -1363,12 +1393,12 @@ public class LoadCountsAsAttributes implements
 
 					copyInsts = Filter.useFilter(copyInsts, add);
 
-//					AddID addId = new AddID();
-//					addId.setInputFormat(copyInsts);
-//					// addId.setIDIndex("first");
-//					String idName = "ID";
-//					addId.setAttributeName(idName);
-//					copyInsts = Filter.useFilter(copyInsts, addId);
+					// AddID addId = new AddID();
+					// addId.setInputFormat(copyInsts);
+					// // addId.setIDIndex("first");
+					// String idName = "ID";
+					// addId.setAttributeName(idName);
+					// copyInsts = Filter.useFilter(copyInsts, addId);
 
 					Writer trueLableWr = Channels
 							.newWriter(
@@ -1394,8 +1424,10 @@ public class LoadCountsAsAttributes implements
 							String cls = Long.toString(Math.round(copyInst
 									.classValue()));
 
-							long idVal = Math.round(copyInst.value(0));
-							trueLableWr.append(Long.toString(idVal))
+							// long idVal = Math.round(copyInst.value(0));
+							// trueLableWr.append(Long.toString(idVal))
+							double idVal = copyInst.value(0);
+							trueLableWr.append(Double.toString(idVal))
 									.append("=").append(cls).append('\n');
 
 							String binaryLabel = null;
