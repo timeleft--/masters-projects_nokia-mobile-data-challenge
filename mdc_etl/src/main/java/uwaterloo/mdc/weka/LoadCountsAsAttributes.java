@@ -1079,7 +1079,7 @@ public class LoadCountsAsAttributes implements
 					wekaInst.setClassMissing();
 				}
 
-				if (prevLabel != null) {
+//				if (prevLabel != null) {
 					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
 						// 1 means true, 0 flase.. or is missing better
 						for (int i = 0; i < Config.LABELS_SINGLES.length; ++i) {
@@ -1093,7 +1093,7 @@ public class LoadCountsAsAttributes implements
 					} else {
 						wekaInst.setValue(prevLabelAttribute, prevLabel);
 					}
-				}
+//				}
 
 				for (Attribute attrib : countMap.keySet()) {
 					if (attrib == labelAttribute) {
@@ -1153,7 +1153,7 @@ public class LoadCountsAsAttributes implements
 			Writer instIdPlaceIdWr = Channels.newWriter(
 					FileUtils.openOutputStream(
 							FileUtils.getFile(OUTPUT_PATH, relName
-									+ "_instid-placeid_map.properties", null))
+									+ "_instid-placeid_map.properties"))
 							.getChannel(), Config.OUT_CHARSET);
 			try {
 				instIDPlaceID.store(instIdPlaceIdWr, null);

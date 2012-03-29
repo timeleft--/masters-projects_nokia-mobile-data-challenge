@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -33,19 +34,21 @@ import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.AttributeTransformer;
 import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
-import weka.attributeSelection.LatentSemanticAnalysis;
 import weka.attributeSelection.PrincipalComponents;
 import weka.attributeSelection.Ranker;
+import weka.attributeSelection.SVMAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
+import weka.classifiers.bayes.BayesNet;
+import weka.classifiers.bayes.DMNBtext;
+import weka.classifiers.bayes.NaiveBayesMultinomial;
 import weka.classifiers.bayes.NaiveBayesUpdateable;
 import weka.classifiers.functions.LibSVM;
-import weka.classifiers.functions.Logistic;
-import weka.classifiers.functions.pace.MixtureDistribution;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.meta.ClassificationViaClustering;
+import weka.classifiers.meta.MultiBoostAB;
 import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -121,7 +124,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 		@Override
 		public KeyValuePair<String, HashMap<String, Double>> call()
-				throws Exception {
+				 {
 			HashMap<String, Double> accuracyMap = new HashMap<String, Double>();
 
 			try {
@@ -150,13 +153,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							}
 						})));
 
-				Instances[] validationSet = new Instances[1];// FIXME: Config.VALIDATION_FOLD_WIDTH];
-				for (int i = 0; i < 1 /*FIXME: Config.VALIDATION_FOLD_WIDTH*/; ++i) {
+				Instances[] validationSet = new Instances[1];// FIXME:
+																// Config.VALIDATION_FOLD_WIDTH];
+				for (int i = 0; i < 1 /* FIXME: Config.VALIDATION_FOLD_WIDTH */; ++i) {
 					int vIX = i + foldStart;
 					validationSet[i] = new Instances(Channels.newReader(
 							FileUtils.openInputStream(dataFiles.remove(vIX))
 									.getChannel(), Config.OUT_CHARSET));
-					validationSet[i].setClassIndex(validationSet[i].numAttributes()-1);
+					validationSet[i].setClassIndex(validationSet[i]
+							.numAttributes() - 1);
 				}
 
 				Instances trainingSet = null;
@@ -284,6 +289,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						+ positiveClass);
 
 				// ////////////////////*********************/////////////////////////
+
 				Properties[] validationActualCs = new Properties[validationSet.length];
 				for (int u = 0; u < validationSet.length; ++u) {
 					// This should never happen
@@ -337,6 +343,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						// // clas
 						// validationSet.deleteWithMissingClass();
 
+						int prevLabelStart = validationSet[u].numAttributes()
+								- Config.LABELS_SINGLES.length - 1;
+						double prevInstLabel = Double.NaN;
+//						(Config.LOAD_REPLACE_MISSING_VALUES ? Config.LOAD_MISSING_VALUE_REPLA
+//								: Double.NaN);
 						for (int i = 0; i < validationSet[u].numInstances(); ++i) {
 							Instance vInst = validationSet[u].instance(i);
 
@@ -350,8 +361,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							if (!(baseClassifier instanceof ClassificationViaClustering)) {
 								classMissing.setClassMissing();
 							}
-
-
+							if (!classifyingBinary) {
+								for (int p = 0; p < Config.LABELS_SINGLES.length; ++p) {
+									classMissing.setValue(prevLabelStart + p,
+											p == prevInstLabel ? 1 : 0);
+								}
+							}
 							double[] vClassDist = baseClassifier
 									.distributionForInstance(classMissing);
 							classificationsWr.append(vInst.dataset()
@@ -366,6 +381,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								}
 							}
 							classificationsWr.append('\n');
+							prevInstLabel = vClass;
 							// The class "Value" is actually its
 							// index!!!!!!
 							if (vClass == vInst.classValue()) {
@@ -771,6 +787,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							: validationSet.numInstances());
 					int totalInternalDirections = 0;
 					int trueInternalDirectionCount = 0;
+					int prevLabelStart = validationSet.numAttributes()
+							- Config.LABELS_SINGLES.length - 1;
+					double prevInstLabel = Double.NaN; 
+//					(Config.LOAD_REPLACE_MISSING_VALUES ? Config.LOAD_MISSING_VALUE_REPLA
+//							: Double.NaN);
+
 					for (int i = 0; i < validationSet.numInstances(); ++i) {
 						Instance vInst = validationSet.instance(i);
 
@@ -780,7 +802,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 						Instance classMissing = (Instance) vInst.copy();
 						classMissing.setDataset(vInst.dataset());
-						classMissing.setClassMissing();
+						if (!(baseClassifier instanceof ClassificationViaClustering)) {
+
+							classMissing.setClassMissing();
+						}
+						if (!classifyingBinary) {
+							for (int p = 0; p < Config.LABELS_SINGLES.length; ++p) {
+								classMissing.setValue(prevLabelStart + p,
+										p == prevInstLabel ? 1 : 0);
+							}
+						}
 
 						double[] vClassDist = featSelector
 								.distributionForInstance(classMissing);
@@ -796,6 +827,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							}
 						}
 						featSelectWr.append('\n');
+						prevInstLabel = vClass;
 						// // The class "Value" is actually its index!!!!!!
 						// if (vClass == vInst.classValue()) {
 						// ++featSelectCorrectCount;
@@ -997,7 +1029,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			if (eval instanceof PrincipalComponents) {
 				// TODO will this be effective after the fact?
 				((PrincipalComponents) eval).setMaximumAttributeNames(-1);
-				
+
 				System.out.println(baseClassifierClazz.getSimpleName() + "/"
 						+ eval.getClass() // attrSelectEvalClazz
 								.getSimpleName() + " - "
@@ -1158,9 +1190,11 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 	/**
 	 * @param args
+	 * @throws ExecutionException 
+	 * @throws InterruptedException 
 	 * @throws Exception
 	 */
-	public static void main(String[] args) {
+	public static void main(String[] args) throws InterruptedException, ExecutionException {
 
 		PrintStream errOrig = System.err;
 		NotifyStream notifyStream = new NotifyStream(errOrig,
@@ -1193,26 +1227,102 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 			ClassifyAndFeatSelect app;
 
+			ExecutorService appExec = Executors.newFixedThreadPool(Config.NUM_THREADS);
+			Future<Void> lastFuture = null;
+			
+			try {
+				// C4.5 decision tree
+				app = new ClassifyAndFeatSelect(J48.class, true, false, true,
+						new Class[] {// GainRatioAttributeEval.class,
+						// LatentSemanticAnalysis.class,
+						PrincipalComponents.class, }, false);
+lastFuture = appExec.submit(app);
+//				app.call();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+			try{
+				 // SVM
+				 app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
+				 new Class[] { SVMAttributeEval.class }, false);
+//				 app.call();
+				 lastFuture = appExec.submit(app);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+				// // Cannot handle multinomial attrs
+				// // Bayesian Logisitc Regression
+				// app = new
+				// ClassifyAndFeatSelect(BayesianLogisticRegression.class);
+				// app.call();
+// Still says cannot handle missing values.. where are they?
+//				try {
+//					app = new ClassifyAndFeatSelect(NaiveBayesMultinomial.class,
+//							true, true, true, new Class[] {
+//									GainRatioAttributeEval.class,
+//									// LatentSemanticAnalysis.class,
+//									PrincipalComponents.class, }, false);
+////					app.call();
+//					lastFuture = appExec.submit(app);
+//				} catch (Exception e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+
+				try {
+					app = new ClassifyAndFeatSelect(DMNBtext.class, true, false,
+							true, new Class[] { 
+//						GainRatioAttributeEval.class,
+//									// LatentSemanticAnalysis.class,
+//									PrincipalComponents.class, 
+									}, false);
+//					app.call();
+					lastFuture = appExec.submit(app);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+				try {
+					// By clustering
+					app = new ClassifyAndFeatSelect(
+							ClassificationViaClustering.class, true, false, true,
+							new Class[] { GainRatioAttributeEval.class,
+									// LatentSemanticAnalysis.class,
+									PrincipalComponents.class, }, false);
+//					app.call();
+					lastFuture = appExec.submit(app);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
 			// try {
-			// // C4.5 decision tree
-			// app = new ClassifyAndFeatSelect(J48.class, true, true,
-			// true,
-			// new Class[] {// GainRatioAttributeEval.class,
-			// LatentSemanticAnalysis.class, PrincipalComponents.class, },
-			// false);
 			//
+			// app = new ClassifyAndFeatSelect(MixtureDistribution.class, false,
+			// true,
+			// true, new Class[] { GainRatioAttributeEval.class,
+			// // LatentSemanticAnalysis.class,
+			// PrincipalComponents.class, }, false);
 			// app.call();
 			// } catch (Exception e) {
 			// // TODO Auto-generated catch block
 			// e.printStackTrace();
 			// }
 
-			
+//			// Exception: weka.classifiers.functions.Logistic: Not enough
+//			// training
+//			// instances with class labels (required: 1, provided: 0)!
+//			// Logistic Regression
 //			try {
 //
-//				app = new ClassifyAndFeatSelect(MixtureDistribution.class, false, true,
+//				app = new ClassifyAndFeatSelect(Logistic.class, false, true,
 //						true, new Class[] { GainRatioAttributeEval.class,
-////								LatentSemanticAnalysis.class,
+//								// LatentSemanticAnalysis.class,
 //								PrincipalComponents.class, }, false);
 //				app.call();
 //			} catch (Exception e) {
@@ -1220,79 +1330,63 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 //				e.printStackTrace();
 //			}
 
-			// Exception: weka.classifiers.functions.Logistic: Not enough
-			// training
-			// instances with class labels (required: 1, provided: 0)!
-			// Logistic Regression
-			try {
-
-				app = new ClassifyAndFeatSelect(Logistic.class, false, true,
-						true, new Class[] { GainRatioAttributeEval.class,
-//								LatentSemanticAnalysis.class,
-								PrincipalComponents.class, }, false);
-				app.call();
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-
 			try {
 				// Naive Bayes
 				app = new ClassifyAndFeatSelect(NaiveBayesUpdateable.class,
-						true, true, true, new Class[] {// GainRatioAttributeEval.class,
-//						LatentSemanticAnalysis.class,
-								PrincipalComponents.class, }, false);
-				app.call();
+						true, false, true, new Class[] {// GainRatioAttributeEval.class,
+						// LatentSemanticAnalysis.class,
+						PrincipalComponents.class, }, false);
+//				app.call();
+				lastFuture = appExec.submit(app);
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+
 			try {
 				// Boosting
 				app = new ClassifyAndFeatSelect(AdaBoostM1.class, true, false,
 						true, new Class[] { // GainRatioAttributeEval.class,
-//						LatentSemanticAnalysis.class,
-								PrincipalComponents.class, }, false);
-				app.call();
+						// LatentSemanticAnalysis.class,
+						PrincipalComponents.class, }, false);
+				lastFuture = appExec.submit(app);
+//				app.call();
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			// app = new ClassifyAndFeatSelect(
-			// MultiBoostAB.class,
-			// true,
-			// false,
-			// true,
-			// new Class[] { GainRatioAttributeEval.class,
-			// LatentSemanticAnalysis.class, PrincipalComponents.class, },
-			// false);
-			// app.call();
+			try {
+				app = new ClassifyAndFeatSelect(MultiBoostAB.class, true,
+						false, true, new Class[] {
+								GainRatioAttributeEval.class,
+								// LatentSemanticAnalysis.class,
+								PrincipalComponents.class, }, false);
+//				app.call();
+				lastFuture = appExec.submit(app);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 
 			// // Bayes Net
-			// app = new ClassifyAndFeatSelect(BayesNet.class);
-			// app.call();
-
-			// // Sometimes: Exception: weka.classifiers.functions.Logistic: Not
-			// enough training
-			// // SVM
-			// app = new ClassifyAndFeatSelect(LibSVM.class, false, true, true,
-			// new Class[] { SVMAttributeEval.class }, false);
-			// app.call();
-
-			// // Cannot handle multinomial attrs
-			// // Bayesian Logisitc Regression
-			// app = new
-			// ClassifyAndFeatSelect(BayesianLogisticRegression.class);
-			// app.call();
+			try {
+				app = new ClassifyAndFeatSelect(BayesNet.class, true, false,
+						true, new Class[] { GainRatioAttributeEval.class,
+								// LatentSemanticAnalysis.class,
+								PrincipalComponents.class, }, false);
+//				app.call();
+				lastFuture = appExec.submit(app);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 
 //			try {
-//				// weka.clusterers.SimpleKMeans: Cannot handle missing class
-//				// values!
-//				// By clustering
-//				app = new ClassifyAndFeatSelect(
-//						ClassificationViaClustering.class, true, true, true,
-//						new Class[] { GainRatioAttributeEval.class,
-////								LatentSemanticAnalysis.class,
+//				// Neural networks
+//				app = new ClassifyAndFeatSelect(MultilayerPerceptron.class,
+//						true, true, true, new Class[] {
+//								GainRatioAttributeEval.class,
+//								// LatentSemanticAnalysis.class,
 //								PrincipalComponents.class, }, false);
 //				app.call();
 //
@@ -1304,6 +1398,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// while (!countExec.isTerminated()) {
 			// Thread.sleep(5000);
 			// }
+			lastFuture.get();
+			appExec.shutdown();
+			while(!appExec.isTerminated()){
+//				System.out.println("Shutting down");
+				Thread.sleep(5000);
+			}
 			System.err.println("Finished running at " + new Date());
 		} finally {
 			try {
@@ -1315,7 +1415,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 	}
 
-	public Void call() throws Exception {
+	public Void call()  {
 
 		Pattern positiveSplit = Pattern.compile("\\+");
 		Pattern minusSplit = Pattern.compile("\\-");
@@ -1332,9 +1432,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			System.out.println(baseClassifierClazz.getSimpleName() + " - "
 					+ new Date().toString()
 					+ " (total): Validating with folds of width  " + 1 /*
-														 * FIXME:Config.
-														 * VALIDATION_FOLD_WIDTH
-														 */+ " users");
+																		 * FIXME:
+																		 * Config
+																		 * .
+																		 * VALIDATION_FOLD_WIDTH
+																		 */
+					+ " users");
 			ExecutorService foldExecutors = Executors
 					.newFixedThreadPool(Config.NUM_THREADS);
 			ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>> foldFutures = new ArrayList<Future<KeyValuePair<String, HashMap<String, Double>>>>();
@@ -1408,27 +1511,43 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						+ " (total): shutting down");
 				Thread.sleep(1000);
 			}
+		} catch (InterruptedException | ExecutionException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
+			e.printStackTrace();
 		} finally {
 			for (Writer wr : cvClassificationAccuracyWr.values()) {
-				wr.flush();
-				wr.close();
+				try {
+					wr.flush();
+					wr.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				
 			}
 			for (Map<String, Writer> pcCvFeatSelectAccuracyWr : cvFeatSelectAccuracyWr
 					.values()) {
 				for (Writer wr : pcCvFeatSelectAccuracyWr.values()) {
-					wr.flush();
-					wr.close();
+					try {
+						wr.flush();
+						wr.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					
 				}
 			}
 		}
 		if (classifyMultiClass) {
 			// There is no internal node, it's just multi-class
-			printSummaryStats(Config.LABELS_MULTICLASS_NAME,
-					multicAccuracySummaryAllFeatures
-							.get(Config.LABELS_MULTICLASS_NAME),
-					multicAccuracySummaryFeatSelected
-							.get(Config.LABELS_MULTICLASS_NAME), null, null,
-					true, false);
+			try {
+				printSummaryStats(Config.LABELS_MULTICLASS_NAME,
+						multicAccuracySummaryAllFeatures
+								.get(Config.LABELS_MULTICLASS_NAME),
+						multicAccuracySummaryFeatSelected
+								.get(Config.LABELS_MULTICLASS_NAME), null, null,
+						true, false);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 
 		if (classifyBinaryHierarchy) {
@@ -1451,19 +1570,27 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				HashMap<String, SummaryStatistics> pcInternalDirSummaryFeatSelected = internalDirSummaryFeatSelected
 						.get(positiveClass);
 
-				printSummaryStats(positiveClass, pcAccuSummaryAllFeats,
-						pcAccuracySummaryFeatSelected,
-						pcInternalDirSummaryAllFeatures,
-						pcInternalDirSummaryFeatSelected, (positiveSplit
-								.split(positiveClass).length == 3 || minusSplit
-								.split(positiveClass).length == 3), true);
+				try {
+					printSummaryStats(positiveClass, pcAccuSummaryAllFeats,
+							pcAccuracySummaryFeatSelected,
+							pcInternalDirSummaryAllFeatures,
+							pcInternalDirSummaryFeatSelected, (positiveSplit
+									.split(positiveClass).length == 3 || minusSplit
+									.split(positiveClass).length == 3), true);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 
-			FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-					baseClassifierClazz.getName(),
-					"binary-ensemble_consensus_accuracy-summary.txt"), Double
-					.toString(acrossPCsAllFeatAccuNumer
-							/ acrossPCsAllFeatAccuDenim));
+			try {
+				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+						baseClassifierClazz.getName(),
+						"binary-ensemble_consensus_accuracy-summary.txt"), Double
+						.toString(acrossPCsAllFeatAccuNumer
+								/ acrossPCsAllFeatAccuDenim));
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 
 		System.out.println(baseClassifierClazz.getSimpleName() + " - "
@@ -1541,7 +1668,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		if (accu == null) {
 			System.err.println("ERROR: Null accuracy for feat selector "
 					+ (internal ? INTERNAL_DIR_PFX : "") + ALL_FEATS
-					+ " for classifier " + this.baseClassifierClazz.getName() + " in positive class: " + accuracies.getKey());
+					+ " for classifier " + this.baseClassifierClazz.getName()
+					+ " in positive class: " + accuracies.getKey());
 		} else {
 			SummaryStatistics accSumm = accuracySummaryAllFeatures
 					.get((internal ? INTERNAL_DIR_PFX : "")
@@ -1563,7 +1691,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			if (accu == null) {
 				System.err.println("ERROR: Null accuracy for feat selector "
 						+ clazz.getName() + " for classifier "
-						+ this.baseClassifierClazz.getName() + " in positive class: " + accuracies.getKey());
+						+ this.baseClassifierClazz.getName()
+						+ " in positive class: " + accuracies.getKey());
 			} else {
 				HashMap<String, SummaryStatistics> accSummMap = accuracySummaryFeatSelected
 						.get(accuracies.getKey());
@@ -1653,9 +1782,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			if (expectAccuracy) {
 				if (pcAccuracySummaryFeatSelected == null) {
 					System.err.println("Null accuracy map for "
-							+ baseClassifierClazz.getSimpleName() + " in positive class: " 
-							+ positiveClass);
-				} else if (pcAccuracySummaryFeatSelected.containsKey(clazz
+							+ baseClassifierClazz.getSimpleName()
+							+ " in positive class: " + positiveClass);
+				} else if (!pcAccuracySummaryFeatSelected.containsKey(clazz
 						.getName())) {
 
 					System.err.println("Null summary for "
@@ -1680,7 +1809,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					System.err.println("Null InternalDir map for "
 							+ baseClassifierClazz.getSimpleName()
 							+ positiveClass);
-				} else if (pcInternalDirSummaryFeatSelected.containsKey(clazz
+				} else if (!pcInternalDirSummaryFeatSelected.containsKey(clazz
 						.getName())) {
 
 					System.err.println("Null summary for "
