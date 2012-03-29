@@ -57,6 +57,11 @@
 			<artifactId>notifier-writer</artifactId>
 			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
+		<dependency>
+			<groupId>mdc2012-deps</groupId>
+			<artifactId>jmathplot</artifactId>
+			<version>200908</version>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>

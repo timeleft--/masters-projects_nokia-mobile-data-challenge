@@ -42,6 +42,7 @@ import weka.classifiers.UpdateableClassifier;
 import weka.classifiers.bayes.NaiveBayesUpdateable;
 import weka.classifiers.functions.LibSVM;
 import weka.classifiers.functions.Logistic;
+import weka.classifiers.functions.pace.MixtureDistribution;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.meta.ClassificationViaClustering;
@@ -993,7 +994,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					+ (System.currentTimeMillis() - startTime) + " (fold " + v
 					+ "): Finished feature selection for " + filenamePfx);
 
-			if (eval instanceof AttributeTransformer) {
+			if (eval instanceof PrincipalComponents) {
+				// TODO will this be effective after the fact?
+				((PrincipalComponents) eval).setMaximumAttributeNames(-1);
 				
 				System.out.println(baseClassifierClazz.getSimpleName() + "/"
 						+ eval.getClass() // attrSelectEvalClazz
@@ -1203,6 +1206,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// // TODO Auto-generated catch block
 			// e.printStackTrace();
 			// }
+
+			
+//			try {
+//
+//				app = new ClassifyAndFeatSelect(MixtureDistribution.class, false, true,
+//						true, new Class[] { GainRatioAttributeEval.class,
+////								LatentSemanticAnalysis.class,
+//								PrincipalComponents.class, }, false);
+//				app.call();
+//			} catch (Exception e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
 
 			// Exception: weka.classifiers.functions.Logistic: Not enough
 			// training

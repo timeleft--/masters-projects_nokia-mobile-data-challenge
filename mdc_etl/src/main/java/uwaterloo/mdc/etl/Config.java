@@ -11,7 +11,7 @@ public class Config {
 	public static final int NUM_THREADS = 8;
 	public static final int NUM_USERS_TO_PROCESS = 80;
 	
-	public static final int VALIDATION_FOLDS = 10; //Config.NUM_USERS_TO_PROCESS; 
+	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
 
@@ -181,17 +181,22 @@ public class Config {
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 	
 	public static final int CLUSTERCALSSIFY_LABEL_ASSG_MAX_ITERS = 30;
-	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MIN = 7;
-	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 10;
+	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MIN = 5;
+	public static final int CLUSTERCLASSIFY_NUM_CLUSTERS_MAX = 11;
 	public static final int CLUSTERCLASSIFY_NUM_KMEAN_RUNS = 7;
 	public static final double CLASSIFY_CLUSTER_DEFINITIVE_PROB_DIV = 1.5;
 	public static final double CLASSIFY_CLUSTER_SMALL_PROB_DIFF = 0.05;
-	public enum CLUSTER_CLASSIFY_METRIC_ENUM {LIKELIHOOD, ENTROPY, ERROR};
+	public enum CLUSTER_CLASSIFY_METRIC_ENUM {LIKELIHOOD, ENTROPY}; //, ERROR};
 	public static final CLUSTER_CLASSIFY_METRIC_ENUM CLUSTER_CLASSIFY_METRIC = CLUSTER_CLASSIFY_METRIC_ENUM.LIKELIHOOD;
 	public static final double CLUSTERCLASSIFY_EPSILON = 1e-6;
 	public static final boolean CLUSTER_CLASSIFY_METRIC_IN_LOG_SPACE = true; //never change
 	public static final boolean CLUSTERCLASSIFY_CLUSTER_IN_DIMREDUCED = true; //no reasong to change
 	public static final boolean CLUSTERCLASSIFY_LAPALCAE_SMOOTH_LABEL_PROBS = true; //never change
+	public static final boolean CLUSTER_CLASSIFY_REM_PREVLABEL = false;
+	public static final boolean CLUSTER_CLASSIFY_PREVLABEL_DISTRIB = true;
+	
+	public static final boolean CLUSTER_IN3D_IN_TRANFORMED_SPACE = true;
+	public static final boolean CLUSTER_IN3D_PER_USER = true;
 		
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
