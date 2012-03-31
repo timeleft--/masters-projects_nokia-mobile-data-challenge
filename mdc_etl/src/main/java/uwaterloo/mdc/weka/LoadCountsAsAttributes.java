@@ -23,6 +23,7 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -1176,8 +1177,10 @@ public class LoadCountsAsAttributes implements
 
 	static class InstancesTransformCallable implements Callable<Integer> {
 
+		private static final String PCA_CONCENSUS_REMOVE_FILTER = "249,248,247,246,245,244,243,241,238,232,227,219,218,217,216,215,214,199,184,183,182,181,180,179,176,175,174,167,166,165,164,163,159,158,157,156,155,154,151,150,149,148,147,139,138,137,136,135,134,133,132,131,130,129,128,127,126,125,124,123,122,121,120,119,118,117,114,113,112,108,107,103,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,81,80,79,78,76,75,74,73,72,70,69,68,67,66,64,63,62,58,57,56,54,53,52,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33,32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,9,8,7,6,4,3,2";
 		private final File userDir;
 		private final HashMap<String, HashMap<String, Integer>> appFreqMap;
+		private final Pattern commaSplit = Pattern.compile("\\,");
 
 		public InstancesTransformCallable(File userDir) {
 			this.userDir = userDir;
@@ -1282,19 +1285,27 @@ public class LoadCountsAsAttributes implements
 				}
 
 				joinedInsts.setRelationName(userid);
+				
+				System.out.println("Joined attrs for user: " + userid + " has attributes: " + joinedInsts.numAttributes());
 
 				Instances copyInsts = joinedInsts;
 				Remove generalRemove;
 				if (Config.LOAD_FEATSELECTED_ONLY) {
 
 					generalRemove = new Remove();
-					String remIxes = FileUtils.readFileToString(FileUtils
-							.getFile(AttributeConsensusRank.OUTPUT_PATH,
-									CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
-					generalRemove = new Remove();
+					String remIxes = PCA_CONCENSUS_REMOVE_FILTER; 
+//							FileUtils.readFileToString(FileUtils
+//							.getFile(AttributeConsensusRank.OUTPUT_PATH,
+//									CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
 					generalRemove.setInputFormat(copyInsts);
 					generalRemove.setAttributeIndices(remIxes);
+					int numInstsBefore = copyInsts.numAttributes();
 					copyInsts = Filter.useFilter(copyInsts, generalRemove);
+					if(numInstsBefore == copyInsts.numAttributes()){
+						for(String attrIxStr: commaSplit.split(remIxes)){
+							copyInsts.deleteAttributeAt(Integer.parseInt(attrIxStr)-1);
+						}
+					}
 				}
 
 				copyInsts.setRelationName(joinedInsts.relationName());
@@ -1351,7 +1362,7 @@ public class LoadCountsAsAttributes implements
 									+ existingNEgative);
 
 					copyInsts = joinedInsts;
-					if (Config.LOAD_FEATSELECTED_ONLY) {
+					if (Config.LOAD_FEATSELECTED_ONLY && Config.LOAD_USER_SPECIFIC_FEATURE_FILTER) {
 
 						File filterFile = FileUtils
 								.getFile(

@@ -11,6 +11,10 @@ public class KeyValuePair<K,V> implements Map.Entry<K, V> {
 		this.value = value;
 	}
 
+	public KeyValuePair() {
+		// TODO Auto-generated constructor stub
+	}
+
 	public K getKey() {
 		return key;
 	}
