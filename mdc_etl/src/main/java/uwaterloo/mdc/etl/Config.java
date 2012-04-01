@@ -8,8 +8,8 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 1;
-	public static final int NUM_USERS_TO_PROCESS = 8;
+	public static final int NUM_THREADS = 4;
+	public static final int NUM_USERS_TO_PROCESS = 80;
 	
 	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
@@ -145,8 +145,8 @@ public class Config {
 	public static final double LOAD_MISSING_VALUE_REPLA = 0.0; //Laplace = 1.0; regular = 0.0
 	public static final boolean LOAD_FEATSELECTED_ONLY = false;
 	public static final boolean LOAD_USER_SPECIFIC_FEATURE_FILTER = false;
-	public static final boolean LOAD_DROP_VERYFREQUENT_VALS = false; //This is for apps and sie only
-	public static final boolean LOAD_DROP_VERYRARE_VALS = false; // This is for apps onl
+	public static final boolean LOAD_DROP_VERYFREQUENT_VALS = true; //This is for apps and sie only
+	public static final boolean LOAD_DROP_VERYRARE_VALS = true; // This is for apps onl
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;

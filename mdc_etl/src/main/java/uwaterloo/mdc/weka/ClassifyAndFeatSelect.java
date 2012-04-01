@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.Writer;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.WeakHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -41,7 +41,6 @@ import weka.attributeSelection.Ranker;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.UpdateableClassifier;
-import weka.classifiers.bayes.DMNBtext;
 import weka.classifiers.functions.LibSVM;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.AttributeSelectedClassifier;
@@ -1150,9 +1149,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 			ClassifyAndFeatSelect app;
 
-			// ExecutorService appExec = Executors.newSingleThreadExecutor();
-			// // .newFixedThreadPool(Config.NUM_THREADS);
-			// Future<Void> lastFuture = null;
+			ExecutorService appExec = Executors.newFixedThreadPool(Config.NUM_THREADS);
+			Future<Void> lastFuture = null;
 
 			try {
 				// C4.5 decision tree
@@ -1160,8 +1158,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						new Class[] { GainRatioAttributeEval.class,
 								// LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
-				// lastFuture = appExec.submit(app);
-				app.call();
+				lastFuture = appExec.submit(app);
+				// app.call();
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -1204,8 +1202,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								GainRatioAttributeEval.class,
 								// // LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
-				app.call();
-				// lastFuture = appExec.submit(app);
+				// app.call();
+				lastFuture = appExec.submit(app);
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -1218,8 +1216,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						new Class[] { GainRatioAttributeEval.class,
 								// LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
-				app.call();
-				// lastFuture = appExec.submit(app);
+				// app.call();
+				lastFuture = appExec.submit(app);
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -1274,8 +1272,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 						true, new Class[] { GainRatioAttributeEval.class,
 								// LatentSemanticAnalysis.class,
 								PrincipalComponents.class, }, false);
-				// lastFuture = appExec.submit(app);
-				app.call();
+				lastFuture = appExec.submit(app);
+				// app.call();
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -1324,12 +1322,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// Thread.sleep(5000);
 			// }
 
-			// lastFuture.get();
-			// appExec.shutdown();
-			// while (!appExec.isTerminated()) {
-			// // System.out.println("Shutting down");
-			// Thread.sleep(5000);
-			// }
+			lastFuture.get();
+			appExec.shutdown();
+			while (!appExec.isTerminated()) {
+				// System.out.println("Shutting down");
+				Thread.sleep(5000);
+			}
 			System.err.println("Finished running at " + new Date());
 		} finally {
 			try {
@@ -1812,14 +1810,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 	}
 
-	static Map<String, KeyValuePair<Instances, Instances[]>> foldInstanceMap = Collections
-			.synchronizedMap(new HashMap<String, KeyValuePair<Instances, Instances[]>>());
+	static Map<String, KeyValuePair<Instances, Instances[]>> foldInstanceMap = new WeakHashMap<String, KeyValuePair<Instances, Instances[]>>();
+
+	// Collections.synchronizedMap(new WeakHashMap<String,
+	// KeyValuePair<Instances, Instances[]>>());
 
 	static/* synchronized */KeyValuePair<Instances, Instances[]> loadFold(
 			File positiveClassDir, int foldStart) throws IOException,
 			InterruptedException {
 		String key = positiveClassDir.getName() + foldStart;
-		KeyValuePair result = null;
+		KeyValuePair<Instances, Instances[]> result = null;
 		while (true) {
 			synchronized (foldInstanceMap) {
 				if (foldInstanceMap.containsKey(key)) {
@@ -1928,7 +1928,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 		++cnt;
 		if (cnt == NUMBER_OF_ALGORITHMS) {
-			foldInstanceMap.remove(key);
+			synchronized (foldInstanceMap) {
+				foldInstanceMap.remove(key);
+			}
 		}
 		foldFinishedCounts.put(key, cnt);
 
