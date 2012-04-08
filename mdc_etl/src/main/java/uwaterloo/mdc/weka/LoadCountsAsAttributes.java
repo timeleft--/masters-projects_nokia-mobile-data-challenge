@@ -3,6 +3,7 @@ package uwaterloo.mdc.weka;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.channels.Channels;
@@ -17,7 +18,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
@@ -28,6 +31,7 @@ import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 import org.apache.commons.math.stat.descriptive.rank.Percentile;
 
 import uwaterloo.mdc.etl.Config;
@@ -38,6 +42,7 @@ import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.util.KeyValuePair;
 import uwaterloo.mdc.etl.util.MathUtil;
 import uwaterloo.mdc.etl.util.StringUtils;
+import uwaterloo.util.NotifyStream;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
@@ -47,7 +52,6 @@ import weka.core.converters.ArffSaver;
 import weka.core.converters.SVMLightSaver;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.Add;
-import weka.filters.unsupervised.attribute.AddID;
 import weka.filters.unsupervised.attribute.Remove;
 
 //import uwaterloo.mdc.etl.mallet.*;
@@ -271,18 +275,22 @@ public class LoadCountsAsAttributes implements
 		}
 	}
 
-	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\segmented_user";
+	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_sample-noweight";
 	public static final String TEMP_PATH = "C:\\mdc-datasets\\weka\\segmented_user_temp";
 
 	private static class ArffSaverCallable implements Callable<Void> {
 		final String outPath;
 		Instances insts;
 		private boolean arffFmt = true;
+		boolean temp = true;
+		int placeIdAttrIx;
 
 		public ArffSaverCallable(Instances insts, String outPath,
-				boolean arffFormat) {
+				boolean arffFormat, boolean pTemp, int pPlaceIdAttrIx) {
 			this(insts, outPath);
 			arffFmt = arffFormat;
+			temp = pTemp;
+			this.placeIdAttrIx = pPlaceIdAttrIx;
 		}
 
 		public ArffSaverCallable(Instances insts, String outPath) {
@@ -292,6 +300,15 @@ public class LoadCountsAsAttributes implements
 					insts.relationName());
 		}
 
+		void append(Instances sample, Instances fold) {
+			Enumeration instEnum = fold.enumerateInstances();
+			while (instEnum.hasMoreElements()) {
+				Instance inst = (Instance) instEnum.nextElement();
+				sample.add(inst);
+				inst.setDataset(sample);
+			}
+		}
+
 		@Override
 		public Void call() throws Exception {
 			File dest = FileUtils.getFile(outPath
@@ -299,6 +316,159 @@ public class LoadCountsAsAttributes implements
 			System.out.println((System.currentTimeMillis() - time)
 					+ ": Writing " + dest.getAbsolutePath());
 
+			if (!temp) {
+				if (Config.LOAD_COUNT_WEIGHT) {
+					Enumeration instEnum = insts.enumerateInstances();
+					while (instEnum.hasMoreElements()) {
+						Instance inst = (Instance) instEnum.nextElement();
+
+						if (Config.LOAD_WEIGHT_LABELS) {
+							double weight = (1.0 * Config.LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT)
+									/ (userClassCount.get(insts.relationName())
+											.getCount(Long.toString(Math
+													.round(inst.classValue()))));
+							inst.setWeight(weight);
+						}
+						if (Config.LOAD_WEIGHT_USERS) {
+							double weight = inst.weight()
+									* (1.0 * Config.LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT / insts
+											.numInstances());
+							inst.setWeight(weight);
+						}
+					}
+				}
+				if (Config.LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER) {
+
+					File validationDest = FileUtils.getFile(
+							dest.getParentFile(), "validation", dest.getName());
+					doSave(validationDest);
+
+					if (insts.numInstances() > Config.LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT) {
+
+						int numSamplesFromPrevalent = Config.LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT;
+						for (int c = 4; c <= 10; ++c) {
+							numSamplesFromPrevalent -= userClassCount.get(
+									insts.relationName()).getCount(
+									Integer.toString(c));
+						}
+
+						Instances sample = new Instances(
+								insts,
+								Config.LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT);
+						insts = new Instances(insts);
+
+						for (int i = 0; i < insts.numInstances(); ++i) {
+							Instance inst = insts.instance(i);
+							if (inst.classValue() > 3) {
+								sample.add(inst);
+								inst.setDataset(sample);
+								insts.delete(i);
+								--i; // because we deleted one
+							}
+						}
+
+						Random rand = new Random(System.currentTimeMillis());
+
+						// int i = rand.nextInt(insts.numInstances());
+						// Instance inst = insts.instance(i);
+						// .. add
+						// insts.delete(i);
+
+						int numFolds = (int) Math.round(Math.floor(1.0 * insts
+								.numInstances() / 100));
+						int numSampleFolds = (int) Math.round(Math
+								.floor(1.0 * numSamplesFromPrevalent / 100));
+						if (numFolds >= 1.5 * numSampleFolds) {
+							insts.stratify(numFolds);
+							Set<Integer> appended = new HashSet<Integer>();
+							for (int s = 0; s < numSampleFolds; ++s) {
+								// && insts.numInstances() > 0;
+
+								Integer r;
+								do {
+									r = rand.nextInt(numFolds);
+								} while (appended.contains(r));
+								appended.add(r);
+								Instances fold = insts.testCV(numFolds, r);
+								append(sample, fold);
+							}
+						} else {
+							append(sample, insts);
+						}
+
+						insts = sample;
+					}
+				} else if (Config.LOAD_USE_PLACEID) {
+					Instances copy = new Instances(insts, 0);
+					copy.deleteAttributeAt(placeIdAttrIx);
+					copy.setClassIndex(copy.numAttributes() - 1);
+
+					TreeMap<String, SummaryStatistics[]> agregateCounts = new TreeMap<String, SummaryStatistics[]>();
+					Enumeration instEnum = insts.enumerateInstances();
+					while (instEnum.hasMoreElements()) {
+						Instance inst = (Instance) instEnum.nextElement();
+
+						String placeId = inst.stringValue(placeIdAttrIx);
+						SummaryStatistics[] countSummary = agregateCounts
+								.get(placeId);
+						// Silently dies inst.deleteAttributeAt(placeIdAttrIx);
+						if (countSummary == null) {
+							countSummary = new SummaryStatistics[inst
+									.numAttributes() - 2]; // the label adnt he
+															// id
+							for (int s = 0; s < countSummary.length; ++s) {
+								countSummary[s] = new SummaryStatistics();
+							}
+							agregateCounts.put(placeId, countSummary);
+						}
+
+						for (int a = 0; a < copy.numAttributes() - 1; ++a) {
+							// FIXME
+							if (!Config.LOAD_REPLACE_MISSING_VALUES) {
+								throw new AssertionError();
+							}
+							countSummary[a].addValue(inst
+									.value((a < placeIdAttrIx ? a : a + 1)));
+						}
+					}
+
+					Properties instIdPlaceId = new Properties();
+					double instId = 1.0;
+
+					for (String placeId : agregateCounts.keySet()) {
+						SummaryStatistics[] countSummary = agregateCounts
+								.get(placeId);
+						Instance inst = new Instance(countSummary.length + 1); // label
+						inst.setDataset(copy);
+						for (int a = 0; a < countSummary.length; ++a) {
+							inst.setValue(a, countSummary[a].getMean());
+						}
+						// FIXME
+						if (!Config.LOAD_MISSING_CLASS_AS_OTHER) {
+							throw new AssertionError();
+						}
+						inst.setClassValue(Config.placeLabels.getProperty(
+								placeId, "0"));
+
+						instIdPlaceId.setProperty(Double.toString(instId),
+								placeId);
+						++instId;
+
+						copy.add(inst);
+					}
+					insts = copy;
+					storeInstIdPlaceId(instIdPlaceId, insts.relationName());
+				}
+			}
+
+			doSave(dest);
+			// System.out.println((System.currentTimeMillis() - time)
+			// + ": Finished writing " + dest.getAbsolutePath());
+
+			return null;
+		}
+
+		void doSave(File dest) throws IOException {
 			if (arffFmt) {
 				ArffSaver arffsaver = new ArffSaver();
 				arffsaver.setInstances(insts);
@@ -311,12 +481,7 @@ public class LoadCountsAsAttributes implements
 				svmlightSave.setDestination(FileUtils.openOutputStream(dest));
 				svmlightSave.writeBatch();
 			}
-			// System.out.println((System.currentTimeMillis() - time)
-			// + ": Finished writing " + dest.getAbsolutePath());
-
-			return null;
 		}
-
 	}
 
 	private static final String NOMINAL = "NOMINAL";
@@ -330,7 +495,7 @@ public class LoadCountsAsAttributes implements
 	private ExecutorService countExec;
 	private ExecutorCompletionService<Instances> countEcs;
 	private static ExecutorService printExec;
-	// private static ExecutorCompletionService<Void> printEcs;
+	private static ExecutorCompletionService<Void> printEcs;
 
 	private static Properties featSelectedApps;
 	private static FastVector appUsageAttrsFV;
@@ -341,6 +506,7 @@ public class LoadCountsAsAttributes implements
 	private FastVector allAttributes;
 	private HashSet<String> nominalAttrs;
 	private Attribute labelAttribute;
+	private static Attribute placeIdAttr;
 	private Attribute prevLabelAttribute;
 	private Attribute[] prevLabelAttributeArr;
 	private int countingJobs;
@@ -353,287 +519,327 @@ public class LoadCountsAsAttributes implements
 	 * @throws IOException
 	 */
 	public static void main(String[] args) throws Exception {
-		Config.placeLabels = new Properties();
-		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
-				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
-		Config.quantizedFields = new Properties();
-		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
-				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+		PrintStream errOrig = System.err;
+		NotifyStream notifyStream = new NotifyStream(errOrig,
+				"LoadCountsAsAttributes");
+		try {
+			System.setErr(new PrintStream(notifyStream));
 
-		featSelectedApps = new Properties();
-		featSelectedApps.load(FileUtils.openInputStream(FileUtils
-				.getFile(Config.FEAT_SELECTED_APPS_PATH)));
+			Config.placeLabels = new Properties();
+			Config.placeLabels.load(FileUtils.openInputStream(FileUtils
+					.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
+			Config.quantizedFields = new Properties();
+			Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
+					.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 
-		LoadCountsAsAttributes app = new LoadCountsAsAttributes();
+			featSelectedApps = new Properties();
+			featSelectedApps
+					.load(FileUtils.openInputStream(FileUtils
+							.getFile((Config.LOAD_FEAT_SELECTED_APPS_ONLY ? Config.FEAT_SELECTED_APPS_PATH
+									: Config.APPUID_PROPERTIES_FILE))));
 
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
-			printExec = Executors.newSingleThreadExecutor();
-			SVMLightSaverSingleton.init(app.inputPath,
-					Config.NUM_USERS_TO_PROCESS); // TODO: support more than LOO
-		} else {
-			printExec = Executors.newFixedThreadPool(Config.NUM_THREADS);
-		}
+			LoadCountsAsAttributes app = new LoadCountsAsAttributes();
 
-		ExecutorCompletionService<Instances> ecs = app.call();
-		int printingJobs = 0;
-		for (int c = 0; c < app.countingJobs; ++c) {
-			Future<Instances> instsFuture = ecs.take();
-
-			if (instsFuture == null) {
-				System.err.println("null future!!!");
-				continue;
+			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
+				printExec = Executors.newSingleThreadExecutor();
+				SVMLightSaverSingleton.init(app.inputPath,
+						Config.NUM_USERS_TO_PROCESS); // TODO: support more than
+														// LOO
+			} else {
+				printExec = Executors.newFixedThreadPool(Config.NUM_THREADS);
+				printEcs = new ExecutorCompletionService<Void>(printExec);
 			}
-			Instances insts = instsFuture.get();
-			if (insts == null) {
-				System.err.println("null insts!!!");
-				continue;
+
+			ExecutorCompletionService<Instances> ecs = app.call();
+			// int printingJobs = 0;
+			for (int c = 0; c < app.countingJobs; ++c) {
+				Future<Instances> instsFuture = ecs.take();
+
+				if (instsFuture == null) {
+					System.err.println("null future!!!");
+					continue;
+				}
+				Instances insts = instsFuture.get();
+				if (insts == null) {
+					System.err.println("null insts!!!");
+					continue;
+				}
+
+				if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
+					SVMLightSaverSingleton svmlightSaver = null;
+					while ((svmlightSaver = SVMLightSaverSingleton
+							.acquireSaver(insts)) == null) {
+						Thread.sleep(500);
+					}
+					try {
+						printExec.submit(svmlightSaver).get();
+					} finally {
+						svmlightSaver.release();
+					}
+				} else {
+					printExec.submit(new ArffSaverCallable(insts, TEMP_PATH))
+							.get();
+					// ++printingJobs;
+
+				}
 			}
 
 			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
-				SVMLightSaverSingleton svmlightSaver = null;
-				while ((svmlightSaver = SVMLightSaverSingleton
-						.acquireSaver(insts)) == null) {
-					Thread.sleep(500);
-				}
-				try {
-					printExec.submit(svmlightSaver).get();
-				} finally {
-					svmlightSaver.release();
-				}
+
+				SVMLightSaverSingleton noncontended = SVMLightSaverSingleton
+						.acquireSaver(null);
+				noncontended.dispose();
+				noncontended.release();
 			} else {
-				printExec.submit(new ArffSaverCallable(insts, TEMP_PATH));
-				++printingJobs;
-
+				// if (printingJobs != app.countingJobs) {
+				// System.err.println("You printed only " + printingJobs
+				// + " ARFFs, you needed: " + app.countingJobs);
+				// }
 			}
-		}
 
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
+			File dataDir = FileUtils.getFile(app.inputPath);
+			if (Config.LOADCOUNT_APP_USAGE) {
+				// Handle App counts
+				int maxAppUsageOccurs = Integer.MIN_VALUE;
+				HashMap<String, Integer> aggregateAppFreq = new HashMap<String, Integer>();
 
-			SVMLightSaverSingleton noncontended = SVMLightSaverSingleton
-					.acquireSaver(null);
-			noncontended.dispose();
-			noncontended.release();
-		} else {
-			if (printingJobs != app.countingJobs) {
-				System.err.println("You printed only " + printingJobs
-						+ " ARFFs, you needed: " + app.countingJobs);
-			}
-		}
-		// Handle App counts
-		int maxAppUsageOccurs = Integer.MIN_VALUE;
-		HashMap<String, Integer> aggregateAppFreq = new HashMap<String, Integer>();
-		File dataDir = FileUtils.getFile(app.inputPath);
-		int userIx = 0;
-		for (File userDir : dataDir.listFiles()) {
-			if (userIx == Config.NUM_USERS_TO_PROCESS) {
-				break;
-			}
-			HashMap<String, HashMap<String, Integer>> appFreqMap = allUsersAppFreqMap
-					.get(userDir.getName());
-			for (File visit : userDir.listFiles()) {
-				for (File microLFile : visit.listFiles()) {
-					HashMap<String, Integer> microLocAppFreq = appFreqMap
-							.get(microLFile.getName() + visit.getName());
-					for (String appUid : microLocAppFreq.keySet()) {
-						Integer appCnt = aggregateAppFreq.get(appUid);
-						if (appCnt == null) {
-							appCnt = 0;
-						}
-						int newFreq = appCnt + microLocAppFreq.get(appUid);
-						aggregateAppFreq.put(appUid, newFreq);
-						if (newFreq > maxAppUsageOccurs) {
-							maxAppUsageOccurs = newFreq;
-						}
+				int userIx = 0;
+				for (File userDir : dataDir.listFiles()) {
+					if (userIx == Config.NUM_USERS_TO_PROCESS) {
+						break;
 					}
-				}
-			}
-			++userIx;
-		}
-
-		System.out.println("\nAggregate App Counts:\n"
-				+ aggregateAppFreq.toString());
-
-		Percentile appUsagePct = new Percentile();
-		double[] aggregateAppFreqVals = new double[aggregateAppFreq.size()];
-		int d = 0;
-		for (Integer appUsage : aggregateAppFreq.values()) {
-			aggregateAppFreqVals[d++] = appUsage;
-		}
-
-		appUsagePct.setData(aggregateAppFreqVals);
-		long stopWordAppTh = Math.round(appUsagePct
-				.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MAX));
-		System.out.println("Stop Word Apps Threshold (90 percentile): "
-				+ stopWordAppTh);
-		long rareWordAppTh = Math.round(appUsagePct
-				.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MIN));
-		System.out.println("Rare Apps Threshold (25 percentile): "
-				+ rareWordAppTh);
-
-		appUsageAttrsFV = new FastVector();
-		for (String appUid : aggregateAppFreq.keySet()) {
-			Integer appUsageOccurs = aggregateAppFreq.get(appUid);
-			if ((Config.LOAD_DROP_VERYFREQUENT_VALS && appUsageOccurs > stopWordAppTh)
-					|| (Config.LOAD_DROP_VERYRARE_VALS && appUsageOccurs < rareWordAppTh)) {
-				continue;
-			}
-
-			Attribute appAttr = new Attribute(appUid);
-			appUsageAttrs.put(appUid, appAttr);
-			appUsageAttrsFV.addElement(appAttr);
-		}
-
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
-			// TODO support more than LOO
-			AppsSVMLightSaver.init(app.inputPath, Config.SVMLIGHT_INPUTPATH,
-					Config.NUM_USERS_TO_PROCESS, app.allAttributes.size());
-		}
-
-		LinkedList<Future<Integer>> transformFutures = new LinkedList<Future<Integer>>();
-		ExecutorService tranformExec = Executors
-				.newFixedThreadPool(Config.NUM_THREADS);
-		userIx = 0;
-		for (File userDir : dataDir.listFiles()) {
-			if (userIx == Config.NUM_USERS_TO_PROCESS) {
-				break;
-			}
-
-			transformFutures.add(tranformExec
-					.submit(new InstancesTransformCallable(userDir)));
-
-			++userIx;
-		}
-
-		for (Future<Integer> addedPrintTasks : transformFutures) {
-			printingJobs += addedPrintTasks.get();
-		}
-
-		tranformExec.shutdown();
-
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
-
-			AppsSVMLightSaver noncontended = (AppsSVMLightSaver) AppsSVMLightSaver
-					.acquireSaver(null);
-			noncontended.dispose();
-			noncontended.release();
-		}
-		if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE
-				|| Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER) {
-			File outputDir = FileUtils.getFile(Config.SVMLIGHT_INPUTPATH);
-			for (File srcDir : outputDir.listFiles()) {
-				for (File srcFile : FileUtils.listFiles(srcDir,
-						new String[] { "csv" }, false)) {
-					// classes
-					String positiveClass = srcFile.getName().substring(1);
-					int positiveExamples = 0;
-					File inputDir = FileUtils.getFile(srcDir.getParentFile(),
-							"c" + positiveClass, srcDir.getName());
-					Writer destWr = Channels.newWriter(
-							FileUtils.openOutputStream(
-									FileUtils.getFile(inputDir,
-											srcFile.getName())).getChannel(),
-							Config.OUT_CHARSET);
-					try {
-						BufferedReader srcRead = new BufferedReader(
-								Channels.newReader(
-										FileUtils.openInputStream(srcFile)
-												.getChannel(),
-										Config.OUT_CHARSET));
-						String line;
-						while ((line = srcRead.readLine()) != null) {
-							int spaceIx = line.indexOf(' ');
-							String cls = line.substring(0, spaceIx);
-
-							if (positiveClass.contains("+" + cls + "+")) {
-								destWr.append("+1")
-										.append(line.substring(spaceIx))
-										.append(System.lineSeparator());
-								if (positiveExamples == 0) {
-									System.out
-											.println("The first positive example for "
-													+ positiveClass
-													+ " in "
-													+ srcFile.getAbsolutePath());
+					HashMap<String, HashMap<String, Integer>> appFreqMap = allUsersAppFreqMap
+							.get(userDir.getName());
+					for (File visit : userDir.listFiles()) {
+						for (File microLFile : visit.listFiles()) {
+							HashMap<String, Integer> microLocAppFreq = appFreqMap
+									.get(microLFile.getName() + visit.getName());
+							for (String appUid : microLocAppFreq.keySet()) {
+								Integer appCnt = aggregateAppFreq.get(appUid);
+								if (appCnt == null) {
+									appCnt = 0;
 								}
-								++positiveExamples;
-
-							} else if (line.startsWith("0")) {
-								if (Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
-									destWr.append(line).append(
-											System.lineSeparator());
+								int newFreq = appCnt
+										+ microLocAppFreq.get(appUid);
+								aggregateAppFreq.put(appUid, newFreq);
+								if (newFreq > maxAppUsageOccurs) {
+									maxAppUsageOccurs = newFreq;
 								}
-							} else if (positiveClass.contains("-" + cls + "-")) {
-								destWr.append("-1")
-										.append(line.substring(spaceIx))
-										.append(System.lineSeparator());
 							}
 						}
-					} finally {
-						destWr.flush();
-						destWr.close();
+					}
+					++userIx;
+				}
+
+				System.out.println("\nAggregate App Counts:\n"
+						+ aggregateAppFreq.toString());
+
+				Percentile appUsagePct = new Percentile();
+				double[] aggregateAppFreqVals = new double[aggregateAppFreq
+						.size()];
+				int d = 0;
+				for (Integer appUsage : aggregateAppFreq.values()) {
+					aggregateAppFreqVals[d++] = appUsage;
+				}
+
+				appUsagePct.setData(aggregateAppFreqVals);
+				long stopWordAppTh = Math.round(appUsagePct
+						.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MAX));
+				System.out.println("Stop Word Apps Threshold (90 percentile): "
+						+ stopWordAppTh);
+				long rareWordAppTh = Math.round(appUsagePct
+						.evaluate(Config.APP_USAGE_FREQ_PERCENTILE_MIN));
+				System.out.println("Rare Apps Threshold (25 percentile): "
+						+ rareWordAppTh);
+
+				appUsageAttrsFV = new FastVector();
+				for (String appUid : aggregateAppFreq.keySet()) {
+					Integer appUsageOccurs = aggregateAppFreq.get(appUid);
+					if ((Config.LOAD_DROP_VERYFREQUENT_VALS && appUsageOccurs > stopWordAppTh)
+							|| (Config.LOAD_DROP_VERYRARE_VALS && appUsageOccurs < rareWordAppTh)) {
+						continue;
 					}
 
-					if (positiveExamples > 0) {
+					Attribute appAttr = new Attribute(appUid);
+					appUsageAttrs.put(appUid, appAttr);
+					appUsageAttrsFV.addElement(appAttr);
+				}
 
-						// Also prepare files for SVMlight output.. it needs
-						// a
-						// file
-						// to overwrite!
+				if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
+					// TODO support more than LOO
+					AppsSVMLightSaver.init(app.inputPath,
+							Config.SVMLIGHT_INPUTPATH,
+							Config.NUM_USERS_TO_PROCESS,
+							app.allAttributes.size());
+				}
+			}
+			LinkedList<Future<Integer>> transformFutures = new LinkedList<Future<Integer>>();
+			ExecutorService tranformExec = Executors
+					.newFixedThreadPool(Config.NUM_THREADS);
+			int userIx = 0;
+			for (File userDir : dataDir.listFiles()) {
+				if (userIx == Config.NUM_USERS_TO_PROCESS) {
+					break;
+				}
 
-						String outDirPathPfx = "c" + positiveClass
-								+ File.separator + srcDir.getName()
-								+ File.separator + "t";
+				transformFutures.add(tranformExec
+						.submit(new InstancesTransformCallable(userDir,
+								placeIdAttr)));
 
-						for (int t = 0; t < 4; ++t) {
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											outDirPathPfx + t, "alpha.txt"))
-									.close();
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											outDirPathPfx + t, "model.txt"))
-									.close();
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											outDirPathPfx + t, "trans.txt"))
-									.close();
-							FileUtils.openOutputStream(
-									FileUtils.getFile(
-											Config.SVMLIGHT_OUTPUTPATH,
-											outDirPathPfx + t,
-											"predictions.txt")).close();
+				++userIx;
+			}
+			int pendingIOJobs = 0;
+			for (Future<Integer> addedPrintTasks : transformFutures) {
+				pendingIOJobs += addedPrintTasks.get();
+			}
+
+			tranformExec.shutdown();
+
+			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
+
+				AppsSVMLightSaver noncontended = (AppsSVMLightSaver) AppsSVMLightSaver
+						.acquireSaver(null);
+				noncontended.dispose();
+				noncontended.release();
+			}
+			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE
+					|| Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER) {
+				File outputDir = FileUtils.getFile(Config.SVMLIGHT_INPUTPATH);
+				for (File srcDir : outputDir.listFiles()) {
+					for (File srcFile : FileUtils.listFiles(srcDir,
+							new String[] { "csv" }, false)) {
+						// classes
+						String positiveClass = srcFile.getName().substring(1);
+						int positiveExamples = 0;
+						File inputDir = FileUtils.getFile(
+								srcDir.getParentFile(), "c" + positiveClass,
+								srcDir.getName());
+						Writer destWr = Channels.newWriter(
+								FileUtils.openOutputStream(
+										FileUtils.getFile(inputDir,
+												srcFile.getName()))
+										.getChannel(), Config.OUT_CHARSET);
+						try {
+							BufferedReader srcRead = new BufferedReader(
+									Channels.newReader(FileUtils
+											.openInputStream(srcFile)
+											.getChannel(), Config.OUT_CHARSET));
+							String line;
+							while ((line = srcRead.readLine()) != null) {
+								int spaceIx = line.indexOf(' ');
+								String cls = line.substring(0, spaceIx);
+
+								if (positiveClass.contains("+" + cls + "+")) {
+									destWr.append("+1")
+											.append(line.substring(spaceIx))
+											.append(System.lineSeparator());
+									if (positiveExamples == 0) {
+										System.out
+												.println("The first positive example for "
+														+ positiveClass
+														+ " in "
+														+ srcFile
+																.getAbsolutePath());
+									}
+									++positiveExamples;
+
+								} else if (line.startsWith("0")) {
+									if (Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
+										destWr.append(line).append(
+												System.lineSeparator());
+									}
+								} else if (positiveClass.contains("-" + cls
+										+ "-")) {
+									destWr.append("-1")
+											.append(line.substring(spaceIx))
+											.append(System.lineSeparator());
+								}
+							}
+						} finally {
+							destWr.flush();
+							destWr.close();
 						}
-					} else {
-						System.out.println("No positive examples for "
-								+ positiveClass + " in "
-								+ srcFile.getAbsolutePath() + ". Deleting "
-								+ inputDir.getAbsolutePath());
-						FileUtils.deleteDirectory(inputDir);
+
+						if (positiveExamples > 0) {
+
+							// Also prepare files for SVMlight output.. it needs
+							// a
+							// file
+							// to overwrite!
+
+							String outDirPathPfx = "c" + positiveClass
+									+ File.separator + srcDir.getName()
+									+ File.separator + "t";
+
+							for (int t = 0; t < 4; ++t) {
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																Config.SVMLIGHT_OUTPUTPATH,
+																outDirPathPfx
+																		+ t,
+																"alpha.txt"))
+										.close();
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																Config.SVMLIGHT_OUTPUTPATH,
+																outDirPathPfx
+																		+ t,
+																"model.txt"))
+										.close();
+								FileUtils
+										.openOutputStream(
+												FileUtils
+														.getFile(
+																Config.SVMLIGHT_OUTPUTPATH,
+																outDirPathPfx
+																		+ t,
+																"trans.txt"))
+										.close();
+								FileUtils.openOutputStream(
+										FileUtils.getFile(
+												Config.SVMLIGHT_OUTPUTPATH,
+												outDirPathPfx + t,
+												"predictions.txt")).close();
+							}
+						} else {
+							System.out.println("No positive examples for "
+									+ positiveClass + " in "
+									+ srcFile.getAbsolutePath() + ". Deleting "
+									+ inputDir.getAbsolutePath());
+							FileUtils.deleteDirectory(inputDir);
+						}
 					}
 				}
 			}
+			for (int i = 0; i < pendingIOJobs; ++i) {
+				printEcs.take();
+			}
+			// This will make the executor accept no new threads
+			// and finish all existing threads in the queue
+			printExec.shutdown();
+			// Wait until all threads are finish
+			while (!printExec.isTerminated()) {
+				Thread.sleep(5000);
+				System.out.println((System.currentTimeMillis() - time)
+						+ ": Shutting down");
+			}
+
+			app.countExec.shutdown();
+
+			System.err.println(new Date() + ": Done in "
+					+ (System.currentTimeMillis() - time) + " millis");
+		} finally {
+			try {
+				notifyStream.close();
+			} catch (IOException ignored) {
+
+			}
+			System.setErr(errOrig);
 		}
-		// for (int i = 0; i < printingJobs; ++i) {
-		// printEcs.take();
-		// }
-		// This will make the executor accept no new threads
-		// and finish all existing threads in the queue
-		printExec.shutdown();
-		// Wait until all threads are finish
-		while (!printExec.isTerminated()) {
-			Thread.sleep(5000);
-			System.out.println((System.currentTimeMillis() - time)
-					+ ": Shutting down");
-		}
-
-		app.countExec.shutdown();
-
-		System.out.println(new Date() + ": Done in "
-				+ (System.currentTimeMillis() - time) + " millis");
-
 	}
 
 	public LoadCountsAsAttributes() throws IOException {
@@ -663,6 +869,10 @@ public class LoadCountsAsAttributes implements
 			nominalAttrs.add(Config.RESULT_KEY_SKY_FREQ);
 		}
 		allAttributes = new FastVector();
+		if (Config.LOAD_USE_PLACEID) {
+			placeIdAttr = new Attribute("PlaceID", (FastVector) null);
+			allAttributes.addElement(placeIdAttr);
+		}
 		valueDomainMap = Collections
 				.synchronizedMap(new HashMap<String, HashMap<String, Attribute>>());
 
@@ -809,278 +1019,313 @@ public class LoadCountsAsAttributes implements
 			String placeID = null;
 			double instId = 1.0;
 			Properties instIDPlaceID = new Properties();
-			for (File microLocF : microLocsFiles) {
-				Instance wekaInst;
-				if (Config.LOAD_REPLACE_MISSING_VALUES) {
-					wekaInst = new Instance(allAttributes.size());
-				} else {
-					wekaInst = new SparseInstance(allAttributes.size());
-				}
-				wekaInst.setDataset(wekaDoc);
-
-				HashMap<Attribute, Integer> countMap = new HashMap<Attribute, Integer>();
-				HashMap<String, Integer> featureCountMap = new HashMap<String, Integer>();
-				HashMap<String, Integer> featureMaxMap = new HashMap<String, Integer>();
-				HashMap<Attribute, String> attrPfxMap = new HashMap<Attribute, String>();
-				for (int i = 0; i < allAttributes.size(); ++i) {
-					countMap.put((Attribute) allAttributes.elementAt(i), 0);
-				}
-
-				Reader microLocR = Channels.newReader(FileUtils
-						.openInputStream(microLocF).getChannel(),
-						Config.OUT_CHARSET);
-				int chInt;
-				int numTabs = 0;
-				StringBuffer header = new StringBuffer();
-
-				long currStartTime = Long.parseLong(StringUtils
-						.removeLastNChars(microLocF.getParentFile().getName(),
-								1));
-				long currEndTime = Long.parseLong(StringUtils.removeLastNChars(
-						microLocF.getName(), 5));
-				while ((chInt = microLocR.read()) != -1) {
-					if ((char) chInt == '\t') {
-						if (numTabs == 0) {
-							// inst name.. not useful in weka
-						} else if (numTabs == 1) {
-							if (prevStartTime != null
-									&& prevStartTime.equals(currStartTime)) {
-								// same visit, different micro loc.. nothing to
-								// do
-								// System.out.println("dummy!");
-							} else if (prevEndTime != null
-									&& currStartTime - prevEndTime < Config.INTERVAL_LABEL_CARRY_OVER) {
-								prevLabel = instLabel;
-							} else {
-								prevLabel = null;
-							}
-							placeID = header.toString();
-							instLabel = Config.placeLabels.getProperty(placeID);
+			Writer instIDVisitTimeWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(OUTPUT_PATH, relName
+									+ "_instid-time_map.properties"))
+							.getChannel(), Config.OUT_CHARSET);
+			try {
+				instIDVisitTimeWr
+						.append("UserId\tInstId\tStartTime\tEndTime\n");
+				for (File microLocF : microLocsFiles) {
+					if (!Config.MICROLOC_SPLITS_DOCS) {
+						if (microLocF.getName().endsWith(
+								"" + Config.TIMETRUSTED_WLAN)) {
+							throw new AssertionError("Splitted!!");
 						}
-						header.setLength(0);
-						++numTabs;
-						if (numTabs == 2) {
-							break;
-						}
-					} else {
-						header.append((char) chInt);
 					}
-				}
-				prevStartTime = currStartTime;
-				prevEndTime = currEndTime;
-				header = null;
 
-				char[] dataChars = new char[Config.IO_BUFFER_SIZE];
-				StringBuilder token = new StringBuilder();
-				int len;
-				while ((len = microLocR.read(dataChars)) > 0) {
-					for (int i = 0; i < len; ++i) {
-						if (Character.isLowerCase(dataChars[i])
-						// Make sure this is not an integer valued feature
-								|| (Character.isDigit(dataChars[i])
-										&& token.indexOf("hod") == -1
-										&& token.indexOf("apu") == -1
-										&& token.indexOf("num") == -1
-										&& token.indexOf("avg") == -1 && token
-										.indexOf("sdv") == -1)) {
-							token.append(dataChars[i]);
+					Instance wekaInst;
+					if (Config.LOAD_REPLACE_MISSING_VALUES) {
+						wekaInst = new Instance(allAttributes.size());
+					} else {
+						wekaInst = new SparseInstance(allAttributes.size());
+					}
+					wekaInst.setDataset(wekaDoc);
 
-						} else {
-							String pfx = token.toString();
-							String statKey = shortColNameDict.getProperty(pfx);
-							token.setLength(0);
+					HashMap<Attribute, Integer> countMap = new HashMap<Attribute, Integer>();
+					HashMap<String, Integer> featureCountMap = new HashMap<String, Integer>();
+					HashMap<String, Integer> featureMaxMap = new HashMap<String, Integer>();
+					HashMap<Attribute, String> attrPfxMap = new HashMap<Attribute, String>();
+					for (int i = 0; i < allAttributes.size(); ++i) {
+						countMap.put((Attribute) allAttributes.elementAt(i), 0);
+					}
 
-							for (; i < dataChars.length; ++i) {
-								if (Character.isWhitespace(dataChars[i])) {
-									break;
-								}
-								token.append(dataChars[i]);
-							}
+					Reader microLocR = Channels.newReader(FileUtils
+							.openInputStream(microLocF).getChannel(),
+							Config.OUT_CHARSET);
+					int chInt;
+					int numTabs = 0;
+					StringBuffer header = new StringBuffer();
 
-							String value = token.toString().trim();
-							token.setLength(0);
-
-							// /
-							if (value
-									.endsWith(Config.MISSING_VALUE_PLACEHOLDER)) {
-								// However this made it here, but it does for
-								// cgd and cgd2!!
-								continue;
-							}
-
-							// It's not used to report the number of aps being
-							// used
-							// if (pfx.equals("apu")) {
-							// // redundant feature, because we now store use
-							// // of every app
-							// continue;
-							// }
-
-							if (Config.LOAD_DROP_VERYFREQUENT_VALS
-									&& (pfx.equals("si") && (value.equals("E") || value
-											.equals("A")))) {
-								// This is like a stop word that always
-								// happens..
-								// sure the user is actively using the mobile!
-								continue;
-							}
-
-							if (Config.LOAD_DROP_VERYFREQUENT_VALS
-									&& (pfx.equals("aca") && (value.equals("E") || value
-											.equals("S")))) {
-								// This is like a stop word that always
-								// happens..
-								// sure the mobile is left laying down!
-								continue;
-							}
-
-							HashMap<String, Attribute> valueDomain = valueDomainMap
-									.get(statKey);
-							Attribute attribute;
-							if (valueDomain != null) {
-								if (nominalAttrs.contains(statKey)) {
-									// one value per microloc.. no counting
-									attribute = valueDomain.get(NOMINAL);
-									if (!value
-											.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
-										wekaInst.setValue(attribute, value);
-									} else if (Config.LOAD_REPLACE_MISSING_VALUES) {
-										wekaInst.setValue(attribute,
-												Config.LOAD_MISSING_VALUE_REPLA);
-									}
-									continue;
+					long currStartTime = Long.parseLong(StringUtils
+							.removeLastNChars(microLocF.getParentFile()
+									.getName(), 1));
+					long currEndTime = Long.parseLong(StringUtils
+							.removeLastNChars(microLocF.getName(), 5));
+					while ((chInt = microLocR.read()) != -1) {
+						if ((char) chInt == '\t') {
+							if (numTabs == 0) {
+								// inst name.. not useful in weka
+							} else if (numTabs == 1) {
+								if (prevStartTime != null
+										&& prevStartTime.equals(currStartTime)) {
+									// same visit, different micro loc.. nothing
+									// to
+									// do
+									// System.out.println("dummy!");
+								} else if (prevEndTime != null
+										&& currStartTime - prevEndTime < Config.INTERVAL_LABEL_CARRY_OVER) {
+									prevLabel = instLabel;
 								} else {
-									if (!Discretize.enumsMap
-											.containsKey(statKey)) {
-										// numeric attribute.. it must be
-										// limited to
-										// range
-										double numVal = Double
-												.parseDouble(value);
+									prevLabel = null;
+								}
+								placeID = header.toString();
+								instLabel = Config.placeLabels
+										.getProperty(placeID);
+							}
+							header.setLength(0);
+							++numTabs;
+							if (numTabs == 2) {
+								break;
+							}
+						} else {
+							header.append((char) chInt);
+						}
+					}
+					prevStartTime = currStartTime;
+					prevEndTime = currEndTime;
+					header = null;
+					double visitLength = (currEndTime - currStartTime)
+							/ Config.TIME_SECONDS_IN_10MINS * 1.0;
 
-										if (pfx.startsWith("avg")
-												|| pfx.startsWith("sdv")) {
-											// numeric value that need smoothing
-											// TODO: Apply a weaker smoothing...
-											// the range isn't that high
-											value = Long.toString(MathUtil
-													.tf(numVal));
-										}
+					if (Config.LOAD_USE_PLACEID) {
+						wekaInst.setValue(0, placeID);
+					}
 
-										if (numVal < 1) {
+					char[] dataChars = new char[Config.IO_BUFFER_SIZE];
+					StringBuilder token = new StringBuilder();
+					int len;
+					while ((len = microLocR.read(dataChars)) > 0) {
+						for (int i = 0; i < len; ++i) {
+							if (Character.isLowerCase(dataChars[i])
+							// Make sure this is not an integer valued feature
+									|| (Character.isDigit(dataChars[i])
+											&& token.indexOf("hod") == -1
+											&& token.indexOf("apu") == -1
+											&& token.indexOf("num") == -1
+											&& token.indexOf("avg") == -1 && token
+											.indexOf("sdv") == -1)) {
+								token.append(dataChars[i]);
 
-											// negative or zero.. discard!
-											// System.err.println("INFO: Discarding nonposetive token "
-											// + pfx + " " + value);
-											continue;
-										} else if (numVal > MathUtil.POWS_OF_2.length - 1) {
-											value = Integer
-													.toString(MathUtil.POWS_OF_2.length - 1);
-										}
+							} else {
+								String pfx = token.toString();
+								String statKey = shortColNameDict
+										.getProperty(pfx);
+								token.setLength(0);
+
+								for (; i < dataChars.length; ++i) {
+									if (Character.isWhitespace(dataChars[i])) {
+										break;
 									}
-									attribute = valueDomain.get(value);
-									if (attribute == null) {
+									token.append(dataChars[i]);
+								}
 
-										if (Config.MISSING_VALUE_PLACEHOLDER
-												.equals(value)) {
-											continue;
-										} else if (!Config.QUANTIZATION_PER_USER) {
-											if ((Config.DROP_HIGHEST_QUANTILE && value
-													.equals(Discretize.QuantilesEnum
-															.values()[Config.NUM_QUANTILES]
-															.toString()))
-													|| (Config.DROP_LOWEST_QUANTILE && value
-															.equals(Discretize.QuantilesEnum
-																	.values()[0]
-																	.toString()))) {
+								String value = token.toString().trim();
+								token.setLength(0);
+
+								// /
+								if (value
+										.endsWith(Config.MISSING_VALUE_PLACEHOLDER)) {
+									// However this made it here, but it does
+									// for
+									// cgd and cgd2!!
+									continue;
+								}
+
+								// It's now used to report the number of aps
+								// being
+								// used
+								// if (pfx.equals("apu")) {
+								// // redundant feature, because we now store
+								// use
+								// // of every app
+								// continue;
+								// }
+
+								if (Config.LOAD_DROP_VERYFREQUENT_VALS
+										&& (pfx.equals("si") && (value
+												.equals("E") || value
+												.equals("A")))) {
+									// This is like a stop word that always
+									// happens..
+									// sure the user is actively using the
+									// mobile!
+									continue;
+								}
+
+								if (Config.LOAD_DROP_VERYFREQUENT_VALS
+										&& (pfx.equals("aca") && (value
+												.equals("E") || value
+												.equals("S")))) {
+									// This is like a stop word that always
+									// happens..
+									// sure the mobile is left laying down!
+									continue;
+								}
+
+								HashMap<String, Attribute> valueDomain = valueDomainMap
+										.get(statKey);
+								Attribute attribute;
+								if (valueDomain != null) {
+									if (nominalAttrs.contains(statKey)) {
+										// one value per microloc.. no counting
+										attribute = valueDomain.get(NOMINAL);
+										if (!value
+												.equals(Config.MISSING_VALUE_PLACEHOLDER)) {
+											wekaInst.setValue(attribute, value);
+										} else if (Config.LOAD_REPLACE_MISSING_VALUES) {
+											wekaInst.setValue(
+													attribute,
+													Config.LOAD_MISSING_VALUE_REPLA);
+										}
+										continue;
+									} else {
+										if (!Discretize.enumsMap
+												.containsKey(statKey)) {
+											// numeric attribute.. it must be
+											// limited to
+											// range
+											double numVal = Double
+													.parseDouble(value);
+
+											if (pfx.startsWith("avg")
+													|| pfx.startsWith("sdv")) {
+												// numeric value that need
+												// smoothing
+												// TODO: Apply a weaker
+												// smoothing...
+												// the range isn't that high
+												value = Long.toString(MathUtil
+														.tf(numVal));
+											}
+
+											if (numVal < 1) {
+
+												// negative or zero.. discard!
+												// System.err.println("INFO: Discarding nonposetive token "
+												// + pfx + " " + value);
 												continue;
+											} else if (numVal > MathUtil.POWS_OF_2.length - 1) {
+												value = Integer
+														.toString(MathUtil.POWS_OF_2.length - 1);
+											}
+										}
+										attribute = valueDomain.get(value);
+										if (attribute == null) {
+
+											if (Config.MISSING_VALUE_PLACEHOLDER
+													.equals(value)) {
+												continue;
+											} else if (!Config.QUANTIZATION_PER_USER) {
+												if ((Config.DROP_HIGHEST_QUANTILE && value
+														.equals(Discretize.QuantilesEnum
+																.values()[Config.NUM_QUANTILES]
+																.toString()))
+														|| (Config.DROP_LOWEST_QUANTILE && value
+																.equals(Discretize.QuantilesEnum
+																		.values()[0]
+																		.toString()))) {
+													continue;
+												}
 											}
 										}
 									}
-								}
-							} else if (pfx.equals("aid")) {
-								String appName = featSelectedApps
-										.getProperty(value);
-								if (appName == null) {
+								} else if (pfx.equals("aid")) {
+									String appName = featSelectedApps
+											.getProperty(value);
+									if (appName == null) {
+										continue;
+									}
+									HashMap<String, Integer> appFreq = appFreqMap
+											.get(microLocF.getName()
+													+ microLocF.getParentFile()
+															.getName());
+									Integer appCnt = appFreq.get(value);
+									if (appCnt == null) {
+										appCnt = 0;
+										// appFreq.put(value, appCnt);
+									}
+									++appCnt;
+									appFreq.put(value, appCnt);
+									continue;
+								} else {
+									if (!pfx.isEmpty()) {
+										System.err
+												.println("WARNING! You are loosing a token: "
+														+ pfx + " " + value);
+
+									}
 									continue;
 								}
-								HashMap<String, Integer> appFreq = appFreqMap
-										.get(microLocF.getName()
-												+ microLocF.getParentFile()
-														.getName());
-								Integer appCnt = appFreq.get(value);
-								if (appCnt == null) {
-									appCnt = 0;
-									// appFreq.put(value, appCnt);
-								}
-								++appCnt;
-								appFreq.put(value, appCnt);
-								continue;
-							} else {
-								if (!pfx.isEmpty()) {
+
+								if (attribute == null) {
 									System.err
-											.println("WARNING! You are loosing a token: "
-													+ pfx + " " + value);
-
-								}
-								continue;
-							}
-
-							if (attribute == null) {
-								System.err
-										.println("Couldn't find attribute for pfx: "
-												+ pfx
-												+ " and value: "
-												+ value
-												+ " from file "
-												+ microLocF.getAbsolutePath());
-								continue;
-							}
-
-							Integer count = countMap.get(attribute);
-							count = count + 1;
-							countMap.put(attribute, count);
-
-							if (!Config.LOAD_NORMALIZE_BY
-									.equals(NORMALIZE_BY_ENUM.NONE)) {
-								if (!attrPfxMap.containsKey(attribute)) {
-									attrPfxMap.put(attribute, pfx);
-								}
-							}
-
-							if (Config.LOAD_NORMALIZE_BY
-									.equals(NORMALIZE_BY_ENUM.SUM)) {
-								Integer featureCount = featureCountMap.get(pfx);
-								if (featureCount == null) {
-									featureCount = 0;
+											.println("Couldn't find attribute for pfx: "
+													+ pfx
+													+ " and value: "
+													+ value
+													+ " from file "
+													+ microLocF
+															.getAbsolutePath());
+									continue;
 								}
 
-								featureCountMap.put(pfx, featureCount + 1);
-							} else if (Config.LOAD_NORMALIZE_BY
-									.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
-								Integer featureMax = featureMaxMap.get(pfx);
-								if (featureMax == null || count > featureMax) {
-									featureMaxMap.put(pfx, count);
+								Integer count = countMap.get(attribute);
+								count = count + 1;
+								countMap.put(attribute, count);
+
+								if (!Config.LOAD_NORMALIZE_BY
+										.equals(NORMALIZE_BY_ENUM.NONE)) {
+									if (!attrPfxMap.containsKey(attribute)) {
+										attrPfxMap.put(attribute, pfx);
+									}
+								}
+
+								if (Config.LOAD_NORMALIZE_BY
+										.equals(NORMALIZE_BY_ENUM.SUM)) {
+									Integer featureCount = featureCountMap
+											.get(pfx);
+									if (featureCount == null) {
+										featureCount = 0;
+									}
+
+									featureCountMap.put(pfx, featureCount + 1);
+								} else if (Config.LOAD_NORMALIZE_BY
+										.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
+									Integer featureMax = featureMaxMap.get(pfx);
+									if (featureMax == null
+											|| count > featureMax) {
+										featureMaxMap.put(pfx, count);
+									}
 								}
 							}
 						}
 					}
-				}
 
-				if (Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null) {
-					instLabel = Config.LABELS_SINGLES[0];
-				}
-
-				if (instLabel != null) {
-					wekaInst.setClassValue(instLabel);
-					synchronized (userClassCount) {
-						userClassCount.get(relName).addValue(instLabel);
+					if (Config.LOAD_MISSING_CLASS_AS_OTHER && instLabel == null) {
+						instLabel = Config.LABELS_SINGLES[0];
 					}
-				} else {
-					wekaInst.setClassMissing();
-				}
 
-//				if (prevLabel != null) {
+					if (instLabel != null) {
+						wekaInst.setClassValue(instLabel);
+						synchronized (userClassCount) {
+							userClassCount.get(relName).addValue(instLabel);
+						}
+					} else {
+						wekaInst.setClassMissing();
+					}
+
 					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
 						// 1 means true, 0 flase.. or is missing better
 						for (int i = 0; i < Config.LABELS_SINGLES.length; ++i) {
@@ -1092,76 +1337,92 @@ public class LoadCountsAsAttributes implements
 							wekaInst.setValue(prevLabelAttributeArr[i], val);
 						}
 					} else {
-						wekaInst.setValue(prevLabelAttribute, prevLabel);
+						if (prevLabel != null) {
+							wekaInst.setValue(prevLabelAttribute, prevLabel);
+						}
+						// else if(Config.LOAD_REPLACE_MISSING_VALUES){
+						// wekaInst.setValue(prevLabelAttribute,
+						// Config.MISSING_VALUE_PLACEHOLDER);
+						// }
 					}
-//				}
 
-				for (Attribute attrib : countMap.keySet()) {
-					if (attrib == labelAttribute) {
-						continue;
-					}
-					if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
-						int i = 0;
-						for (; i < Config.LABELS_SINGLES.length; ++i) {
-							if (prevLabelAttributeArr[i] == attrib) {
-								break;
+					for (Attribute attrib : countMap.keySet()) {
+						if (attrib == labelAttribute
+								|| attrib.name().contains("ID")) {
+							continue;
+						}
+						if (Config.SPREAD_NOMINAL_FEATURES_AS_BINARY) {
+							int i = 0;
+							for (; i < Config.LABELS_SINGLES.length; ++i) {
+								if (prevLabelAttributeArr[i] == attrib) {
+									break;
+								}
+							}
+							if (i != Config.LABELS_SINGLES.length) {
+								continue;
+							}
+						} else {
+							if (attrib == prevLabelAttribute) {
+								continue;
 							}
 						}
-						if (i != Config.LABELS_SINGLES.length) {
-							continue;
-						}
-					} else {
-						if (attrib == prevLabelAttribute) {
-							continue;
-						}
-					}
 
-					int count = countMap.get(attrib);
-					if (count > 0) {
-						double normalizer = 1;
-						if (Config.LOAD_NORMALIZE_BY
-								.equals(NORMALIZE_BY_ENUM.SUM)) {
-							normalizer = featureCountMap.get(attrPfxMap
-									.get(attrib));
-						} else if (Config.LOAD_NORMALIZE_BY
-								.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
-							normalizer = featureMaxMap.get(attrPfxMap
-									.get(attrib)); // TODO??: * 0.01; // so that
-													// the range is from 0 to
-													// 100
-						}
-						wekaInst.setValue(attrib, count / normalizer);
-					} else {
-						if (Config.LOAD_REPLACE_MISSING_VALUES) {
-							wekaInst.setValue(attrib,
-									Config.LOAD_MISSING_VALUE_REPLA);
+						int count = countMap.get(attrib);
+						if (count > 0) {
+							double normalizer = 1;
+							if (Config.LOAD_NORMALIZE_BY
+									.equals(NORMALIZE_BY_ENUM.SUM)) {
+								normalizer = featureCountMap.get(attrPfxMap
+										.get(attrib));
+							} else if (Config.LOAD_NORMALIZE_BY
+									.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
+								normalizer = featureMaxMap.get(attrPfxMap
+										.get(attrib)); // TODO??: * 0.01; // so
+														// that
+														// the range is from 0
+														// to
+														// 100
+							}
+							if (Config.LOAD_NORMALIZE_VISIT_LENGTH) {
+								normalizer *= visitLength;
+							}
+							wekaInst.setValue(attrib, count / normalizer);
 						} else {
-							wekaInst.setMissing(attrib);
+							if (Config.LOAD_REPLACE_MISSING_VALUES) {
+								wekaInst.setValue(attrib,
+										Config.LOAD_MISSING_VALUE_REPLA);
+							} else {
+								wekaInst.setMissing(attrib);
+							}
 						}
+
 					}
 
-				}
+					wekaDoc.add(wekaInst);
 
-				wekaDoc.add(wekaInst);
-				instIDPlaceID.setProperty(Double.toString(instId), placeID);
-				++instId;
-			}
-			
-			if(instIDPlaceID.size() != wekaDoc.numInstances()){
-				throw new AssertionError("There must be one record per instance that maps it to a visit!");
-			}
-			
-			Writer instIdPlaceIdWr = Channels.newWriter(
-					FileUtils.openOutputStream(
-							FileUtils.getFile(OUTPUT_PATH, relName
-									+ "_instid-placeid_map.properties"))
-							.getChannel(), Config.OUT_CHARSET);
-			try {
-				instIDPlaceID.store(instIdPlaceIdWr, null);
+					instIDPlaceID.setProperty(Double.toString(instId), placeID);
+
+					String startTime = StringUtils.removeLastNChars(microLocF
+							.getParentFile().getName(), 1);
+					String endTime = StringUtils.removeLastNChars(
+							microLocF.getName(), 5);
+					instIDVisitTimeWr.append(relName).append('\t')
+							.append(Double.toString(instId)).append('\t')
+							.append(startTime).append('\t').append(endTime)
+							.append('\n');
+					// .append("?").append('\t').append('\n');
+					++instId;
+				}
 			} finally {
-				instIdPlaceIdWr.flush();
-				instIdPlaceIdWr.close();
+				instIDVisitTimeWr.flush();
+				instIDVisitTimeWr.close();
 			}
+			if (instIDPlaceID.size() != wekaDoc.numInstances()) {
+				throw new AssertionError(
+						"There must be one record per instance that maps it to a visit!");
+			}
+
+			storeInstIdPlaceId(instIDPlaceID, relName);
 			System.out.println((System.currentTimeMillis() - time)
 					+ ": Finished reading user " + relName);
 			return wekaDoc;
@@ -1175,76 +1436,108 @@ public class LoadCountsAsAttributes implements
 		}
 	}
 
-	static class InstancesTransformCallable implements Callable<Integer> {
+	private static void storeInstIdPlaceId(Properties instIDPlaceID,
+			String relName) throws IOException {
+		Writer instIdPlaceIdWr = Channels.newWriter(
+				FileUtils.openOutputStream(
+						FileUtils.getFile(OUTPUT_PATH, relName
+								+ "_instid-placeid_map.properties"))
+						.getChannel(), Config.OUT_CHARSET);
+		try {
+			instIDPlaceID.store(instIdPlaceIdWr, null);
+		} finally {
+			instIdPlaceIdWr.flush();
+			instIdPlaceIdWr.close();
+		}
 
+	}
+
+	static class InstancesTransformCallable implements Callable<Integer> {
+		final Attribute placeIdAttr;
 		private static final String PCA_CONCENSUS_REMOVE_FILTER = "249,248,247,246,245,244,243,241,238,232,227,219,218,217,216,215,214,199,184,183,182,181,180,179,176,175,174,167,166,165,164,163,159,158,157,156,155,154,151,150,149,148,147,139,138,137,136,135,134,133,132,131,130,129,128,127,126,125,124,123,122,121,120,119,118,117,114,113,112,108,107,103,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,81,80,79,78,76,75,74,73,72,70,69,68,67,66,64,63,62,58,57,56,54,53,52,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33,32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,9,8,7,6,4,3,2";
+		// "249,248,247,246,245,244,243,241,238,232,227,219,218,217,216,215,214,199,184,183,182,181,180,179,176,175,174,167,166,165,164,163,159,158,157,156,155,154,151,150,149,148,147,139,138,137,136,135,134,133,132,131,130,129,128,127,126,125,124,123,122,121,120,119,118,117,114,113,112,108,107,103,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,81,80,79,78,76,75,74,73,72,70,69,68,67,66,64,63,62,58,57,56,54,53,52,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33,32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,9,8,7,6,4,3,2";
 		private final File userDir;
 		private final HashMap<String, HashMap<String, Integer>> appFreqMap;
 		private final Pattern commaSplit = Pattern.compile("\\,");
 
-		public InstancesTransformCallable(File userDir) {
+		public InstancesTransformCallable(File userDir, Attribute placeIdAttr) {
 			this.userDir = userDir;
 			appFreqMap = allUsersAppFreqMap.get(userDir.getName());
+			this.placeIdAttr = placeIdAttr;
 		}
 
 		@Override
 		public Integer call() throws Exception {
-
 			int printingJobs = 0;
-			Instances userAppUsage = new Instances(userDir.getName(),
-					appUsageAttrsFV, 0);
-			for (File visit : userDir.listFiles()) {
-				for (File microLoc : visit.listFiles()) {
-					Instance microLocAppUsage = new Instance(
-							appUsageAttrsFV.size());
-					microLocAppUsage.setDataset(userAppUsage);
-					HashMap<String, Integer> visitAppFreq = appFreqMap
-							.get(microLoc.getName() + visit.getName());
-					double normalizer = 1;
-					if (Config.LOAD_NORMALIZE_BY.equals(NORMALIZE_BY_ENUM.SUM)) {
-						for (String appUid : visitAppFreq.keySet()) {
-							normalizer += visitAppFreq.get(appUid);
-						}
-					} else if (Config.LOAD_NORMALIZE_BY
-							.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
-						normalizer = Integer.MIN_VALUE;
-						for (String appUid : visitAppFreq.keySet()) {
-							double c = visitAppFreq.get(appUid);
-							if (normalizer < c) {
-								normalizer = visitAppFreq.get(appUid);
-							}
-						}
-					}
-					for (String appUid : appUsageAttrs.keySet()) {
-						Attribute appAttr = appUsageAttrs.get(appUid);
-						// if (appAttr == null) {
-						if (!visitAppFreq.containsKey(appUid)) {
-							if (Config.LOAD_REPLACE_MISSING_VALUES) {
-								microLocAppUsage.setValue(appAttr,
-										Config.LOAD_MISSING_VALUE_REPLA);
-							} else {
-								microLocAppUsage.setMissing(appAttr);
-							}
-							continue;
-						}
+			Instances userAppUsage = null;
+			if (Config.LOADCOUNT_APP_USAGE) {
+				userAppUsage = new Instances(userDir.getName(),
+						appUsageAttrsFV, 0);
+				for (File visit : userDir.listFiles()) {
+					for (File microLoc : visit.listFiles()) {
+
+						Instance microLocAppUsage = new Instance(
+								appUsageAttrsFV.size());
+						microLocAppUsage.setDataset(userAppUsage);
+						HashMap<String, Integer> visitAppFreq = appFreqMap
+								.get(microLoc.getName() + visit.getName());
+						double normalizer = 1;
 						if (Config.LOAD_NORMALIZE_BY
 								.equals(NORMALIZE_BY_ENUM.SUM)) {
-							microLocAppUsage.setValue(appAttr,
-									visitAppFreq.get(appUid) / normalizer);
+							for (String appUid : visitAppFreq.keySet()) {
+								normalizer += visitAppFreq.get(appUid);
+							}
 						} else if (Config.LOAD_NORMALIZE_BY
 								.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
-							microLocAppUsage.setValue(appAttr,
-									MathUtil.tf(visitAppFreq.get(appUid))
-											/ MathUtil.tf(normalizer));
-						} else {
-							microLocAppUsage.setValue(appAttr,
-									MathUtil.tf(visitAppFreq.get(appUid)));
+							normalizer = Integer.MIN_VALUE;
+							for (String appUid : visitAppFreq.keySet()) {
+								double c = visitAppFreq.get(appUid);
+								if (normalizer < c) {
+									normalizer = visitAppFreq.get(appUid);
+								}
+							}
 						}
+						for (String appUid : appUsageAttrs.keySet()) {
+							Attribute appAttr = appUsageAttrs.get(appUid);
+							// if (appAttr == null) {
+							if (!visitAppFreq.containsKey(appUid)) {
+								if (Config.LOAD_REPLACE_MISSING_VALUES) {
+									microLocAppUsage.setValue(appAttr,
+											Config.LOAD_MISSING_VALUE_REPLA);
+								} else {
+									microLocAppUsage.setMissing(appAttr);
+								}
+								continue;
+							}
+							double appValue;
+							if (Config.LOAD_NORMALIZE_BY
+									.equals(NORMALIZE_BY_ENUM.SUM)) {
+								appValue = visitAppFreq.get(appUid)
+										/ normalizer;
+							} else if (Config.LOAD_NORMALIZE_BY
+									.equals(NORMALIZE_BY_ENUM.MAXIMUM)) {
+								appValue = MathUtil
+										.tf(visitAppFreq.get(appUid))
+										/ MathUtil.tf(normalizer);
+							} else {
+								appValue = MathUtil
+										.tf(visitAppFreq.get(appUid));
+							}
+							if (Config.LOAD_NORMALIZE_VISIT_LENGTH) {
+								appValue /= (Long
+										.parseLong(StringUtils
+												.removeLastNChars(
+														microLoc.getName(), 5)) - Long
+										.parseLong(StringUtils
+												.removeLastNChars(
+														visit.getName(), 1)));
+							}
+							microLocAppUsage.setValue(appAttr, appValue);
+						}
+						userAppUsage.add(microLocAppUsage);
 					}
-					userAppUsage.add(microLocAppUsage);
 				}
 			}
-
 			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 				AppsSVMLightSaver saver = null;
 				while ((saver = (AppsSVMLightSaver) AppsSVMLightSaver
@@ -1257,26 +1550,39 @@ public class LoadCountsAsAttributes implements
 					saver.release();
 				}
 			} else {
+				String userid;
+				Instances joinedInsts;
+				if (Config.LOADCOUNT_APP_USAGE) {
+					userid = userAppUsage.relationName();
 
-				String userid = userAppUsage.relationName();
-
-				Instances countsInsts = new Instances(Channels.newReader(
-						FileUtils.openInputStream(FileUtils.getFile(TEMP_PATH, // Config.LABELS_MULTICLASS_NAME,
-								userid + ".arff")).getChannel(),
-						Config.OUT_CHARSET));
-				Instances joinedInsts = Instances.mergeInstances(userAppUsage,
-						countsInsts);
+					Instances countsInsts = new Instances(Channels.newReader(
+							FileUtils.openInputStream(
+									FileUtils.getFile(TEMP_PATH, // Config.LABELS_MULTICLASS_NAME,
+											userid + ".arff")).getChannel(),
+							Config.OUT_CHARSET));
+					joinedInsts = Instances.mergeInstances(userAppUsage,
+							countsInsts);
+					// joinedInsts.setClassIndex(joinedInsts.numAttributes() -
+					// 1);
+					joinedInsts.setRelationName(userid);
+					countsInsts = null;
+					userAppUsage = null;
+				} else {
+					userid = userDir.getName();
+					joinedInsts = new Instances(Channels.newReader(FileUtils
+							.openInputStream(FileUtils.getFile(TEMP_PATH, // Config.LABELS_MULTICLASS_NAME,
+									userid + ".arff")).getChannel(),
+							Config.OUT_CHARSET));
+				}
 				joinedInsts.setClassIndex(joinedInsts.numAttributes() - 1);
-				joinedInsts.setRelationName(userid);
-				countsInsts = null;
-				userAppUsage = null;
-
-				AddID addId = new AddID();
-				addId.setInputFormat(joinedInsts);
-				// addId.setIDIndex("first");
-				String idName = "ID";
-				addId.setAttributeName(idName);
-				joinedInsts = Filter.useFilter(joinedInsts, addId);
+				// Treated as a feature, so first inst of each user has
+				// something in common, .. etc
+				// AddID addId = new AddID();
+				// addId.setInputFormat(joinedInsts);
+				// // addId.setIDIndex("first");
+				// String idName = "ID";
+				// addId.setAttributeName(idName);
+				// joinedInsts = Filter.useFilter(joinedInsts, addId);
 
 				if (Config.LOADCOUNTS_DELETE_MISSING_CLASS) {
 					// Should have done this earlier
@@ -1285,34 +1591,42 @@ public class LoadCountsAsAttributes implements
 				}
 
 				joinedInsts.setRelationName(userid);
-				
-				System.out.println("Joined attrs for user: " + userid + " has attributes: " + joinedInsts.numAttributes());
 
-				Instances copyInsts = joinedInsts;
-				Remove generalRemove;
+				System.out.println("Joined attrs for user: " + userid
+						+ " has attributes: " + joinedInsts.numAttributes());
+
+				Remove generalRemove = null;
 				if (Config.LOAD_FEATSELECTED_ONLY) {
 
 					generalRemove = new Remove();
-					String remIxes = PCA_CONCENSUS_REMOVE_FILTER; 
-//							FileUtils.readFileToString(FileUtils
-//							.getFile(AttributeConsensusRank.OUTPUT_PATH,
-//									CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
-					generalRemove.setInputFormat(copyInsts);
+					String remIxes = PCA_CONCENSUS_REMOVE_FILTER;
+					// FileUtils.readFileToString(FileUtils
+					// .getFile(AttributeConsensusRank.OUTPUT_PATH,
+					// CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
+					generalRemove.setInputFormat(joinedInsts);
 					generalRemove.setAttributeIndices(remIxes);
-					int numInstsBefore = copyInsts.numAttributes();
-					copyInsts = Filter.useFilter(copyInsts, generalRemove);
-					if(numInstsBefore == copyInsts.numAttributes()){
-						for(String attrIxStr: commaSplit.split(remIxes)){
-							copyInsts.deleteAttributeAt(Integer.parseInt(attrIxStr)-1);
+					int numInstsBefore = joinedInsts.numAttributes();
+					joinedInsts = Filter.useFilter(joinedInsts, generalRemove);
+					if (numInstsBefore == joinedInsts.numAttributes()) {
+						for (String attrIxStr : commaSplit.split(remIxes)) {
+							joinedInsts.deleteAttributeAt(Integer
+									.parseInt(attrIxStr) - 1);
 						}
 					}
 				}
 
-				copyInsts.setRelationName(joinedInsts.relationName());
+				joinedInsts.setRelationName(userid);
 
-				printExec.submit(new ArffSaverCallable(copyInsts, FilenameUtils
-						.concat(OUTPUT_PATH, Config.LABELS_MULTICLASS_NAME),
-						!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
+				int placeIdAttrIx = -1;
+				if (Config.LOAD_USE_PLACEID) {
+					placeIdAttrIx = searchForAttr(joinedInsts, placeIdAttr);
+				}
+
+				printEcs.submit(new ArffSaverCallable(joinedInsts,
+						FilenameUtils.concat(OUTPUT_PATH,
+								Config.LABELS_MULTICLASS_NAME),
+						!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER, false,
+						placeIdAttrIx));
 
 				++printingJobs;
 
@@ -1343,16 +1657,6 @@ public class LoadCountsAsAttributes implements
 							existingNEgative += numForUser;
 						}
 					}
-					if (existingNEgative == 0 // || OR throws away positive
-												// samples, wrong??
-							&& existingPositive == 0) {
-						// not a usefule user for this positive class
-						System.out
-								.println(userid + " is not useful for classes "
-										+ positiveClass);
-						continue;
-					}
-
 					FileUtils.writeStringToFile(
 							FileUtils.getFile(
 									FilenameUtils.concat(OUTPUT_PATH, "c"
@@ -1361,8 +1665,20 @@ public class LoadCountsAsAttributes implements
 									+ existingPositive + " - Negative: "
 									+ existingNEgative);
 
-					copyInsts = joinedInsts;
-					if (Config.LOAD_FEATSELECTED_ONLY && Config.LOAD_USER_SPECIFIC_FEATURE_FILTER) {
+					if (existingNEgative == 0 // || OR throws away positive
+							// samples, wrong??
+							&& existingPositive == 0) {
+						// if(existingPositive == 0){
+						// not a usefule user for this positive class
+						System.out
+								.println(userid + " is not useful for classes "
+										+ positiveClass);
+						continue;
+					}
+
+					Instances copyInsts = new Instances(joinedInsts);
+					if (Config.LOAD_FEATSELECTED_ONLY
+							&& Config.LOAD_USER_SPECIFIC_FEATURE_FILTER) {
 
 						File filterFile = FileUtils
 								.getFile(
@@ -1398,9 +1714,7 @@ public class LoadCountsAsAttributes implements
 					add.setAttributeName("binary-label");
 					add.setNominalLabels(Config.LABELS_BINARY[0] + ","
 							+ Config.LABELS_BINARY[1]);
-					add.setInputFormat(joinedInsts);
-
-					copyInsts = new Instances(joinedInsts);
+					add.setInputFormat(copyInsts);
 
 					copyInsts = Filter.useFilter(copyInsts, add);
 
@@ -1427,7 +1741,7 @@ public class LoadCountsAsAttributes implements
 					try {
 						@SuppressWarnings("rawtypes")
 						Enumeration instEnum = copyInsts.enumerateInstances();
-
+						double idVal = 0.0;
 						while (instEnum.hasMoreElements()) {
 							Instance copyInst = (Instance) instEnum
 									.nextElement();
@@ -1437,7 +1751,8 @@ public class LoadCountsAsAttributes implements
 
 							// long idVal = Math.round(copyInst.value(0));
 							// trueLableWr.append(Long.toString(idVal))
-							double idVal = copyInst.value(0);
+							// double idVal = copyInst.value(0);
+							++idVal;
 							trueLableWr.append(Double.toString(idVal))
 									.append("=").append(cls).append('\n');
 
@@ -1473,16 +1788,21 @@ public class LoadCountsAsAttributes implements
 					copyInsts = Filter.useFilter(copyInsts, rem);
 
 					copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
-					// Will never happen, and we want to fix the ID
-					// copyInsts.deleteWithMissingClass();
-					// }
 
-					copyInsts.setRelationName(joinedInsts.relationName());
+					if (!Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
+						copyInsts.deleteWithMissingClass();
+					}
 
-					printExec.submit(new ArffSaverCallable(copyInsts,
+					copyInsts.setRelationName(userid);
+
+					int copyPlaceIdAttrIx = placeIdAttrIx;
+					// searchForAttr(copyInsts,placeIdAttr);
+
+					printEcs.submit(new ArffSaverCallable(copyInsts,
 							FilenameUtils.concat(OUTPUT_PATH, "c"
 									+ positiveClass),
-							!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER));
+							!Config.LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER, false,
+							copyPlaceIdAttrIx));
 					++printingJobs;
 				}
 
@@ -1494,6 +1814,22 @@ public class LoadCountsAsAttributes implements
 				// printExec.submit(arffSaveCall);
 			}
 			return printingJobs;
+		}
+
+		private int searchForAttr(Instances joinedInsts, Attribute attr) {
+			if (attr == null) {
+				return -1;
+			}
+			int result = 0;
+			Enumeration attrEnum = joinedInsts.enumerateAttributes();
+			while (attrEnum.hasMoreElements()) {
+				if (attr.equals((Attribute) attrEnum.nextElement())) {
+					return result;
+				} else {
+					++result;
+				}
+			}
+			return -1;
 		}
 
 	}

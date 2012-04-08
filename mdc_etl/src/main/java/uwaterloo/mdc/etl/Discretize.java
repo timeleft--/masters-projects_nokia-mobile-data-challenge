@@ -113,8 +113,8 @@ public class Discretize {
 	};
 
 	public enum DaysOfWeek {
-		// Locale specific
-		M, TU, W, TH, F, SA, SU;
+		// Locale specific but Sunday constant value is 1
+		SU, M, TU, W, TH, F, SA;
 	};
 
 	public enum HourOfDay {
@@ -231,7 +231,7 @@ public class Discretize {
 			timeZonePlusMinus = '-';
 		}
 		// Offset in hours (from seconds)
-		int hrs = timeZoneOffset / 3600;
+		int hrs = Math.abs(timeZoneOffset / 3600);
 		
 		TimeZone timeZoneOfRecord = TimeZone.getTimeZone("GMT" + timeZonePlusMinus
 				+ hrs);

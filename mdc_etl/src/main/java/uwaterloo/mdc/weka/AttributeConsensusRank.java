@@ -40,20 +40,20 @@ public class AttributeConsensusRank implements
 	private static final String REDUCED_HEADER_END = "@attribute label ";
 	private static final String RANKED_ATTRS_PFX = "Ranked attributes:";
 	private static final String APPLICATIONS = "APPS";
-	public static final String INPUT_PATH = "C:\\mdc-datasets\\weka\\validation_svm-featsel_2days\\";
+	public static final String INPUT_PATH = "C:\\mdc-datasets\\weka\\validation_tree-vs-forest\\";
 	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\filters\\";
 	private static final String STATNAME_POSTFIX_ATTRS = "_attrs";
 	private static final String STATNAME_POSTFIX_CATEGORIES = "_categories";
 //	private static final String APPDICT_PROPS_PATH = "C:\\mdc-datasets\\app-uid_name.properties";
 	// private static final String STRUCT_DIR_PATH =
 	// "/Users/yia/Dropbox/nokia-mdc/";
-	private static final String STRUCT_FILE_PREFIX = "045"; // "struct";
-															// //_q-spread";
+//	private static final String STRUCT_FILE_PREFIX = "045"; // "struct";
+//															// //_q-spread";
 
 	private static final Pattern SPACE_SPLIT = Pattern.compile("\\s+");
 	static FileFilter dirFilter = new FileFilter() {
 		public boolean accept(File f) {
-			return f.isDirectory();
+			return f.isDirectory() && !f.getName().endsWith("PrincipalComponents");
 		}
 	};
 	private static ArrayList<String> allAttributes;
@@ -67,7 +67,7 @@ public class AttributeConsensusRank implements
 			.synchronizedMap(new HashMap<String, HashMap<String, Integer>>());
 	private static final int NUM_ATTRS_TO_RETAIN = 100;
 	protected static final String FEAT_SELECTION_FNAME_SUFFIX = "feat-selection.txt";
-	private static final String STRUCT_PATH = INPUT_PATH; //"C:\\mdc-datasets\\weka\\segmented_user";
+	private static final String STRUCT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_97\\ALL";
 	// private static final Map<String, String> attrIxMap =
 	// Collections.synchronizedMap(new HashMap<String, String>());
 	private final HashMap<String, HashMap<String, SummaryStatistics>> statsMapArr;
@@ -273,11 +273,10 @@ public class AttributeConsensusRank implements
 
 		allAttributes = new ArrayList<String>();
 		int ix = 0;
-		File[] structFiles = new File[2];
-		structFiles[1] = FileUtils.getFile(STRUCT_PATH, STRUCT_FILE_PREFIX
-				+ ".arff");
-		structFiles[0] = FileUtils.getFile(STRUCT_PATH, STRUCT_FILE_PREFIX
-				+ ".app");
+		File[] structFiles = new File[1];
+		structFiles[0] = FileUtils.getFile(STRUCT_PATH, "001.arff");
+//		structFiles[0] = FileUtils.getFile(STRUCT_PATH, STRUCT_FILE_PREFIX
+//				+ ".app");
 		// FileUtils.getFile(BASE_PATH).listFiles(
 		// new FilenameFilter() {
 		//

@@ -8,9 +8,9 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS = 4;
+	public static final int NUM_THREADS =1;
 	public static final int NUM_USERS_TO_PROCESS = 80;
-	
+	public static final int VALIDATION_SAMPLE_USERS = 20;
 	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
 	public static final int VALIDATION_FOLD_WIDTH = Config.NUM_USERS_TO_PROCESS / Config.VALIDATION_FOLDS; //8;
 
@@ -44,13 +44,16 @@ public class Config {
 	public static final long WLAN_DELTAT_MIN = 60;
 	public static final int WLAN_DELTAT_MAX = 900;
 
+	public static final long TIME_SECONDS_IN_10MINS = 600;
 	public static final long TIME_SECONDS_IN_HOUR = 60 * 60;
 	public static final int TIME_SECONDS_IN_HOUR_STRLEN = Long.toString(
 			Config.TIME_SECONDS_IN_HOUR).length();
 	public static final long TIME_SECONDS_IN_DAY = 60 * 60 * 24;
+	public static final long TIME_SECONDS_IN_WEEK =TIME_SECONDS_IN_DAY * 7;
+	public static final long TIME_10MINS_IN_WEEK = Math.round(Math.ceil(TIME_SECONDS_IN_WEEK / TIME_SECONDS_IN_10MINS));
 	public static final int TIME_SECONDS_IN_DAY_STRLEN = Long.toString(
 			Config.TIME_SECONDS_IN_DAY).length();
-	public static final long TIME_SECONDS_IN_10MINS = 600;
+	
 
 	public static final String RESULT_KEY_READING_NOVISIT_FREQ = "reading-within-visit-freq";
 	public static final String RESULT_KEY_VISIT_NOREADING_FREQ = "visit-with-reading-freq";
@@ -101,11 +104,11 @@ public class Config {
 //		"+4+-5-6-7-8-9-10-","+5+-4-6-7-8-9-10-","+6+-4-5-7-8-9-10-",
 //		"+7+-4-5-6-8-9-10-","+8+-4-5-6-7-9-10-","+9+-4-5-6-7-8-10-",
 //		"+10+-4-5-6-7-8-9-",
-//		// Those are wrong!
-////		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
-////		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
-////		"+10+-1-2-3-4-5-6-7-8-9-",
-//		
+////		// Those are wrong!
+//////		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
+//////		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
+//////		"+10+-1-2-3-4-5-6-7-8-9-",
+//////		
 		};
 	public static final String[] LABELS_BINARY = new String[] { "+1","-1"};
 	public static final int LABLES_BINARY_POSITIVE_IX = 0;
@@ -138,7 +141,7 @@ public class Config {
 	public static final boolean SPREAD_NOMINAL_FEATURES_AS_BINARY = true;
 	public static final boolean SPREAD_NOMINAL_FEATURES_USE_MISSING = false;
 	public enum NORMALIZE_BY_ENUM {NONE, MAXIMUM, SUM};
-	public static final NORMALIZE_BY_ENUM LOAD_NORMALIZE_BY = NORMALIZE_BY_ENUM.NONE;
+	public static final NORMALIZE_BY_ENUM LOAD_NORMALIZE_BY = NORMALIZE_BY_ENUM.MAXIMUM;
 	public static final boolean LOAD_MISSING_CLASS_AS_OTHER = true;
 	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = false;
 	public static final boolean LOAD_REPLACE_MISSING_VALUES = true;
@@ -147,6 +150,15 @@ public class Config {
 	public static final boolean LOAD_USER_SPECIFIC_FEATURE_FILTER = false;
 	public static final boolean LOAD_DROP_VERYFREQUENT_VALS = true; //This is for apps and sie only
 	public static final boolean LOAD_DROP_VERYRARE_VALS = true; // This is for apps onl
+	public static final boolean LOAD_FEAT_SELECTED_APPS_ONLY = true;
+	public static final boolean LOADCOUNT_APP_USAGE = true;
+	public static final boolean LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER = true;
+	public static final int LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT = 400;
+	public static final boolean LOAD_NORMALIZE_VISIT_LENGTH = false;
+	public static final boolean LOAD_USE_PLACEID = false;
+	public static final boolean LOAD_WEIGHT_LABELS = false;
+	public static final boolean LOAD_COUNT_WEIGHT = false;
+	public static final boolean LOAD_WEIGHT_USERS = false;
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;
@@ -154,6 +166,7 @@ public class Config {
 	public static final String SVMLIGHT_INPUTPATH = "C:\\mdc-datasets\\svmlight\\input";
 	public static final String SVMLIGHT_OUTPUTPATH = "C:\\mdc-datasets\\svmlight\\output";
 //	public static final boolean SVMLIGHT_TRAINED_CLASSIEFER = false;
+	public static final boolean CLASSIFY_OUT_FOR_SVMLIGHT = true;
 
 // These should be values per classifier type
 //	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
@@ -174,7 +187,7 @@ public class Config {
 
 	public static final boolean DROP_HIGHEST_QUANTILE = false;
 
-	public static final boolean MICROLOC_SPLITS_DOCS = true;
+	public static final boolean MICROLOC_SPLITS_DOCS = false;
 
 	public static final int CALCCUTPOINTS_NUM_SAMPLE_USERS = Config.NUM_USERS_TO_PROCESS / 2;
 	
@@ -195,8 +208,16 @@ public class Config {
 	
 	public static final boolean CLUSTER_IN3D_IN_TRANFORMED_SPACE = true;
 	public static final boolean CLUSTER_IN3D_PER_USER = true;
+
+
+	public static final boolean CLASSIFYFEATSEL_WRITE_TRANSFORMED = false;
+	public static final boolean CLASSIFY_PENALIZE_ZERO = false;
+	public static final boolean CLASSIFY_SEPARATE_PREVALENCE = true;
+	public static final boolean CLASSIFY_USING_SAMPLE_FIXED_NUMBER_FROM_USER =true;
 	
-		
+	
+	
+	
 	// This class is thread-safe: multiple threads can share a single Properties
 	// object without the need for external synchronization.
 	public static Properties placeLabels;

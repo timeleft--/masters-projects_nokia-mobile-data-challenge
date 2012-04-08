@@ -192,7 +192,7 @@ public class ClusterIn3DSpace extends JFrame {
 				// }
 				int label = (int) Math.round(trainingInst.classValue());
 				// long cluster = clusterer.clusterInstance(noClassInst);
-				wr.append(Double.toString(trainingInst.value(0))).append('\t')
+				wr.append(Double.toString(instIx[label])).append('\t')
 						.append(Double.toString(trainingInst.value(1)))
 						.append('\t')
 						.append(Double.toString(trainingInst.value(2)))

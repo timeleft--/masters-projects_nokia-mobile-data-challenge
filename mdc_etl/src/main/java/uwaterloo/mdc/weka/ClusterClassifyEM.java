@@ -177,11 +177,11 @@ public class ClusterClassifyEM implements Callable<Void> {
 							Integer actualLabel = (int) Math.round(inst
 									.value(inst.numAttributes() - 1));
 							Integer initialLabel = uesrPrediction.instInitialLabelMap
-									.get(inst.value(0));
+									.get(inst.value(0));//FIXME
 							Integer finalLabel = uesrPrediction.instFinalLabelMap
-									.get(inst.value(0));
+									.get(inst.value(0));//FIXME
 							Integer clusteredLabel = uesrPrediction.instClusteredLabelMap
-									.get(inst.value(0));
+									.get(inst.value(0));//FIXME
 							if (finalLabel.equals(actualLabel)) {
 								++correctFinal;
 								if (!initialLabel.equals(finalLabel)) {
@@ -535,6 +535,7 @@ public class ClusterClassifyEM implements Callable<Void> {
 			Instance testInst = testSet.instance(i);
 
 			if (validate) {
+				//FIXME
 				instTrueLabelMap.put(testInst.value(0), (int) Math
 						.round(testInst.value(testInst.numAttributes() - 1)));
 			}
@@ -594,13 +595,13 @@ public class ClusterClassifyEM implements Callable<Void> {
 			predictiedLabelDistrib.addValue(predictedLabel);
 			Instance noClassInst = noClassSet.instance(i);
 			int c = clusterer.clusterInstance(noClassInst);
-			instClusterMap.put(noClassInst.value(0), c);
+			instClusterMap.put(noClassInst.value(0), c);//FIXME
 			++clusterSizes[c];
 
 			clusterLabelPriors[c].addValue(predictedLabel);
-			instPredictionMap.put(noClassInst.value(0), // ID
+			instPredictionMap.put(noClassInst.value(0), // ID//FIXME
 					labelDistribution);
-			instInitialLabelMap.put(noClassInst.value(0), // ID
+			instInitialLabelMap.put(noClassInst.value(0), // ID//FIXME
 					// inst.attribute(inst.numAttributes() - 1).value(
 					// predictedLabel));
 					predictedLabel);

@@ -43,6 +43,9 @@ public class MathUtil {
 	public static void normalizeProbabilities(double[] modifiedLabelDistrib) {
 		double sum = 0;
 		for (int i = 0; i < modifiedLabelDistrib.length; ++i) {
+			if (Double.isNaN(modifiedLabelDistrib[i])) {
+				continue;
+			}
 			sum += modifiedLabelDistrib[i];
 		}
 		for (int i = 0; i < modifiedLabelDistrib.length; ++i) {
