@@ -35,7 +35,6 @@ import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.util.KeyValuePair;
-import uwaterloo.mdc.etl.util.MathUtil;
 import uwaterloo.util.NotifyStream;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
@@ -44,19 +43,18 @@ import weka.attributeSelection.CfsSubsetEval;
 import weka.attributeSelection.ConsistencySubsetEval;
 import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
+import weka.attributeSelection.InfoGainAttributeEval;
 import weka.attributeSelection.PrincipalComponents;
 import weka.attributeSelection.Ranker;
 import weka.attributeSelection.ReliefFAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
 import weka.attributeSelection.WrapperSubsetEval;
 import weka.classifiers.Classifier;
-import weka.classifiers.bayes.NaiveBayes;
+import weka.classifiers.SingleClassifierEnhancer;
+import weka.classifiers.bayes.DMNBtext;
 import weka.classifiers.functions.LibSVM;
-import weka.classifiers.functions.LinearRegression;
-import weka.classifiers.lazy.KStar;
 import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.meta.ClassificationViaClustering;
-import weka.classifiers.trees.DecisionStump;
 import weka.classifiers.trees.J48;
 import weka.classifiers.trees.RandomForest;
 import weka.clusterers.SimpleKMeans;
@@ -74,7 +72,7 @@ import weka.filters.unsupervised.attribute.Remove;
 
 public class ClassifyAndFeatSelect implements Callable<Void> {
 	// private static boolean validate = true;
-	private double superiorityRatio = 1.0;
+	private double superiorityRatio = 1.25;
 
 	// Commented out are Dimensionality reductions that failed
 	// Class<? extends ASEvaluation>[] cannot create!
@@ -84,13 +82,15 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// ChiSquaredAttributeEval.class,
 			// causes nonunique name exception LatentSemanticAnalysis.class,
 			// FilteredAttributeEval.class, FilteredSubsetEval.class,
-			// InfoGainAttributeEval.class,
+			 InfoGainAttributeEval.class,
 			// SVMAttributeEval.class,
 			// SymmetricalUncertAttributeEval.class,
-			GainRatioAttributeEval.class, ReliefFAttributeEval.class,
-			CfsSubsetEval.class, PrincipalComponents.class,
+//			GainRatioAttributeEval.class, 
+			ReliefFAttributeEval.class,
+			CfsSubsetEval.class, 
+			PrincipalComponents.class,
 			ConsistencySubsetEval.class,
-
+//
 			WrapperSubsetEval.class,
 
 	};
@@ -142,7 +142,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			if (baseClassifier instanceof LibSVM) {
 				// baseClassifier.setDebug(false);
 				((LibSVM) baseClassifier).setKernelType(new SelectedTag(
-						LibSVM.KERNELTYPE_RBF, LibSVM.TAGS_KERNELTYPE));
+						LibSVM.KERNELTYPE_LINEAR, LibSVM.TAGS_KERNELTYPE));
 				// WARNING: using -h 0 may be faster
 				((LibSVM) baseClassifier).setShrinking(false);
 			} else if (baseClassifier instanceof J48) {
@@ -776,17 +776,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					positiveClass, accuracyMap);
 		}
 
-		Frequency nearTies;
-		SummaryStatistics tieSize;
-		Frequency prevLabelCorrect;
-		Frequency randLabelCorrect;
-		LinkedList<Instance> withinDayInsts;
 		static final int maxVisitsInADay = 1;// (6 * 24); // 10;// ;
 		DistanceFunction distanceMeasure;
-		private double[][] instDistribs;
 
 		private double getClassFromDistrib(double[] vClassDist, Instance inst,
-				double trueClass) {
+				LinkedList<Instance> pWithinDayInsts, double trueClass,
+				Frequency pNearTies, SummaryStatistics pTieSize,
+				Frequency pPrevLabelCorrect, Frequency pRandLabelCorrect) {
 			double vClassMaxProb = 1E-9;// vClassDist[0];
 			LinkedList<Integer> result = new LinkedList<Integer>();
 			double res = Double.NaN;
@@ -808,7 +804,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			if (result.size() == 1) {
 				res = result.getFirst().doubleValue();
 			} else if (result.size() > 1) {
-				tieSize.addValue(result.size());
+				pTieSize.addValue(result.size());
 				// Integer prevLabel = null;
 				// int prevAttrsIx = inst.numAttributes()
 				// - Config.LABELS_SINGLES.length - 1;
@@ -818,7 +814,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// break;
 				// }
 				// }
-				Iterator<Instance> instsIter = withinDayInsts.iterator();
+				Iterator<Instance> instsIter = pWithinDayInsts.iterator();
 				int numStepsBack = 0;
 				int numStepsBackAtSelection = -1;
 
@@ -837,7 +833,6 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					++numStepsBack;
 				}
 
-				// if (prevLabel != null
 				// // attempt anything when the prev is just 0
 				// && prevLabel != 0) {
 				// // People tend to stay at home or at work
@@ -848,7 +843,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 							.classValue());
 					if (result.contains(prevLabel)
 					// Use the past only if it is better
-							&& (closestInst.weight() > vClassMaxProb)) {
+							&& (closestInst.weight() / vClassMaxProb > superiorityRatio)) {
 						// Use the nearest neighbour if it is already a probable
 						System.out.println("Using the "
 								+ (numStepsBackAtSelection + 1)
@@ -856,12 +851,13 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								+ " to break near tie between " + result
 								+ " from distrib "
 								+ Arrays.toString(vClassDist));
-						nearTies.addValue('P');
+						pNearTies.addValue('P');
 
 						res = prevLabel.doubleValue();
 
 						// if(validate){
-						prevLabelCorrect.addValue(res == trueClass);
+						if (pPrevLabelCorrect != null)
+							pPrevLabelCorrect.addValue(res == trueClass);
 						// }
 					}
 				}
@@ -870,21 +866,22 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					System.out.println("Randomly breaking a near tie between "
 							+ result + " from distrib "
 							+ Arrays.toString(vClassDist));
-					nearTies.addValue('R');
+					pNearTies.addValue('R');
 
 					res = result.get(rand.nextInt(result.size())).doubleValue();
 
 					// if(validate){
-					randLabelCorrect.addValue(res == trueClass);
+					if (pRandLabelCorrect != null)
+						pRandLabelCorrect.addValue(res == trueClass);
 					// }
 				}
 			}
 
 			inst.setClassValue(res);
 			inst.setWeight(vClassMaxProb);
-			withinDayInsts.addFirst(inst);
-			while (withinDayInsts.size() > maxVisitsInADay) {
-				withinDayInsts.removeLast();
+			pWithinDayInsts.addFirst(inst);
+			while (pWithinDayInsts.size() > maxVisitsInADay) {
+				pWithinDayInsts.removeLast();
 			}
 			return res;
 		}
@@ -906,14 +903,18 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// }
 			String fileNamePPfxBase = filenamePfx;
 			int levels = (Config.CLASSIFY_SEPARATE_PREVALENCE ? 4 : 1);
-			instDistribs = new double[trainingSet.numInstances()][Config.LABELS_SINGLES.length];
+			double[][] instDistribs = new double[trainingSet.numInstances()][Config.LABELS_SINGLES.length];
+			Integer[] honoredClassifier = new Integer[trainingSet
+					.numInstances()];
 			for (int l = 0; l < levels; ++l) {
-				AttributeSelectedClassifier featSelector = new AttributeSelectedClassifier();
+
 				Classifier classifier;
 				ASEvaluation evaluation;
 				if ((Config.CLASSIFY_SEPARATE_PREVALENCE) && (l < 2)) {
-					evaluation = new PrincipalComponents();
-					classifier = new J48(); // DecisionStump();
+					// evaluation = new PrincipalComponents();
+					classifier = baseClassifier;
+					evaluation = eval;
+					// classifier = new DecisionStump();
 					// Cannot handle a binary class
 					// classifier = new LinearRegression();
 					// ((LinearRegression)classifier).setRidge(newRidge)
@@ -933,9 +934,20 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					classifier = baseClassifier;
 					evaluation = eval;
 				}
-				featSelector.setClassifier(classifier);
-				featSelector.setEvaluator(evaluation);
-				featSelector.setSearch(search);
+
+				Classifier featSelector;
+
+				if (Config.CLASSIFY_FEAT_SELECTED_CLASSIFIER) {
+					featSelector = new AttributeSelectedClassifier();
+					((SingleClassifierEnhancer) featSelector)
+							.setClassifier(classifier);
+					((AttributeSelectedClassifier) featSelector)
+							.setEvaluator(evaluation);
+					((AttributeSelectedClassifier) featSelector)
+							.setSearch(search);
+				} else {
+					featSelector = classifier;
+				}
 
 				if (Config.CLASSIFY_SEPARATE_PREVALENCE) {
 
@@ -986,12 +998,23 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// }
 				// validationSet = copyValidation;
 				// }
+				Frequency nearTiesLeaf = new Frequency();
+				SummaryStatistics tieSizeLeaf = new SummaryStatistics();
+				Frequency prevLabelCorrectLeaf = new Frequency();
+				Frequency randLabelCorrectLeaf = new Frequency();
+				LinkedList<Instance> withinDayInstsLeaf = new LinkedList<Instance>();
 
-				nearTies = new Frequency();
-				tieSize = new SummaryStatistics();
-				prevLabelCorrect = new Frequency();
-				randLabelCorrect = new Frequency();
-				withinDayInsts = new LinkedList<Instance>();
+				Frequency nearTiesClassifier = new Frequency();
+				SummaryStatistics tieSizeClassifier = new SummaryStatistics();
+				Frequency prevLabelCorrectClassifier = new Frequency();
+				Frequency randLabelCorrectClassifier = new Frequency();
+				LinkedList<Instance> withinDayInstsClassifier = new LinkedList<Instance>();
+
+				// nearTies = new Frequency();
+				// tieSize = new SummaryStatistics();
+				// prevLabelCorrect = new Frequency();
+				// randLabelCorrect = new Frequency();
+				// withinDayInsts = new LinkedList<Instance>();
 				distanceMeasure = new EuclideanDistance(validationSet);
 				// FIXME: This function wasn't modified for handling more than
 				// LOO
@@ -1112,21 +1135,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								double[] vClassDist = featSelector
 										.distributionForInstance(classMissing);
 								if (Config.CLASSIFY_SEPARATE_PREVALENCE) {
+
 									if (l == 0) {
-										instDistribs[i][0] = vClassDist[Config.LABLES_BINARY_POSITIVE_IX];
+										instDistribs[i][0] = vClassDist[Config.LABLES_BINARY_POSITIVE_IX] + 1E-6;
 										for (int c = 1; c < instDistribs[i].length; ++c) {
-											instDistribs[i][c] = vClassDist[Config.LABLES_BINARY_NEGATIVE_IX];
+											instDistribs[i][c] = vClassDist[Config.LABLES_BINARY_NEGATIVE_IX] + 1E-6;
 										}
 									} else if (l == 1) {
-										// Condition on the positive
-										// classification
-										for (int c = 1; c < 4 /*
-															 * instDistribs[i].
-															 * length
-															 */; ++c) {
-											int p = (c > 0 && c < 4 ? Config.LABLES_BINARY_POSITIVE_IX
+										for (int c = 0; c < instDistribs[i].length; ++c) {
+											int p = (c == 1 || c == 3 ? Config.LABLES_BINARY_POSITIVE_IX
 													: Config.LABLES_BINARY_NEGATIVE_IX);
-
 											double numerator = vClassDist[p]
 													* instDistribs[i][c];
 											double denim = vClassDist[p]
@@ -1138,39 +1156,120 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 												// bith are already zeros
 											}
 										}
-									} else if (l == 2 || l == 3) {
 
-										int start = 0, end = 0;
+										// MathUtil.normalizeProbabilities(instDistribs[i]);
 
-										if (l == 2) {
-											start = 1;
-											end = 4;
+										double maxProb = instDistribs[i][0];
+										LinkedList<Integer> honorList = new LinkedList<Integer>();
+										for (int c : Arrays.asList(0, 1, /*2,3,*/4)) {// 0;
+																				// c
+																				// <
+																				// instDistribs[i].length;
+																				// ++c)
+																				// {
+											if (instDistribs[i][c] >= maxProb) {
+												// double probDiv =
+												// instDistribs[i][c]
+												// / maxProb;
+												// if (probDiv >= 1 /
+												// superiorityRatio)
+												// if (probDiv >
+												// superiorityRatio) {
+												if (instDistribs[i][c] > maxProb)
+													honorList.clear();
+
+												honorList.add(c);
+												// if (probDiv > 1) {
+												maxProb = instDistribs[i][c];
+											}
+										}
+										honoredClassifier[i] = honorList
+												.get(rand.nextInt(honorList
+														.size()));
+										// honoredClassifier[i] = (int)
+										// getClassFromDistrib(
+										// instDistribs[i], classMissing,
+										// withinDayInstsClassifier,
+										// vInst.classValue(),
+										// nearTiesClassifier,
+										// tieSizeClassifier, null, null);
+										if (honoredClassifier[i] == 2 || honoredClassifier[i] > 3) {
+											honoredClassifier[i] = 3;
+										} else if (honoredClassifier[i] > 0) {
+											honoredClassifier[i] = 2;
 										} else {
-											start = 4;
-											end = 11;
+											honoredClassifier[i] = -1;
 										}
-										for (int c = start; c < end; ++c) {
-											double numerator = vClassDist[c]
-													* instDistribs[i][c];
-											double denim = vClassDist[c]
-													+ instDistribs[i][c];
-											if (denim != 0) {
-												instDistribs[i][c] = numerator
-														/ denim;
-											} // else they are both already
-												// zeros
+
+										// gather stats
+										tieSizeClassifier.addValue(honorList
+												.size());
+										if ((honoredClassifier[i] == 3 && (vInst
+												.classValue() > 3|| vInst
+												.classValue() == 2)) ) {
+											prevLabelCorrectClassifier
+													.addValue(true);
+										} else if ((honoredClassifier[i] == 2 && vInst
+												.classValue() > 0)) {
+											prevLabelCorrectClassifier
+													.addValue(true);
+										} else if ((honoredClassifier[i] == -1 && vInst
+												.classValue() == 0)) {
+											prevLabelCorrectClassifier
+													.addValue(true);
+										} else {
+											prevLabelCorrectClassifier
+													.addValue(false);
 										}
+
+									} else if (l == honoredClassifier[i]) {
+										instDistribs[i] = vClassDist;
 									}
 
 									if (l == 3) {
-										MathUtil.normalizeProbabilities(instDistribs[i]);
-										vClassDist = instDistribs[i];
-//										// only till 4.. that's cheating!!
-//										for (int c = 0; c < 4; ++c) {
-//											vClassDist[c] = instDistribs[i][c];
-//										}
-//										MathUtil.normalizeProbabilities(vClassDist);
+										if (honoredClassifier[i] == null
+												|| honoredClassifier[i] == -1) {
+											vClassDist = new double[vClassDist.length];
+											vClassDist[0] = 1;
+										} else {
+											vClassDist = instDistribs[i];
+										}
 									}
+									// } else if (l == 2 || l == 3) {
+									//
+									// List<Integer> classes;
+									// if (l == 2) {
+									// classes = Arrays.asList(1, 2, 3);
+									// } else {
+									// classes = Arrays.asList(4, 5, 6, 7,
+									// 8, 9, 10);
+									// }
+									// for (int c : classes) {
+									// double numerator = vClassDist[c]
+									// // The join probability should take
+									// // care of the "scaling"
+									// // * classes.size() / 10) // labels
+									// * instDistribs[i][c];
+									// double denim = vClassDist[c]
+									// + instDistribs[i][c];
+									// if (denim != 0) {
+									// instDistribs[i][c] = numerator
+									// / denim;
+									// } // else they are both already
+									// // zeros
+									// }
+									// }
+									//
+									// if (l == 3) {
+									// MathUtil.normalizeProbabilities(instDistribs[i]);
+									// vClassDist = instDistribs[i];
+									// // // only till 4.. that's cheating!!
+									// // for (int c = 0; c < 4; ++c) {
+									// // vClassDist[c] = instDistribs[i][c];
+									// // }
+									// //
+									// MathUtil.normalizeProbabilities(vClassDist);
+									// }
 								}
 								// FIXMENOT: use the actual instance ID
 								String instId = Double.toString((i * 1.0 + 1));
@@ -1185,7 +1284,10 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 								// double vClassMaxProb =
 								// Double.NEGATIVE_INFINITY;
 								double vClass = getClassFromDistrib(vClassDist,
-										classMissing, vInst.classValue());
+										classMissing, withinDayInstsLeaf,
+										vInst.classValue(), nearTiesLeaf,
+										tieSizeLeaf, prevLabelCorrectLeaf,
+										randLabelCorrectLeaf);
 								for (int j = 0; j < vClassDist.length; ++j) {
 									featSelectWr.append("\t" + vClassDist[j]);
 									// if (vClassDist[j] > vClassMaxProb) {
@@ -1448,43 +1550,66 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 									+ "_feat-selection.txt"), featSelector
 							.toString());
 				}
-				FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
-						baseClassifier.getClass().getName(), eval.getClass() // attrSelectEvalClazz
-								.getName(), filenamePfx + "_" + positiveClass
-								+ "_tie-size.txt"), tieSize.toString());
-				Writer tieWr = Channels.newWriter(
-						FileUtils.openOutputStream(
+				FileUtils
+						.writeStringToFile(
 								FileUtils.getFile(outputPath, baseClassifier
 										.getClass().getName(), eval.getClass() // attrSelectEvalClazz
 										.getName(), filenamePfx + "_"
-										+ positiveClass + "_near-ties.txt"))
+										+ positiveClass + "_tie-size_leaf.txt"),
+								tieSizeLeaf.toString());
+				Writer tieWr = Channels.newWriter(
+						FileUtils.openOutputStream(
+								FileUtils
+										.getFile(outputPath, baseClassifier
+												.getClass().getName(), eval
+												.getClass() // attrSelectEvalClazz
+												.getName(), filenamePfx + "_"
+												+ positiveClass
+												+ "_near-ties_leaf.txt"))
 								.getChannel(), Config.OUT_CHARSET);
 				try {
-					tieWr.append("Random\tPrevious\tTie-Count\tTotal-Count\tRand-Correct\tPrev-Correct\tRand-Wrong\tPrev-Wrong\n");
-					long totalTies = nearTies.getCount('R')
-							+ nearTies.getCount('P');
-					tieWr.append(Double.toString(nearTies.getPct('R')))
-							.append('\t')
-							.append(Double.toString(nearTies.getPct('P')))
-							.append('\t')
-							.append(Long.toString(totalTies))
-							.append('\t')
-							.append(Long.toString(validationSet.numInstances()))
-							.append('\t')
-							.append(Double.toString(randLabelCorrect
-									.getPct(Boolean.TRUE)))
-							.append('\t')
-							.append(Double.toString(prevLabelCorrect
-									.getPct(Boolean.TRUE)))
-							.append('\t')
-							.append(Double.toString(randLabelCorrect
-									.getPct(Boolean.FALSE)))
-							.append('\t')
-							.append(Double.toString(prevLabelCorrect
-									.getPct(Boolean.FALSE))).append('\n');
+					writeTies(tieWr, nearTiesLeaf,
+							validationSet.numInstances(), randLabelCorrectLeaf,
+							prevLabelCorrectLeaf);
 				} finally {
 					tieWr.flush();
 					tieWr.close();
+				}
+				if (l == 1) {
+					FileUtils.writeStringToFile(FileUtils.getFile(outputPath,
+							baseClassifier.getClass().getName(), eval
+									.getClass() // attrSelectEvalClazz
+									.getName(), filenamePfx + "_"
+									+ positiveClass
+									+ "_tie-size_Classifier.txt"),
+							tieSizeClassifier.toString());
+					tieWr = Channels
+							.newWriter(
+									FileUtils
+											.openOutputStream(
+													FileUtils
+															.getFile(
+																	outputPath,
+																	baseClassifier
+																			.getClass()
+																			.getName(),
+																	eval.getClass() // attrSelectEvalClazz
+																			.getName(),
+																	filenamePfx
+																			+ "_"
+																			+ positiveClass
+																			+ "_near-ties_Classifier.txt"))
+											.getChannel(), Config.OUT_CHARSET);
+					try {
+						writeTies(tieWr, nearTiesClassifier,
+								validationSet.numInstances(),
+								randLabelCorrectClassifier,
+								prevLabelCorrectClassifier);
+					} finally {
+						tieWr.flush();
+						tieWr.close();
+					}
+
 				}
 				// algo name
 				System.out.println(baseClassifierClazz.getSimpleName() + "/"
@@ -1531,10 +1656,36 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 			}
 		}
+
+		private void writeTies(Writer tieWr, Frequency nearTies,
+				long numInstances, Frequency randLabelCorrect,
+				Frequency prevLabelCorrect) throws IOException {
+			tieWr.append("Random\tPrevious\tTie-Count\tTotal-Count\tRand-Correct\tPrev-Correct\tRand-Wrong\tPrev-Wrong\n");
+			long totalTies = nearTies.getCount('R') + nearTies.getCount('P');
+			tieWr.append(Double.toString(nearTies.getPct('R')))
+					.append('\t')
+					.append(Double.toString(nearTies.getPct('P')))
+					.append('\t')
+					.append(Long.toString(totalTies))
+					.append('\t')
+					.append(Long.toString(numInstances))
+					.append('\t')
+					.append(Double.toString(randLabelCorrect
+							.getPct(Boolean.TRUE)))
+					.append('\t')
+					.append(Double.toString(prevLabelCorrect
+							.getPct(Boolean.TRUE)))
+					.append('\t')
+					.append(Double.toString(randLabelCorrect
+							.getPct(Boolean.FALSE)))
+					.append('\t')
+					.append(Double.toString(prevLabelCorrect
+							.getPct(Boolean.FALSE))).append('\n');
+		}
 	}
 
-	private static String outputPath = "C:\\mdc-datasets\\weka\\validation_sample-noweight_cascade-j48_condition";
-	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user_sample-noweight";
+	private static String outputPath = "C:\\mdc-datasets\\weka\\validation_full-compare-diff-feat-sel";
+	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user_full-noweights_split";
 	private static String trainingPath = "C:\\mdc-datasets\\weka\\segmented_user";
 	private static String testPath = "C:\\mdc-datasets\\weka\\segmented_user_test";
 
@@ -1742,6 +1893,58 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 
 			for (Class attrSelectEvalClazz : attrSelectorsForMain) {
 
+				
+//				 try {
+//				 // for (int n = 1; n <= 10; ++n) {
+//				 // // The king
+//				 app = new ClassifyAndFeatSelect(BayesNet.class, true,
+//				 false, true, attrSelectEvalClazz, false);
+//				 // new Class[] {
+//				 // GainRatioAttributeEval.class,
+//				 // // // LatentSemanticAnalysis.class,
+//				 // PrincipalComponents.class, }, false);
+//				 // app.n = n;
+//				 // app.call();
+//				 lastFuture = appExec.submit(app);
+//				 // }
+//				 } catch (Exception e) {
+//				 // catch block
+//				 e.printStackTrace();
+//				 }
+//				 try {
+//				 // for (int n = 1; n <= 10; ++n) {
+//				 // // The king
+//				 app = new ClassifyAndFeatSelect(RandomForest.class, true,
+//				 false, true, attrSelectEvalClazz, false);
+//				 // new Class[] {
+//				 // GainRatioAttributeEval.class,
+//				 // // // LatentSemanticAnalysis.class,
+//				 // PrincipalComponents.class, }, false);
+//				 // app.n = n;
+//				 // app.call();
+//				 lastFuture = appExec.submit(app);
+//				 // }
+//				 } catch (Exception e) {
+//				 // catch block
+//				 e.printStackTrace();
+//				 }
+//				 try {
+//				 // for (int n = 1; n <= 10; ++n) {
+//				 // // The king
+//				 app = new ClassifyAndFeatSelect(.class, true,
+//				 false, true, attrSelectEvalClazz, false);
+//				 // new Class[] {
+//				 // GainRatioAttributeEval.class,
+//				 // // // LatentSemanticAnalysis.class,
+//				 // PrincipalComponents.class, }, false);
+//				 // app.n = n;
+//				 // app.call();
+//				 lastFuture = appExec.submit(app);
+//				 // }
+//				 } catch (Exception e) {
+//				 // catch block
+//				 e.printStackTrace();
+//				 }
 				// try {
 				// // SVM
 				// app = new ClassifyAndFeatSelect(LibSVM.class, false, true,
@@ -1771,23 +1974,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// // catch block
 				// e.printStackTrace();
 				// }
-				try {
-					// for (int n = 1; n <= 10; ++n) {
-					// // The king
-					app = new ClassifyAndFeatSelect(RandomForest.class, true,
-							false, true, attrSelectEvalClazz, false);
-					// new Class[] {
-					// GainRatioAttributeEval.class,
-					// // // LatentSemanticAnalysis.class,
-					// PrincipalComponents.class, }, false);
-					// app.n = n;
-					// app.call();
-					lastFuture = appExec.submit(app);
-					// }
-				} catch (Exception e) {
-					// catch block
-					e.printStackTrace();
-				}
+
 				// try {
 				// // Boosting
 				// app = new ClassifyAndFeatSelect(AdaBoostM1.class, true,
@@ -1802,20 +1989,100 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				// // catch block
 				// e.printStackTrace();
 				// }
+				//
+				//
+				// try {
+				// // for (int n = 1; n <= 10; ++n) {
+				// app = new ClassifyAndFeatSelect(LogitBoost.class, true,
+				// false, true, attrSelectEvalClazz, false);
+				// // new Class[] {
+				// // GainRatioAttributeEval.class,
+				// // // // LatentSemanticAnalysis.class,
+				// // PrincipalComponents.class, }, false);
+				// // app.n = n;
+				// // app.call();
+				// lastFuture = appExec.submit(app);
+				// // }
+				// } catch (Exception e) {
+				// // catch block
+				// e.printStackTrace();
+				// }
+//				try {
+//					// Boosting
+//					app = new ClassifyAndFeatSelect(NaiveBayes.class, true,
+//							false, true, attrSelectEvalClazz,
+//							// new Class[] { GainRatioAttributeEval.class,
+//							// // LatentSemanticAnalysis.class,
+//							// PrincipalComponents.class, },
+//							false);
+//					lastFuture = appExec.submit(app);
+//					// app.call();
+//				} catch (Exception e) {
+//					// catch block
+//					e.printStackTrace();
+//				}
 
+//				try {
+//					// for (int n = 1; n <= 10; ++n) {
+//					app = new ClassifyAndFeatSelect(LibSVM.class, true, false,
+//							true, attrSelectEvalClazz, false);
+//					// new Class[] {
+//					// GainRatioAttributeEval.class,
+//					// // // LatentSemanticAnalysis.class,
+//					// PrincipalComponents.class, }, false);
+//					// app.n = n;
+//					// app.call();
+//					lastFuture = appExec.submit(app);
+//					// }
+//				} catch (Exception e) {
+//					// catch block
+//					e.printStackTrace();
+//				}
 				try {
-					// C4.5 decision tree
-					app = new ClassifyAndFeatSelect(J48.class, true, false,
-							true, attrSelectEvalClazz, false);
-					// new Class[] { GainRatioAttributeEval.class,
-					// // LatentSemanticAnalysis.class,
-					// PrincipalComponents.class, }, false);
+					// Good
+					app = new ClassifyAndFeatSelect(DMNBtext.class, true,
+							false, true, attrSelectEvalClazz,
+							// new Class[] { GainRatioAttributeEval.class,
+							// // LatentSemanticAnalysis.class,
+							// PrincipalComponents.class, },
+							false);
 					lastFuture = appExec.submit(app);
 					// app.call();
 				} catch (Exception e) {
 					// catch block
 					e.printStackTrace();
 				}
+//
+//				try {
+//					// for (int n = 1; n <= 10; ++n) {
+//					app = new ClassifyAndFeatSelect(OneR.class, true, false,
+//							true, attrSelectEvalClazz, false);
+//					// new Class[] {
+//					// GainRatioAttributeEval.class,
+//					// // // LatentSemanticAnalysis.class,
+//					// PrincipalComponents.class, }, false);
+//					// app.n = n;
+//					// app.call();
+//					lastFuture = appExec.submit(app);
+//					// }
+//				} catch (Exception e) {
+//					// catch block
+//					e.printStackTrace();
+//				}
+				
+				 try {
+				 // C4.5 decision tree
+				 app = new ClassifyAndFeatSelect(J48.class, true, false,
+				 true, attrSelectEvalClazz, false);
+				 // new Class[] { GainRatioAttributeEval.class,
+				 // // LatentSemanticAnalysis.class,
+				 // PrincipalComponents.class, }, false);
+				 lastFuture = appExec.submit(app);
+				 // app.call();
+				 } catch (Exception e) {
+				 // catch block
+				 e.printStackTrace();
+				 }
 				// // TODONE try these
 				// try {
 				// // OK
@@ -2825,16 +3092,18 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			case 0:
 				if (l == 0) {
 					trainingSet.instance(i).setClassValue("+1");
+				} else if (l == 1) {
+					trainingSet.instance(i).setClassValue("-1");
 				} else {
 					if (delete) {
-						trainingSet.delete(i);
-					} else if (l == 1) {
-						trainingSet.instance(i).setClassValue("-1");
+						// trainingSet.delete(i);
+						trainingSet.instance(i).setWeight(
+								1.0 / trainingSet.numInstances());
 					}
 				}
 				break;
 			case 1:
-			case 2:
+//			case 2:
 			case 3:
 				if (l == 0) {
 					trainingSet.instance(i).setClassValue("-1");
@@ -2842,7 +3111,9 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					trainingSet.instance(i).setClassValue("+1");
 				} else if (l == 3) {
 					if (delete) {
-						trainingSet.delete(i);
+						// trainingSet.delete(i);
+						trainingSet.instance(i).setWeight(
+								1.0 / trainingSet.numInstances());
 					} else {
 						// nothing
 					}
@@ -2855,51 +3126,16 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 					trainingSet.instance(i).setClassValue("-1");
 				} else if (l == 2) {
 					if (delete) {
-						trainingSet.delete(i);
+						// trainingSet.delete(i);
+						trainingSet.instance(i).setWeight(
+								1.0 / trainingSet.numInstances());
 					} else {
 						// nothing
 					}
 				}
 				break;
 			}
-			// if (srcInst.classValue() == 0) {
-			// if (l == 0) {
-			// trainingSet.instance(i).setClassValue("+1");
-			// } else if (l == 1) {
-			// trainingSet.instance(i).setClassValue("-1");
-			// } else {
-			// if (delete) {
-			// trainingSet.delete(i);
-			// }
-			//
-			// }
-			// } else {
-			// if (l == 0) {
-			// trainingSet.instance(i).setClassValue("-1");
-			// } else {
-			// if (srcInst.classValue() < 4) {
-			// if (l == 1) {
-			// trainingSet.instance(i).setClassValue("+1");
-			// } else if (l == 3) {
-			// if (delete) {
-			// trainingSet.delete(i);
-			// } else {
-			// // nothing
-			// }
-			// }
-			// } else {
-			// if (l == 1) {
-			// trainingSet.instance(i).setClassValue("-1");
-			// } else if (l == 2) {
-			// if (delete) {
-			// trainingSet.delete(i);
-			// } else {
-			// // nothing
-			// }
-			// }
-			// }
-			// }
-			// }
+
 		}
 		return trainingSet;
 	}

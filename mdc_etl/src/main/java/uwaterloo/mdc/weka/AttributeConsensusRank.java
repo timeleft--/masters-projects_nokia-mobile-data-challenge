@@ -40,8 +40,8 @@ public class AttributeConsensusRank implements
 	private static final String REDUCED_HEADER_END = "@attribute label ";
 	private static final String RANKED_ATTRS_PFX = "Ranked attributes:";
 	private static final String APPLICATIONS = "APPS";
-	public static final String INPUT_PATH = "C:\\mdc-datasets\\weka\\validation_tree-vs-forest\\";
-	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\filters\\";
+	public static final String INPUT_PATH = "C:\\mdc-datasets\\weka\\validation_full-noweight\\";
+	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\filters_full-no-weight\\";
 	private static final String STATNAME_POSTFIX_ATTRS = "_attrs";
 	private static final String STATNAME_POSTFIX_CATEGORIES = "_categories";
 //	private static final String APPDICT_PROPS_PATH = "C:\\mdc-datasets\\app-uid_name.properties";
@@ -67,7 +67,7 @@ public class AttributeConsensusRank implements
 			.synchronizedMap(new HashMap<String, HashMap<String, Integer>>());
 	private static final int NUM_ATTRS_TO_RETAIN = 100;
 	protected static final String FEAT_SELECTION_FNAME_SUFFIX = "feat-selection.txt";
-	private static final String STRUCT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_97\\ALL";
+	private static final String STRUCT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_full-noweights_split\\ALL";
 	// private static final Map<String, String> attrIxMap =
 	// Collections.synchronizedMap(new HashMap<String, String>());
 	private final HashMap<String, HashMap<String, SummaryStatistics>> statsMapArr;
@@ -90,8 +90,8 @@ public class AttributeConsensusRank implements
 
 		FilenameFilter fold0AttrSelectionFilter = new FilenameFilter() {
 			public boolean accept(File dir, String name) {
-				return name.startsWith("v0")
-						&& name.endsWith(FEAT_SELECTION_FNAME_SUFFIX);
+				return //name.startsWith("v0")&&
+						 name.endsWith(FEAT_SELECTION_FNAME_SUFFIX);
 			}
 		};
 

@@ -275,7 +275,7 @@ public class LoadCountsAsAttributes implements
 		}
 	}
 
-	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_sample-noweight";
+	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_full_no-weight_binary";
 	public static final String TEMP_PATH = "C:\\mdc-datasets\\weka\\segmented_user_temp";
 
 	private static class ArffSaverCallable implements Callable<Void> {
@@ -1748,6 +1748,9 @@ public class LoadCountsAsAttributes implements
 
 							String cls = Long.toString(Math.round(copyInst
 									.classValue()));
+							
+							
+						
 
 							// long idVal = Math.round(copyInst.value(0));
 							// trueLableWr.append(Long.toString(idVal))
@@ -1764,6 +1767,10 @@ public class LoadCountsAsAttributes implements
 								binaryLabel = "-1";
 							}
 
+							if(Config.LOAD_COUNT_TRANSDUCTIVE_ZERO && "0".equals(cls)){
+								binaryLabel = null;
+							}
+							
 							if (binaryLabel != null) {
 								copyInst.setValue(copyInst.numAttributes() - 1,
 										binaryLabel);
@@ -1789,7 +1796,7 @@ public class LoadCountsAsAttributes implements
 
 					copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
 
-					if (!Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE) {
+					if (!Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE && !Config.LOAD_COUNT_TRANSDUCTIVE_ZERO) {
 						copyInsts.deleteWithMissingClass();
 					}
 

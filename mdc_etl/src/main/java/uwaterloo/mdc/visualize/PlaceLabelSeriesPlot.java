@@ -5,6 +5,7 @@ import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
@@ -13,11 +14,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Writer;
 import java.nio.channels.Channels;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.GregorianCalendar;
-import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.Properties;
 import java.util.Random;
@@ -32,9 +34,9 @@ import javax.swing.SwingUtilities;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.http.impl.cookie.DateUtils;
 import org.math.plot.Plot2DPanel;
 import org.math.plot.plots.ScatterPlot;
-import org.omg.CORBA_2_3.portable.InputStream;
 
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.util.StringUtils;
@@ -43,6 +45,7 @@ import weka.core.Instances;
 import weka.core.converters.CSVLoader;
 
 public class PlaceLabelSeriesPlot extends JFrame {
+	private static final boolean WEKA = true;
 	private static boolean validate = true;
 	private static boolean guess = false;
 	private static boolean show = false;
@@ -50,25 +53,32 @@ public class PlaceLabelSeriesPlot extends JFrame {
 	// private static String classifierAndFeatSelector =
 	// "weka.classifiers.trees.J48\\weka.attributeSelection.GainRatioAttributeEval";
 	// "weka.classifiers.trees.RandomForest\\weka.attributeSelection.GainRatioAttributeEval";
-	private static String inBase = "C:\\mdc-datasets\\weka\\validation_sample-noweight_cascade-j48";
+	private static String inBase = "C:\\mdc-datasets\\weka\\"; // validation_sample-noweight_cascade-base_max1.5";
 	// + classifierAndFeatSelector; //
 	// \v0_u0_n1_ALL_feat-selected_instid-time_prediction.csv"
-	private static String outBase = "C:\\mdc-datasets\\weka\\visualization\\place-label_time-series_validation_sample-noweight_cascade-j48\\";
+	private static String outBase = "C:\\mdc-datasets\\weka\\results";
+	// "visualization\\place-label_time-series_validation_sample-noweight_cascade-base_max1.5\\";
 	// + classifierAndFeatSelector;
-	private static String FILENAME_SUFFIX = "l3_ALL_feat-selected_instid-time_prediction.csv";
+	private static String FILENAME_SUFFIX = "ALL_feat-selected_instid-time_prediction.csv";
 	private static String instIdPlaceIdMapsPath = "C:\\mdc-datasets\\weka\\segmented_user_sample-noweight\\";
 	private static String instIdPlaceIdMapsFname = "_instid-placeid_map.properties";
 	private static FilenameFilter fnFilter = new FilenameFilter() {
 
 		@Override
 		public boolean accept(File dir, String name) {
-			return name.endsWith(FILENAME_SUFFIX);
+			boolean result = name.endsWith(FILENAME_SUFFIX);
+			if (name.contains("_l")) {
+				result &= name.contains("_l3");
+			}
+			return result;
 		}
 	};
 	private static double[][] visitsConfusionMatrix;
 	private static double[][] placesConfusionMatrix;
 	private static Properties instIdPlaceId;
 	static TreeMap<String, Frequency> placePredictions = new TreeMap<String, Frequency>();
+	static SimpleDateFormat reverseDate = new SimpleDateFormat("yyyyMMddHHmm");
+	private static double superiorityRatio = 1.1;
 
 	public PlaceLabelSeriesPlot(String userId, String pfx) {
 		setTitle(userId + pfx
@@ -78,183 +88,25 @@ public class PlaceLabelSeriesPlot extends JFrame {
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 	}
 
-	public static void main(String[] args) throws IOException,
-			InterruptedException {
+	public static void main(String[] args) throws InterruptedException,
+			IOException {
 		Config.placeLabels = new Properties();
 		FileInputStream placeLabelsIn = FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE));
 		Config.placeLabels.load(placeLabelsIn);
 		placeLabelsIn.close();
 
-		FileFilter dirFilter = new FileFilter() {
-
-			@Override
-			public boolean accept(File arg0) {
-				return arg0.isDirectory();
-			}
-		};
-		for (File classifierDir : FileUtils.getFile(inBase)
-				.listFiles(dirFilter)) {
-			for (File featSelDir : classifierDir.listFiles(dirFilter)) {
-				String outPath = FilenameUtils.concat(
-						FilenameUtils.concat(outBase, classifierDir.getName()),
-						featSelDir.getName());
-				Writer accuracyWr = Channels.newWriter(
-						FileUtils.openOutputStream(
-								FileUtils.getFile(outPath, "accuracy.csv"))
-								.getChannel(), Config.OUT_CHARSET);
-				double totalCount = 0;
-				double trueCount = 0;
-				// double mereGuess[] = {0,0,0};
-				visitsConfusionMatrix = new double[11][11];
-				placesConfusionMatrix = new double[11][11];
-				try {
-					accuracyWr.append("User\tTRUE\tFALSE\tTotalCount\n");
-					int fileIx = 0;
-					for (File seriesFile : featSelDir.listFiles(fnFilter)) {
-						if (fileIx == Config.NUM_USERS_TO_PROCESS) {
-							break;
-						}
-
-						String pfx = seriesFile.getParentFile().getParentFile()
-								.getName()
-								+ "/"
-								+ seriesFile.getParentFile().getName()
-								+ "/"
-								+ seriesFile.getName().substring(
-										0,
-										seriesFile.getName().indexOf(
-												FILENAME_SUFFIX));
-
-						CSVLoader csvLoad = new CSVLoader();
-						csvLoad.setSource(seriesFile);
-						// Instances struct = csvLoad.getStructure();
-						Instances data = csvLoad.getDataSet();
-
-						String currUserId = null;
-						TreeMap<Double, Double> predicted = new TreeMap<Double, Double>();
-						TreeMap<Double, Double> actual = new TreeMap<Double, Double>();
-						LinkedList<String> instIds = new LinkedList<String>();
-						Enumeration instEnum = data.enumerateInstances();
-						while (instEnum.hasMoreElements()) {
-							Instance inst = (Instance) instEnum.nextElement();
-							String instUserId = StringUtils
-									.numberToId((int) Math.round(inst.value(0)));
-							if (!instUserId.equals(currUserId)) {
-								if (predicted.size() > 0) {
-
-									Frequency accuracy = plotAndCalcAccuracy(
-											currUserId, pfx, predicted, actual,
-											instIds, outPath);
-									// if(guess){
-									// mereGuess[0] += guess(actual,0);
-									// mereGuess[1] += guess(actual,1);
-									// mereGuess[2] += guess(actual,3);
-									// }
-									long userCount = appendAccuracy(accuracyWr,
-											accuracy, currUserId);
-									totalCount += userCount;
-									trueCount += userCount
-											* accuracy.getPct(Boolean.TRUE);
-
-									predicted.clear();
-									actual.clear();
-									instIds.clear();
-
-									writeFreqMap(currUserId);
-									placePredictions.clear();
-								}
-								instIdPlaceId = new Properties();
-								FileInputStream in = FileUtils
-										.openInputStream(FileUtils.getFile(FilenameUtils
-												.concat(instIdPlaceIdMapsPath,
-														instUserId
-																+ instIdPlaceIdMapsFname)));
-								instIdPlaceId.load(in);
-								in.close();
-							}
-
-							currUserId = instUserId;
-							String instId = Long.toString(Math.round(inst
-									.value(1)));
-
-							Double startTime = inst.value(2);
-							Double endTime = inst.value(3);
-							Double instPredicted = inst.value(4);
-							Double instActual = inst.value(5);
-
-							for (double time = startTime; time <= endTime; time += Config.TIME_SECONDS_IN_10MINS) {
-								predicted.put(time, instPredicted);
-								if (validate) {
-									actual.put(time, instActual);
-								}
-								instIds.add(instId);
-							}
-
-						}
-						Frequency accuracy = plotAndCalcAccuracy(currUserId,
-								pfx, predicted, actual, instIds, outPath);
-						long userCount = appendAccuracy(accuracyWr, accuracy,
-								currUserId);
-						// if(guess){
-						// mereGuess[0] += guess(actual,0);
-						// mereGuess[1] += guess(actual,1);
-						// mereGuess[2] += guess(actual,3);
-						// }
-						totalCount += userCount;
-						trueCount += userCount * accuracy.getPct(Boolean.TRUE);
-						++fileIx;
-					
-						writeFreqMap(currUserId);
-						placePredictions.clear();
-					
-					}
-
-					
-					
-				} finally {
-					accuracyWr.flush();
-					accuracyWr.close();
-				}
-
-				
-				// FileUtils.writeStringToFile(
-				// FileUtils.getFile(outPath, "true-positive-rate.csv"),
-				// trueCount + " / " + totalCount + " = "
-				// + (trueCount * 1.0 / totalCount) + "\nGuess: " +
-				// Arrays.toString(mereGuess));
-				Writer evalWr = Channels.newWriter(
-						FileUtils.openOutputStream(
-								FileUtils.getFile(outPath, "visits-eval.csv"))
-								.getChannel(), Config.OUT_CHARSET);
-				try {
-					evalWr.append(
-							trueCount + " / " + totalCount + " = "
-									+ (trueCount * 1.0 / totalCount) + "\n");
-					
-					writeConfusionMatrix(visitsConfusionMatrix, evalWr);
-					
-				} finally {
-					evalWr.flush();
-					evalWr.close();
-				}
-				evalWr = Channels.newWriter(
-						FileUtils.openOutputStream(
-								FileUtils.getFile(outPath, "places-eval.csv"))
-								.getChannel(), Config.OUT_CHARSET);
-				try {
-					
-					writeConfusionMatrix(placesConfusionMatrix, evalWr);
-					
-				} finally {
-					evalWr.flush();
-					evalWr.close();
-				}
-			}
+		if (WEKA) {
+			doWeka();
+		} else {
+			inBase = "C:\\mdc-datasets\\svmlight\\output\\ALL";
+			doSvmLight();
 		}
+
 	}
 
-	static void writeConfusionMatrix(double[][] confusionMatrix, Writer evalWr) throws IOException{
+	static void writeConfusionMatrix(double[][] confusionMatrix, Writer evalWr)
+			throws IOException {
 		double[] precision = new double[11];
 		double[] recall = new double[11];
 		double avgPrec = 0.0;
@@ -272,10 +124,11 @@ public class PlaceLabelSeriesPlot extends JFrame {
 			avgPrec += precision[i];
 			avgRecall += recall[i];
 		}
-				evalWr.append("Precision: " + Arrays.toString(precision)
-						+ " Average: " + (avgPrec / 11) + "\n")
-				.append("Recall: " + Arrays.toString(recall) 
-						+ " Average: " + (avgRecall / 11) + "\n");
+		evalWr.append(
+				"Precision: " + Arrays.toString(precision) + " Average: "
+						+ (avgPrec / 11) + "\n").append(
+				"Recall: " + Arrays.toString(recall) + " Average: "
+						+ (avgRecall / 11) + "\n");
 
 		evalWr.append("Confusion Matrix:\n").append(
 				"label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\n");
@@ -287,16 +140,14 @@ public class PlaceLabelSeriesPlot extends JFrame {
 			for (int j = 0; j < Config.LABELS_SINGLES.length; ++j) {
 				double cnt = confusionMatrix[i][j];
 				rowTotal += cnt;
-				evalWr.append('\t').append(
-						Long.toString(Math.round(cnt)));
+				evalWr.append('\t').append(Long.toString(Math.round(cnt)));
 			}
 
-			evalWr.append('\t').append(Long.toString(rowTotal))
-					.append('\n');
+			evalWr.append('\t').append(Long.toString(rowTotal)).append('\n');
 		}
 
-
 	}
+
 	private static void writeFreqMap(String userId) throws IOException {
 		Writer wr = Channels.newWriter(
 				FileUtils.openOutputStream(
@@ -316,10 +167,10 @@ public class PlaceLabelSeriesPlot extends JFrame {
 					double pct = freq.getPct(Double.parseDouble(label));
 					wr.append('\t').append(Double.toString(pct));
 					total += freq.getCount(label);
-					
-					double ratio =  pct / maxPct;
-					if (ratio >= 1 / 1.5) {
-						if (ratio > 1.5) {
+
+					double ratio = pct / maxPct;
+					if (ratio >= 1 / superiorityRatio) {
+						if (ratio > superiorityRatio) {
 							selLabels.clear();
 						}
 						selLabels.add(label);
@@ -328,13 +179,18 @@ public class PlaceLabelSeriesPlot extends JFrame {
 						}
 					}
 				}
-				String actualLabel = Config.placeLabels.getProperty(placeid,"0");
+				String actualLabel = Config.placeLabels.getProperty(placeid,
+						"0");
+				if (selLabels.size() == 0) {
+					wr.append("No selected label!");
+					continue;
+				}
 				String label = selLabels.get(rand.nextInt(selLabels.size()));
-				wr.append("\t" + total)
-					.append("\t" + label)
-					.append("\t" + actualLabel).append('\n');
-				
-				++placesConfusionMatrix[Integer.parseInt(actualLabel)][Integer.parseInt(label)];
+				wr.append("\t" + total).append("\t" + label)
+						.append("\t" + actualLabel).append('\n');
+
+				++placesConfusionMatrix[Integer.parseInt(actualLabel)][Integer
+						.parseInt(label)];
 			}
 
 		} finally {
@@ -418,17 +274,21 @@ public class PlaceLabelSeriesPlot extends JFrame {
 			if (validate) {
 				actualArr[i][0] = predictedArr[i][0];
 				actualArr[i][1] = actual.get(time);
-				
-					accuracy.addValue(actualArr[i][1] == predictedArr[i][1] && actualArr[i][1] != 0);
-				
+
+				accuracy.addValue(actualArr[i][1] == predictedArr[i][1]);
+				// && actualArr[i][1] != 0);
+
 				++visitsConfusionMatrix[(int) actualArr[i][1]][(int) predictedArr[i][1]];
-				String placeId = instIdPlaceId.getProperty(instIdArr[i]+".0");
-				Frequency placeFreq = placePredictions.get(placeId);
-				if(placeFreq == null){
-					placeFreq = new Frequency();
-					placePredictions.put(placeId,placeFreq);
+				if (WEKA) {
+					String placeId = instIdPlaceId.getProperty(instIdArr[i]
+							+ ".0");
+					Frequency placeFreq = placePredictions.get(placeId);
+					if (placeFreq == null) {
+						placeFreq = new Frequency();
+						placePredictions.put(placeId, placeFreq);
+					}
+					placeFreq.addValue(predictedArr[i][1]);
 				}
-				placeFreq.addValue(predictedArr[i][1]);
 			}
 			++i;
 		}
@@ -522,5 +382,422 @@ public class PlaceLabelSeriesPlot extends JFrame {
 			}
 		}
 		return accuracy;
+	}
+
+	private static void doWeka() throws IOException {
+		FileFilter dirFilter = new FileFilter() {
+
+			@Override
+			public boolean accept(File arg0) {
+				return arg0.isDirectory();
+			}
+		};
+
+		FileFilter validationFilter = new FileFilter() {
+			@Override
+			public boolean accept(File arg0) {
+				return arg0.getName().startsWith(
+						"validation_full-no-weight_bayesnet")// validation_sample-noweight_cascade-base_ties
+						&& arg0.isDirectory();
+			}
+		};
+		for (File validationDir : FileUtils.getFile(inBase).listFiles(
+				validationFilter)) {
+			String validationName = reverseDate.format(new Date(validationDir
+					.lastModified())) + "_" + validationDir.getName();
+			for (File classifierDir : validationDir.listFiles(dirFilter)) {
+				for (File featSelDir : classifierDir.listFiles(dirFilter)) {
+
+					String outPath = FilenameUtils.concat(
+							FilenameUtils.concat(outBase,
+									classifierDir.getName()),
+							featSelDir.getName());
+					Writer accuracyWr = Channels.newWriter(
+							FileUtils.openOutputStream(
+									FileUtils.getFile(outPath, validationName,
+											"accuracy.csv")).getChannel(),
+							Config.OUT_CHARSET);
+					double totalCount = 0;
+					double trueCount = 0;
+					// double mereGuess[] = {0,0,0};
+					visitsConfusionMatrix = new double[11][11];
+					placesConfusionMatrix = new double[11][11];
+					TreeMap<Double, Double> predicted = new TreeMap<Double, Double>();
+					TreeMap<Double, Double> actual = new TreeMap<Double, Double>();
+					LinkedList<String> instIds = new LinkedList<String>();
+
+					try {
+						accuracyWr.append("User\tTRUE\tFALSE\tTotalCount\n");
+						int fileIx = 0;
+						for (File seriesFile : featSelDir.listFiles(fnFilter)) {
+							try {
+								if (fileIx == Config.NUM_USERS_TO_PROCESS) {
+									break;
+								}
+
+								predicted.clear();
+								actual.clear();
+								instIds.clear();
+
+								String pfx = seriesFile.getParentFile()
+										.getParentFile().getName()
+										+ "/"
+										+ seriesFile.getParentFile().getName()
+										+ "/"
+										+ seriesFile.getName().substring(
+												0,
+												seriesFile.getName().indexOf(
+														FILENAME_SUFFIX));
+
+								CSVLoader csvLoad = new CSVLoader();
+								csvLoad.setSource(seriesFile);
+								// Instances struct = csvLoad.getStructure();
+								Instances data = csvLoad.getDataSet();
+
+								String currUserId = null;
+								Enumeration instEnum = data
+										.enumerateInstances();
+								while (instEnum.hasMoreElements()) {
+									Instance inst = (Instance) instEnum
+											.nextElement();
+									String instUserId = StringUtils
+											.numberToId((int) Math.round(inst
+													.value(0)));
+									if (!instUserId.equals(currUserId)) {
+										if (predicted.size() > 0) {
+											System.err
+													.println("Two users in the same timeline file");
+											Frequency accuracy = plotAndCalcAccuracy(
+													currUserId,
+													pfx,
+													predicted,
+													actual,
+													instIds,
+													FilenameUtils
+															.concat(outPath,
+																	reverseDate
+																			.format(new Date(
+																					validationDir
+																							.lastModified()))
+																			+ "_"
+																			+ validationDir
+																					.getName()));
+											// if(guess){
+											// mereGuess[0] += guess(actual,0);
+											// mereGuess[1] += guess(actual,1);
+											// mereGuess[2] += guess(actual,3);
+											// }
+											long userCount = appendAccuracy(
+													accuracyWr, accuracy,
+													currUserId);
+											totalCount += userCount;
+											trueCount += userCount
+													* accuracy
+															.getPct(Boolean.TRUE);
+
+											predicted.clear();
+											actual.clear();
+											instIds.clear();
+
+											writeFreqMap(currUserId);
+											placePredictions.clear();
+										}
+										instIdPlaceId = new Properties();
+										FileInputStream in = FileUtils
+												.openInputStream(FileUtils.getFile(FilenameUtils
+														.concat(instIdPlaceIdMapsPath,
+																instUserId
+																		+ instIdPlaceIdMapsFname)));
+										instIdPlaceId.load(in);
+										in.close();
+									}
+
+									currUserId = instUserId;
+									String instId = Long.toString(Math
+											.round(inst.value(1)));
+
+									Double startTime = inst.value(2);
+									Double endTime = inst.value(3);
+									Double instPredicted = inst.value(4);
+									Double instActual = inst.value(5);
+
+									for (double time = startTime; time <= endTime; time += Config.TIME_SECONDS_IN_10MINS) {
+										predicted.put(time, instPredicted);
+										if (validate) {
+											actual.put(time, instActual);
+										}
+										instIds.add(instId);
+									}
+
+								}
+
+								Frequency accuracy = plotAndCalcAccuracy(
+										currUserId, pfx, predicted, actual,
+										instIds, FilenameUtils.concat(outPath,
+												validationName));
+								long userCount = appendAccuracy(accuracyWr,
+										accuracy, currUserId);
+								// if(guess){
+								// mereGuess[0] += guess(actual,0);
+								// mereGuess[1] += guess(actual,1);
+								// mereGuess[2] += guess(actual,3);
+								// }
+								totalCount += userCount;
+								trueCount += userCount
+										* accuracy.getPct(Boolean.TRUE);
+								++fileIx;
+
+								writeFreqMap(currUserId);
+								placePredictions.clear();
+							} catch (Exception ignored) {
+								System.err.println(new Date()
+										+ seriesFile.getAbsolutePath());
+								ignored.printStackTrace();
+							}
+						}
+
+					} finally {
+						accuracyWr.flush();
+						accuracyWr.close();
+					}
+
+					if (predicted.size() == 0) {
+						continue;
+						// System.out.println("Deleting "+ outPath);
+						// FileUtils.deleteDirectory(FileUtils.getFile(outPath));
+					} else {
+						System.out.println("Keeping " + outPath);
+
+					}
+
+					// FileUtils.writeStringToFile(
+					// FileUtils.getFile(outPath, "true-positive-rate.csv"),
+					// trueCount + " / " + totalCount + " = "
+					// + (trueCount * 1.0 / totalCount) + "\nGuess: " +
+					// Arrays.toString(mereGuess));
+					Writer evalWr = Channels.newWriter(
+							FileUtils.openOutputStream(
+									FileUtils.getFile(outPath, validationName,
+											"visits-eval.csv")).getChannel(),
+							Config.OUT_CHARSET);
+					try {
+						evalWr.append(trueCount + " / " + totalCount + " = "
+								+ (trueCount * 1.0 / totalCount) + "\n");
+
+						writeConfusionMatrix(visitsConfusionMatrix, evalWr);
+
+					} finally {
+						evalWr.flush();
+						evalWr.close();
+					}
+					evalWr = Channels.newWriter(
+							FileUtils.openOutputStream(
+									FileUtils.getFile(outPath, validationName,
+											"places-eval.csv")).getChannel(),
+							Config.OUT_CHARSET);
+					try {
+
+						writeConfusionMatrix(placesConfusionMatrix, evalWr);
+
+					} finally {
+						evalWr.flush();
+						evalWr.close();
+					}
+
+				}
+			}
+		}
+	}
+
+	static class tFilter implements FilenameFilter {
+
+		final int t;
+
+		public tFilter(int t) {
+			this.t = t;
+		}
+
+		@Override
+		public boolean accept(File dir, String name) {
+
+			return name.endsWith(t + "_predictions.txt");
+
+		}
+	}
+
+	static void doSvmLight() throws IOException {
+		FileFilter validationFilter = new FileFilter() {
+			@Override
+			public boolean accept(File arg0) {
+				return arg0.getName().startsWith("v")// validation_sample-noweight_cascade-base_ties
+						&& arg0.isDirectory();
+			}
+		};
+
+		for (int t = 0; t < 1; ++t) {
+			File inDir =  FileUtils.getFile(inBase);
+			String validationName = reverseDate.format(new Date(inDir
+					.lastModified())) + "_" + inDir.getName();
+
+			String outPath = FilenameUtils.concat(
+					FilenameUtils.concat(outBase, "svmlight"), "t" + t);
+			Writer accuracyWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outPath, validationName,
+									"accuracy.csv")).getChannel(),
+					Config.OUT_CHARSET);
+			double totalCount = 0;
+			double trueCount = 0;
+			// double mereGuess[] = {0,0,0};
+			visitsConfusionMatrix = new double[11][11];
+			placesConfusionMatrix = new double[11][11];
+			TreeMap<Double, Double> predicted = new TreeMap<Double, Double>();
+			TreeMap<Double, Double> actual = new TreeMap<Double, Double>();
+			LinkedList<String> instIds = new LinkedList<String>();
+
+			try {
+				accuracyWr.append("User\tTRUE\tFALSE\tTotalCount\n");
+				int fileIx = 0;
+				for (File validationDir :inDir.listFiles(
+						validationFilter)) {
+					for (File seriesFile : validationDir.listFiles(new tFilter(
+							t))) {
+						try {
+							if (fileIx == Config.NUM_USERS_TO_PROCESS) {
+								break;
+							}
+
+							predicted.clear();
+							actual.clear();
+							instIds.clear();
+
+							String pfx = "t" + t;
+
+							// instIdPlaceId = new Properties();
+							// FileInputStream in = FileUtils
+							// .openInputStream(FileUtils.getFile(FilenameUtils
+							// .concat(instIdPlaceIdMapsPath,
+							// instUserId
+							// + instIdPlaceIdMapsFname)));
+							// instIdPlaceId.load(in);
+							// in.close();
+
+							BufferedReader pRd = new BufferedReader(
+									Channels.newReader(FileUtils
+											.openInputStream(seriesFile)
+											.getChannel(), "US-ASCII"));
+							BufferedReader aRd = new BufferedReader(
+									Channels.newReader(
+											FileUtils
+													.openInputStream(
+															FileUtils
+																	.getFile(
+																			"C:\\mdc-datasets\\svmlight\\input\\ALL",
+																			validationDir
+																					.getName(),
+																			"validate.csv"))
+													.getChannel(), "US-ASCII"));
+							int instIdInt = 1;
+							String pLine, aLine;
+							while ((pLine = pRd.readLine()) != null) {
+								aLine = aRd.readLine();
+
+								Double instPredicted = Double.valueOf(pLine
+										.substring(0, pLine.indexOf(' ')));
+								if (instPredicted == 11) {
+									instPredicted = 0.0;
+								}
+								Double instActual = Double.valueOf(aLine
+										.substring(0, aLine.indexOf(' ')));
+								if (instActual == 11) {
+									instActual = 0.0;
+								}
+								String instId = Long.toString(instIdInt);
+								double startTime = instIdInt * 600;
+								double endTime = startTime + 601;
+
+								for (double time = startTime; time <= endTime; time += Config.TIME_SECONDS_IN_10MINS) {
+									predicted.put(time, instPredicted);
+									if (validate) {
+										actual.put(time, instActual);
+									}
+									instIds.add(instId);
+								}
+								++instIdInt;
+							}
+
+							Frequency accuracy = plotAndCalcAccuracy(
+									validationDir.getName(), pfx, predicted,
+									actual, instIds, FilenameUtils.concat(
+											outPath, validationName));
+							long userCount = appendAccuracy(accuracyWr,
+									accuracy, validationDir.getName());
+							// if(guess){
+							// mereGuess[0] += guess(actual,0);
+							// mereGuess[1] += guess(actual,1);
+							// mereGuess[2] += guess(actual,3);
+							// }
+							totalCount += userCount;
+							trueCount += userCount
+									* accuracy.getPct(Boolean.TRUE);
+							++fileIx;
+
+							placePredictions.clear();
+						} catch (Exception ignored) {
+							System.err.println(new Date()
+									+ seriesFile.getAbsolutePath());
+							ignored.printStackTrace();
+						}
+					}
+				}
+
+			} finally {
+				accuracyWr.flush();
+				accuracyWr.close();
+			}
+
+			if (predicted.size() == 0) {
+				continue;
+				// System.out.println("Deleting "+ outPath);
+				// FileUtils.deleteDirectory(FileUtils.getFile(outPath));
+			} else {
+				System.out.println("Keeping " + outPath);
+
+			}
+
+			// FileUtils.writeStringToFile(
+			// FileUtils.getFile(outPath, "true-positive-rate.csv"),
+			// trueCount + " / " + totalCount + " = "
+			// + (trueCount * 1.0 / totalCount) + "\nGuess: " +
+			// Arrays.toString(mereGuess));
+			Writer evalWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outPath, validationName,
+									"visits-eval.csv")).getChannel(),
+					Config.OUT_CHARSET);
+			try {
+				evalWr.append(trueCount + " / " + totalCount + " = "
+						+ (trueCount * 1.0 / totalCount) + "\n");
+
+				writeConfusionMatrix(visitsConfusionMatrix, evalWr);
+
+			} finally {
+				evalWr.flush();
+				evalWr.close();
+			}
+			evalWr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outPath, validationName,
+									"places-eval.csv")).getChannel(),
+					Config.OUT_CHARSET);
+			try {
+
+				writeConfusionMatrix(placesConfusionMatrix, evalWr);
+
+			} finally {
+				evalWr.flush();
+				evalWr.close();
+			}
+		}
 	}
 }

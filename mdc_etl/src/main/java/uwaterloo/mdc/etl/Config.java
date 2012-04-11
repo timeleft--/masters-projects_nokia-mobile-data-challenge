@@ -8,7 +8,7 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS =1;
+	public static final int NUM_THREADS =10;
 	public static final int NUM_USERS_TO_PROCESS = 80;
 	public static final int VALIDATION_SAMPLE_USERS = 20;
 	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
@@ -90,25 +90,25 @@ public class Config {
 	public static final String[] LABEL_HIERARCHY = {
 //		// Known vs unknown
 //		"+0+-1-2-3-4-5-6-7-8-9-10-",
-//		// Prevalent vs not
-//		"+1+2+3+-4-5-6-7-8-9-10-",
-//		// This is redundant.. it is exactly the previoys one: "-1-2-3-+4+5+6+7+8+9+10+",
-//		// Add this layer and see if two levels or three levels is better
-////				"+1+2+-3-", //Homes vs Work
-////				"+4+5+-1-2-3-6-7-8-9-10-", //On the way vs rest
-////				"+6+7+-1-2-3-4-5-8-9-10-", // Sports vs rest
-////				"+8+9+-1-2-3-4-5-6-7-10-", // Commercial vs rest
-//		// Pair wise:
-//		"+1+-2-","+1+-3-",/*"+2+-1-",*/"+2+-3-",/*"+3+-1-","+3+-2-",*/
-//		// Once agains all (that still remain)
-//		"+4+-5-6-7-8-9-10-","+5+-4-6-7-8-9-10-","+6+-4-5-7-8-9-10-",
-//		"+7+-4-5-6-8-9-10-","+8+-4-5-6-7-9-10-","+9+-4-5-6-7-8-10-",
-//		"+10+-4-5-6-7-8-9-",
-////		// Those are wrong!
-//////		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
-//////		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
-//////		"+10+-1-2-3-4-5-6-7-8-9-",
-//////		
+		// Prevalent vs not
+		"+1+2+3+-4-5-6-7-8-9-10-",
+		// This is redundant.. it is exactly the previoys one: "-1-2-3-+4+5+6+7+8+9+10+",
+		// Add this layer and see if two levels or three levels is better
+//				"+1+2+-3-", //Homes vs Work
+//				"+4+5+-1-2-3-6-7-8-9-10-", //On the way vs rest
+//				"+6+7+-1-2-3-4-5-8-9-10-", // Sports vs rest
+//				"+8+9+-1-2-3-4-5-6-7-10-", // Commercial vs rest
+		// Pair wise:
+		"+1+-2-","+1+-3-",/*"+2+-1-",*/"+2+-3-",/*"+3+-1-","+3+-2-",*/
+		// One against all (that still remain)
+		"+4+-5-6-7-8-9-10-","+5+-4-6-7-8-9-10-","+6+-4-5-7-8-9-10-",
+		"+7+-4-5-6-8-9-10-","+8+-4-5-6-7-9-10-","+9+-4-5-6-7-8-10-",
+		"+10+-4-5-6-7-8-9-",
+//		// Those are wrong!
+////		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
+////		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
+////		"+10+-1-2-3-4-5-6-7-8-9-",
+////		
 		};
 	public static final String[] LABELS_BINARY = new String[] { "+1","-1"};
 	public static final int LABLES_BINARY_POSITIVE_IX = 0;
@@ -152,13 +152,14 @@ public class Config {
 	public static final boolean LOAD_DROP_VERYRARE_VALS = true; // This is for apps onl
 	public static final boolean LOAD_FEAT_SELECTED_APPS_ONLY = true;
 	public static final boolean LOADCOUNT_APP_USAGE = true;
-	public static final boolean LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER = true;
+	public static final boolean LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER = false;
 	public static final int LOAD_COUNT_SAMPLE_FIXED_NUMBER_FROM_USER_COUNT = 400;
 	public static final boolean LOAD_NORMALIZE_VISIT_LENGTH = false;
 	public static final boolean LOAD_USE_PLACEID = false;
 	public static final boolean LOAD_WEIGHT_LABELS = false;
 	public static final boolean LOAD_COUNT_WEIGHT = false;
 	public static final boolean LOAD_WEIGHT_USERS = false;
+	public static final boolean LOAD_COUNT_TRANSDUCTIVE_ZERO = true;
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;
@@ -212,9 +213,9 @@ public class Config {
 
 	public static final boolean CLASSIFYFEATSEL_WRITE_TRANSFORMED = false;
 	public static final boolean CLASSIFY_PENALIZE_ZERO = false;
-	public static final boolean CLASSIFY_SEPARATE_PREVALENCE = true;
-	public static final boolean CLASSIFY_USING_SAMPLE_FIXED_NUMBER_FROM_USER =true;
-	
+	public static final boolean CLASSIFY_SEPARATE_PREVALENCE = false;
+	public static final boolean CLASSIFY_USING_SAMPLE_FIXED_NUMBER_FROM_USER =false;
+	public static final boolean CLASSIFY_FEAT_SELECTED_CLASSIFIER =true;
 	
 	
 	
