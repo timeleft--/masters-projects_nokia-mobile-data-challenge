@@ -45,7 +45,7 @@ import weka.core.Instances;
 import weka.core.converters.CSVLoader;
 
 public class PlaceLabelSeriesPlot extends JFrame {
-	private static final boolean WEKA = true;
+	private static final boolean WEKA = false;
 	private static boolean validate = true;
 	private static boolean guess = false;
 	private static boolean show = false;
@@ -99,7 +99,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 		if (WEKA) {
 			doWeka();
 		} else {
-			inBase = "C:\\mdc-datasets\\svmlight\\output\\ALL";
+//			for(inBase:  "C:\\mdc-datasets\\svmlight\\output\\";
 			doSvmLight();
 		}
 
@@ -397,7 +397,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 			@Override
 			public boolean accept(File arg0) {
 				return arg0.getName().startsWith(
-						"validation_full-no-weight_bayesnet")// validation_sample-noweight_cascade-base_ties
+						"validation_full-compare-diff-feat-sel")// validation_sample-noweight_cascade-base_ties
 						&& arg0.isDirectory();
 			}
 		};

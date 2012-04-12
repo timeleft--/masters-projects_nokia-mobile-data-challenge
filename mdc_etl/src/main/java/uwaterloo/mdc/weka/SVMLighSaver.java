@@ -7,19 +7,23 @@ import java.io.IOException;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
 
 import uwaterloo.mdc.etl.Config;
 import weka.core.Attribute;
 import weka.core.Capabilities;
+import weka.core.Capabilities.Capability;
 import weka.core.Instance;
 import weka.core.Instances;
-import weka.core.Capabilities.Capability;
 import weka.core.converters.ArffLoader;
 import weka.core.converters.SVMLightSaver;
-import weka.filters.Filter;
-import weka.filters.unsupervised.attribute.Remove;
 
 public class SVMLighSaver {
 	
@@ -60,10 +64,18 @@ public class SVMLighSaver {
 	private static final String ARFF_DIR = "C:\\mdc-datasets\\weka\\segmented_user_full_no-weight_binary";
 	private static final String OUT_DIR = "C:\\mdc-datasets\\svmlight\\output";
 	private static final String IN_DIR = "C:\\mdc-datasets\\svmlight\\input";
-	private static final boolean APPLY_FILTER = false;
+	private static final boolean APPLY_FILTER = true;
 	private static final String FILTER_TEXT = "1,2,3,4,6,7,9,10,11,13,14,15,17,16,19,18,21,20,23,22,25,27,26,29,28,30,34,35,33,38,39,37,42,43,40,41,46,47,44,45,50,49,48,55,54,53,52,59,58,57,56,63,62,68,69,70,71,66,67,76,77,78,72,73,74,75,85,84,86,81,80,83,82,93,92,95,94,89,91,90,102,101,96,97,106,105,119,118,117,116,115,127,126,125,124,123,122,121,120,137,136,139,138,141,140,129,128,155,156,157,158,144,145,146,147,148,149,171,170,169,174,173,172,160,165,164,189,205,204,207,206,199,222,223,217,208,209,239,234,228";
 	private static int[] filteredAttrs; 
-	static void saveFold(File positiveClassDir, int foldStart) throws Exception {
+	
+	static class FoldSaver implements Callable<Void>{
+		private File positiveClassDir;
+		private int foldStart;
+		FoldSaver(File positiveClassDir, int foldStart){
+			this.positiveClassDir =positiveClassDir;
+			this.foldStart = foldStart;
+		}
+	public Void call() throws Exception {
 
 		ArrayList<File> dataFiles = new ArrayList<File>();
 		dataFiles.addAll(Arrays.asList(positiveClassDir
@@ -116,8 +128,10 @@ public class SVMLighSaver {
 					FileUtils.getFile(outDir, "t" + t + "_predictions.txt"))
 					.close();
 		}
+		return null;
 	}
 
+	}
 	private static Instances applyFilter(Instances trainingSet) {
 		if(APPLY_FILTER){
 //			Remove rem = new Remove();
@@ -172,7 +186,7 @@ public class SVMLighSaver {
 
 	public static void main(String[] args) throws Exception {
 		
-		LoadCountsAsAttributes.main(args);
+//		LoadCountsAsAttributes.main(args);
 		
 		String[] attrs = FILTER_TEXT.split("\\,");
 		filteredAttrs = new int[attrs.length];
@@ -181,7 +195,8 @@ public class SVMLighSaver {
 		}
 		Arrays.sort(filteredAttrs);
 		
-		
+		ExecutorService exec = Executors.newFixedThreadPool(Config.NUM_THREADS);
+		List<Future<Void>> futureList = new LinkedList<>();
 		
 		for (int foldStart : Arrays.asList(8, 24, 5, 9, 11, 19, 4, 6, 64, 46,
 				78, 68, 66, 58, 12, 57, 54, 74, 30, 1)) {
@@ -194,8 +209,17 @@ public class SVMLighSaver {
 							return arg0.isDirectory();
 						}
 					})) {
-				saveFold(arffDir, foldStart);
+				futureList.add(exec.submit(new FoldSaver(arffDir, foldStart)));
 			}
+		}
+		
+		for(Future<Void> f: futureList){
+			f.get();
+		}
+		
+		exec.shutdown();
+		while(!exec.isTerminated()){
+			Thread.sleep(5000);
 		}
 	}
 }

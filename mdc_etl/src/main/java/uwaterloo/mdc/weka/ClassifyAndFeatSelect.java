@@ -1684,7 +1684,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 	}
 
-	private static String outputPath = "C:\\mdc-datasets\\weka\\validation_full-compare-diff-feat-sel";
+	private static String outputPath = "C:\\mdc-datasets\\weka\\validation_full-cascade_2-as-small";
 	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user_full-noweights_split";
 	private static String trainingPath = "C:\\mdc-datasets\\weka\\segmented_user";
 	private static String testPath = "C:\\mdc-datasets\\weka\\segmented_user_test";
@@ -1911,23 +1911,23 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 //				 // catch block
 //				 e.printStackTrace();
 //				 }
-//				 try {
-//				 // for (int n = 1; n <= 10; ++n) {
-//				 // // The king
-//				 app = new ClassifyAndFeatSelect(RandomForest.class, true,
-//				 false, true, attrSelectEvalClazz, false);
-//				 // new Class[] {
-//				 // GainRatioAttributeEval.class,
-//				 // // // LatentSemanticAnalysis.class,
-//				 // PrincipalComponents.class, }, false);
-//				 // app.n = n;
-//				 // app.call();
-//				 lastFuture = appExec.submit(app);
-//				 // }
-//				 } catch (Exception e) {
-//				 // catch block
-//				 e.printStackTrace();
-//				 }
+				try {
+					// for (int n = 1; n <= 10; ++n) {
+					// // The king
+					app = new ClassifyAndFeatSelect(RandomForest.class, true,
+							false, true, attrSelectEvalClazz, false);
+					// new Class[] {
+					// GainRatioAttributeEval.class,
+					// // // LatentSemanticAnalysis.class,
+					// PrincipalComponents.class, }, false);
+					// app.n = n;
+					// app.call();
+					lastFuture = appExec.submit(app);
+					// }
+				} catch (Exception e) {
+					// catch block
+					e.printStackTrace();
+				}
 //				 try {
 //				 // for (int n = 1; n <= 10; ++n) {
 //				 // // The king
@@ -2070,19 +2070,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 //					e.printStackTrace();
 //				}
 				
-				 try {
-				 // C4.5 decision tree
-				 app = new ClassifyAndFeatSelect(J48.class, true, false,
-				 true, attrSelectEvalClazz, false);
-				 // new Class[] { GainRatioAttributeEval.class,
-				 // // LatentSemanticAnalysis.class,
-				 // PrincipalComponents.class, }, false);
-				 lastFuture = appExec.submit(app);
-				 // app.call();
-				 } catch (Exception e) {
-				 // catch block
-				 e.printStackTrace();
-				 }
+//				 try {
+//				 // C4.5 decision tree
+//				 app = new ClassifyAndFeatSelect(J48.class, true, false,
+//				 true, attrSelectEvalClazz, false);
+//				 // new Class[] { GainRatioAttributeEval.class,
+//				 // // LatentSemanticAnalysis.class,
+//				 // PrincipalComponents.class, }, false);
+//				 lastFuture = appExec.submit(app);
+//				 // app.call();
+//				 } catch (Exception e) {
+//				 // catch block
+//				 e.printStackTrace();
+//				 }
 				// // TODONE try these
 				// try {
 				// // OK

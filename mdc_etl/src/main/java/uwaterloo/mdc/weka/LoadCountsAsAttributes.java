@@ -37,6 +37,7 @@ import org.apache.commons.math.stat.descriptive.rank.Percentile;
 import uwaterloo.mdc.etl.Config;
 import uwaterloo.mdc.etl.Config.NORMALIZE_BY_ENUM;
 import uwaterloo.mdc.etl.Discretize;
+import uwaterloo.mdc.etl.mallet.ImportIntoMallet;
 import uwaterloo.mdc.etl.mallet.LoadInputsIntoDocs;
 import uwaterloo.mdc.etl.operations.CallableOperationFactory;
 import uwaterloo.mdc.etl.util.KeyValuePair;
@@ -275,8 +276,8 @@ public class LoadCountsAsAttributes implements
 		}
 	}
 
-	public static final String OUTPUT_PATH = "C:\\mdc-datasets\\weka\\segmented_user_full_no-weight_binary";
-	public static final String TEMP_PATH = "C:\\mdc-datasets\\weka\\segmented_user_temp";
+	public static final String OUTPUT_PATH = "D:\\mdc-datasets\\weka\\segmented_user-test";
+	public static final String TEMP_PATH = "D:\\mdc-datasets\\weka\\segmented_user_temp-test";
 
 	private static class ArffSaverCallable implements Callable<Void> {
 		final String outPath;
@@ -489,7 +490,7 @@ public class LoadCountsAsAttributes implements
 	private static long time = System.currentTimeMillis();
 
 	private String shotColNamesPath = "C:\\mdc-datasets\\short-col-names.properties";
-	private String inputPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
+	private String inputPath = "D:\\mdc-datasets\\mallet\\segmented_user-time_test";
 
 	private Properties shortColNameDict = new Properties();
 	private ExecutorService countExec;
@@ -520,10 +521,10 @@ public class LoadCountsAsAttributes implements
 	 */
 	public static void main(String[] args) throws Exception {
 		PrintStream errOrig = System.err;
-		NotifyStream notifyStream = new NotifyStream(errOrig,
-				"LoadCountsAsAttributes");
+//		NotifyStream notifyStream = new NotifyStream(errOrig,
+//				"LoadCountsAsAttributes");
 		try {
-			System.setErr(new PrintStream(notifyStream));
+//			System.setErr(new PrintStream(notifyStream));
 
 			Config.placeLabels = new Properties();
 			Config.placeLabels.load(FileUtils.openInputStream(FileUtils
@@ -538,6 +539,7 @@ public class LoadCountsAsAttributes implements
 							.getFile((Config.LOAD_FEAT_SELECTED_APPS_ONLY ? Config.FEAT_SELECTED_APPS_PATH
 									: Config.APPUID_PROPERTIES_FILE))));
 
+//			ImportIntoMallet.main(args);
 			LoadCountsAsAttributes app = new LoadCountsAsAttributes();
 
 			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
@@ -833,11 +835,11 @@ public class LoadCountsAsAttributes implements
 			System.err.println(new Date() + ": Done in "
 					+ (System.currentTimeMillis() - time) + " millis");
 		} finally {
-			try {
-				notifyStream.close();
-			} catch (IOException ignored) {
-
-			}
+//			try {
+////				notifyStream.close();
+//			} catch (IOException ignored) {
+//
+//			}
 			System.setErr(errOrig);
 		}
 	}
@@ -1082,7 +1084,7 @@ public class LoadCountsAsAttributes implements
 								}
 								placeID = header.toString();
 								instLabel = Config.placeLabels
-										.getProperty(placeID);
+										.getProperty(placeID, "0");
 							}
 							header.setLength(0);
 							++numTabs;
@@ -1599,7 +1601,9 @@ public class LoadCountsAsAttributes implements
 				if (Config.LOAD_FEATSELECTED_ONLY) {
 
 					generalRemove = new Remove();
-					String remIxes = PCA_CONCENSUS_REMOVE_FILTER;
+					String remIxes = "1,2,3,4,6,7,9,10,11,13,14,15,17,16,19,18,21,20,23,22,25,27,26,29,28,30,34,35,33,38,39,37,42,43,40,41,46,47,44,45,50,49,48,55,54,53,52,59,58,57,56,63,62,68,69,70,71,66,67,76,77,78,72,73,74,75,85,84,86,81,80,83,82,93,92,95,94,89,91,90,102,101,96,97,106,105,119,118,117,116,115,127,126,125,124,123,122,121,120,137,136,139,138,141,140,129,128,155,156,157,158,144,145,146,147,148,149,171,170,169,174,173,172,160,165,164,189,205,204,207,206,199,222,223,217,208,209,239,234,228";
+					
+//							PCA_CONCENSUS_REMOVE_FILTER;
 					// FileUtils.readFileToString(FileUtils
 					// .getFile(AttributeConsensusRank.OUTPUT_PATH,
 					// CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
@@ -1608,10 +1612,17 @@ public class LoadCountsAsAttributes implements
 					int numInstsBefore = joinedInsts.numAttributes();
 					joinedInsts = Filter.useFilter(joinedInsts, generalRemove);
 					if (numInstsBefore == joinedInsts.numAttributes()) {
-						for (String attrIxStr : commaSplit.split(remIxes)) {
-							joinedInsts.deleteAttributeAt(Integer
-									.parseInt(attrIxStr) - 1);
+						String[] attrs = remIxes.split("\\,");
+						int[] filteredAttrs = new int[attrs.length];
+						for(int i=0; i<attrs.length; ++i){
+							filteredAttrs[i] = Integer.parseInt(attrs[i]);
 						}
+						Arrays.sort(filteredAttrs);
+						for(int i=filteredAttrs.length-1; i>=0; --i){
+							
+							joinedInsts.deleteAttributeAt(filteredAttrs[i] - 1);
+						}
+						joinedInsts.setClassIndex(joinedInsts.numAttributes() - 1);
 					}
 				}
 
@@ -1748,9 +1759,6 @@ public class LoadCountsAsAttributes implements
 
 							String cls = Long.toString(Math.round(copyInst
 									.classValue()));
-							
-							
-						
 
 							// long idVal = Math.round(copyInst.value(0));
 							// trueLableWr.append(Long.toString(idVal))
@@ -1767,10 +1775,15 @@ public class LoadCountsAsAttributes implements
 								binaryLabel = "-1";
 							}
 
-							if(Config.LOAD_COUNT_TRANSDUCTIVE_ZERO && "0".equals(cls)){
-								binaryLabel = null;
+							if (Config.LOAD_COUNT_TRANSDUCTIVE_ZERO) {
+								if ("0".equals(cls)) {
+									binaryLabel = null;
+								} else if (binaryLabel == null) {
+									throw new AssertionError(
+											"Load transductive hierarchyO");
+								}
 							}
-							
+
 							if (binaryLabel != null) {
 								copyInst.setValue(copyInst.numAttributes() - 1,
 										binaryLabel);
@@ -1796,7 +1809,8 @@ public class LoadCountsAsAttributes implements
 
 					copyInsts.setClassIndex(copyInsts.numAttributes() - 1);
 
-					if (!Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE && !Config.LOAD_COUNT_TRANSDUCTIVE_ZERO) {
+					if (!Config.LOADCOUNTS_FOR_SVMLIGHT_TRANSDUCTIVE
+							&& !Config.LOAD_COUNT_TRANSDUCTIVE_ZERO) {
 						copyInsts.deleteWithMissingClass();
 					}
 

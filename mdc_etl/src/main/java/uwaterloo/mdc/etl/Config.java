@@ -8,7 +8,7 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS =10;
+	public static final int NUM_THREADS =8;
 	public static final int NUM_USERS_TO_PROCESS = 80;
 	public static final int VALIDATION_SAMPLE_USERS = 20;
 	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
@@ -90,25 +90,31 @@ public class Config {
 	public static final String[] LABEL_HIERARCHY = {
 //		// Known vs unknown
 //		"+0+-1-2-3-4-5-6-7-8-9-10-",
-		// Prevalent vs not
-		"+1+2+3+-4-5-6-7-8-9-10-",
-		// This is redundant.. it is exactly the previoys one: "-1-2-3-+4+5+6+7+8+9+10+",
-		// Add this layer and see if two levels or three levels is better
+//		// Prevalent vs not
+//		"+1+2+3+-4-5-6-7-8-9-10-",
+//		// This is redundant.. it is exactly the previoys one: "-1-2-3-+4+5+6+7+8+9+10+",
+//		// Add this layer and see if two levels or three levels is better
 //				"+1+2+-3-", //Homes vs Work
 //				"+4+5+-1-2-3-6-7-8-9-10-", //On the way vs rest
 //				"+6+7+-1-2-3-4-5-8-9-10-", // Sports vs rest
 //				"+8+9+-1-2-3-4-5-6-7-10-", // Commercial vs rest
-		// Pair wise:
-		"+1+-2-","+1+-3-",/*"+2+-1-",*/"+2+-3-",/*"+3+-1-","+3+-2-",*/
-		// One against all (that still remain)
-		"+4+-5-6-7-8-9-10-","+5+-4-6-7-8-9-10-","+6+-4-5-7-8-9-10-",
-		"+7+-4-5-6-8-9-10-","+8+-4-5-6-7-9-10-","+9+-4-5-6-7-8-10-",
-		"+10+-4-5-6-7-8-9-",
+//		// Pair wise:
+//		"+1+-2-","+1+-3-",/*"+2+-1-",*/"+2+-3-",/*"+3+-1-","+3+-2-",*/
+//		// One against all (that still remain)
+//		"+4+-5-6-7-8-9-10-","+5+-4-6-7-8-9-10-","+6+-4-5-7-8-9-10-",
+//		"+7+-4-5-6-8-9-10-","+8+-4-5-6-7-9-10-","+9+-4-5-6-7-8-10-",
+//		"+10+-4-5-6-7-8-9-",
 //		// Those are wrong!
 ////		"+4+-1-2-3-5-6-7-8-9-10-","+5+-1-2-3-4-6-7-8-9-10-","+6+-1-2-3-4-5-7-8-9-10-",
 ////		"+7+-1-2-3-4-5-6-8-9-10-","+8+-1-2-3-4-5-6-7-9-10-","+9+-1-2-3-4-5-6-7-8-10-",
 ////		"+10+-1-2-3-4-5-6-7-8-9-",
 ////		
+		
+//		// Transductive
+//		"+1+-5-6-7-8-9-10-4-2-3-","+2+-4-6-7-8-9-10-1-5-3-","+3+-4-5-7-8-9-10-1-2-6-",
+//		"+4+-5-6-7-8-9-10-1-2-3-","+5+-4-6-7-8-9-10-1-2-3-","+6+-4-5-7-8-9-10-1-2-3-",
+//		"+7+-4-5-6-8-9-10-1-2-3-","+8+-4-5-6-7-9-10-1-2-3-","+9+-4-5-6-7-8-10-1-2-3-",
+//		"+10+-4-5-6-7-8-9-1-2-3-",
 		};
 	public static final String[] LABELS_BINARY = new String[] { "+1","-1"};
 	public static final int LABLES_BINARY_POSITIVE_IX = 0;
@@ -146,7 +152,7 @@ public class Config {
 	public static final boolean LOADCOUNTS_DELETE_MISSING_CLASS = false;
 	public static final boolean LOAD_REPLACE_MISSING_VALUES = true;
 	public static final double LOAD_MISSING_VALUE_REPLA = 0.0; //Laplace = 1.0; regular = 0.0
-	public static final boolean LOAD_FEATSELECTED_ONLY = false;
+	public static final boolean LOAD_FEATSELECTED_ONLY = true;
 	public static final boolean LOAD_USER_SPECIFIC_FEATURE_FILTER = false;
 	public static final boolean LOAD_DROP_VERYFREQUENT_VALS = true; //This is for apps and sie only
 	public static final boolean LOAD_DROP_VERYRARE_VALS = true; // This is for apps onl
@@ -159,7 +165,7 @@ public class Config {
 	public static final boolean LOAD_WEIGHT_LABELS = false;
 	public static final boolean LOAD_COUNT_WEIGHT = false;
 	public static final boolean LOAD_WEIGHT_USERS = false;
-	public static final boolean LOAD_COUNT_TRANSDUCTIVE_ZERO = true;
+	public static final boolean LOAD_COUNT_TRANSDUCTIVE_ZERO = false;
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;

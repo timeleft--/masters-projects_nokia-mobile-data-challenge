@@ -9,6 +9,7 @@ import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletionService;
@@ -39,19 +40,19 @@ public class ImportIntoMallet {
 					&& !("contacts.csv".equals(fName))
 					&& !("gsm.csv".equals(fName))
 					&& !("media.csv".equals(fName))
-//					&& !("bluetooth.csv".equals(fName))
-//					&& !("application.csv".equals(fName))
-//					&& !("sys.csv".equals(fName))
-//					&& !("accel.csv".equals(fName))
+					// && !("bluetooth.csv".equals(fName))
+					// && !("application.csv".equals(fName))
+					// && !("sys.csv".equals(fName))
+					// && !("accel.csv".equals(fName))
 					&& !("process.csv".equals(fName));
 
 			return result;
 		}
 	};
 
-	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
-	private String outPath = "C:\\mdc-datasets\\mallet\\segmented_user-time";
-	private String statsPath = "C:\\mdc-datasets\\mallet\\stats";
+	private String dataRoot = "P:\\mdc-datasets\\mdc2012-375-setB\\mdc2012-375-setB";// "P:\\mdc-datasets\\mdc2012-375-taskdedicated";
+	private String outPath = "D:\\mdc-datasets\\mallet\\segmented_user-time_test";
+	private String statsPath = "D:\\mdc-datasets\\mallet\\stats";
 
 	private Map<String, Writer> statWriters = Collections
 			.synchronizedMap(new HashMap<String, Writer>());
@@ -66,47 +67,48 @@ public class ImportIntoMallet {
 		Config.placeLabels.load(FileUtils.openInputStream(FileUtils
 				.getFile(Config.PATH_PLACE_LABELS_PROPERTIES_FILE)));
 		Config.quantizedFields = new Properties();
-		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
-		
+		Config.quantizedFields.load(FileUtils.openInputStream(FileUtils
+				.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
+
 		Config.appUidDictionary = new Properties();
-//		Config.appUidDictionary.load(FileUtils.openInputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE)));
-		
-		
+		// Config.appUidDictionary.load(FileUtils.openInputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE)));
+
 		ImportIntoMallet app = new ImportIntoMallet();
 		app.createDocuments();
 
-		FileOutputStream os =  FileUtils.openOutputStream(FileUtils.getFile(Config.APPUID_PROPERTIES_FILE));
-		try{
-		Config.appUidDictionary.store(os, null);
-		}finally{
+		FileOutputStream os = FileUtils.openOutputStream(FileUtils
+				.getFile(Config.APPUID_PROPERTIES_FILE));
+		try {
+			Config.appUidDictionary.store(os, null);
+		} finally {
 			os.flush();
 			os.close();
 		}
-//		CountConditionalFreqs countCond = new CountConditionalFreqs();
-//		ExecutorService countExec = Executors.newSingleThreadExecutor();
-//		countExec.submit(countCond);
-////
-////		NaiveBayesClassify nb = new NaiveBayesClassify();
-////		ExecutorService nbExec = Executors.newSingleThreadExecutor();
-////		nbExec.submit(nb);
-////
-////		nbExec.shutdown();
-////		while (!nbExec.isTerminated()) {
-////			Thread.sleep(5000);
-////		}
-//		// AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
-//		// ExecutorService ldaExec = Executors.newSingleThreadExecutor();
-//		// ldaExec.submit(lda);
-//		//
-//		// ldaExec.shutdown();
-//		// while (!ldaExec.isTerminated()) {
-//		// Thread.sleep(5000);
-//		// }
-//
-//		countExec.shutdown();
-//		while (!countExec.isTerminated()) {
-//			Thread.sleep(5000);
-//		}
+		// CountConditionalFreqs countCond = new CountConditionalFreqs();
+		// ExecutorService countExec = Executors.newSingleThreadExecutor();
+		// countExec.submit(countCond);
+		// //
+		// // NaiveBayesClassify nb = new NaiveBayesClassify();
+		// // ExecutorService nbExec = Executors.newSingleThreadExecutor();
+		// // nbExec.submit(nb);
+		// //
+		// // nbExec.shutdown();
+		// // while (!nbExec.isTerminated()) {
+		// // Thread.sleep(5000);
+		// // }
+		// // AuthorTopicAnalysis lda = new AuthorTopicAnalysis();
+		// // ExecutorService ldaExec = Executors.newSingleThreadExecutor();
+		// // ldaExec.submit(lda);
+		// //
+		// // ldaExec.shutdown();
+		// // while (!ldaExec.isTerminated()) {
+		// // Thread.sleep(5000);
+		// // }
+		//
+		// countExec.shutdown();
+		// while (!countExec.isTerminated()) {
+		// Thread.sleep(5000);
+		// }
 	}
 
 	public ImportIntoMallet() throws IOException {
@@ -124,14 +126,17 @@ public class ImportIntoMallet {
 			CallableOperationFactory<String, Long> fromVisitsFactory = new CallableOperationFactory<String, Long>();
 			ExecutorService fromVisitsExec = Executors
 					.newFixedThreadPool(Config.NUM_THREADS / 4);
-			CompletionService<String> fromVisitsEcs = new ExecutorCompletionService<String>(
-					fromVisitsExec);
+			// CompletionService<String> fromVisitsEcs = new
+			// ExecutorCompletionService<String>(
+			// fromVisitsExec);
 
 			CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, String> fromWlanFactory = new CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, String>();
 			ExecutorService fromWlanExec = Executors
 					.newFixedThreadPool(Config.NUM_THREADS / 4);
-			CompletionService<KeyValuePair<String, HashMap<String, Object>>> fromWlanEcs = new ExecutorCompletionService<KeyValuePair<String, HashMap<String, Object>>>(
-					fromWlanExec);
+			// CompletionService<KeyValuePair<String, HashMap<String, Object>>>
+			// fromWlanEcs = new ExecutorCompletionService<KeyValuePair<String,
+			// HashMap<String, Object>>>(
+			// fromWlanExec);
 
 			CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, StringBuilder> loadDataFactory = new CallableOperationFactory<KeyValuePair<String, HashMap<String, Object>>, StringBuilder>();
 			ExecutorService loadDataExec = Executors
@@ -159,6 +164,7 @@ public class ImportIntoMallet {
 			RefineDocumentsFromWlan.setLOG(FromWifiLogWriter);
 			try {
 				File dataRootFile = FileUtils.getFile(dataRoot);
+				LinkedList<Future<String>> fromVisitFutures = new LinkedList<>();
 				for (File userDir : dataRootFile.listFiles()) {
 					File visitsFile = FileUtils.getFile(userDir,
 							"visit_sequence_10min.csv");
@@ -166,17 +172,23 @@ public class ImportIntoMallet {
 							.createOperation(CreateDocumentsFromVisits.class,
 									this, visitsFile, outPath);
 
-					fromVisitsEcs.submit(fromVisits);
+					// fromVisitsEcs.submit(fromVisits);
+					fromVisitFutures.add(fromVisitsExec.submit(fromVisits));
 					++fromVisitsNumberTasks;
 					if (fromVisitsNumberTasks >= Config.NUM_USERS_TO_PROCESS) {
 						break;
 					}
 				}
 
-				for (int i = 0; i < fromVisitsNumberTasks; ++i) {
+				LinkedList<Future<KeyValuePair<String, HashMap<String, Object>>>> fromWlanFutures = new LinkedList<>();
+
+				for (Future<String> finished : fromVisitFutures) {
 					System.out.println(PerfMon.asString());
 
-					Future<String> finished = fromVisitsEcs.take();
+					// for (int i = 0; i < fromVisitsNumberTasks; ++i) {
+					// System.out.println(PerfMon.asString());
+					//
+					// Future<String> finished = fromVisitsEcs.take();
 					String userid = finished.get();
 					if (userid != null) {
 						File userDir = FileUtils.getFile(dataRootFile, userid);
@@ -186,7 +198,8 @@ public class ImportIntoMallet {
 								.createOperation(RefineDocumentsFromWlan.class,
 										this, wlanFile, outPath);
 
-						fromWlanEcs.submit(fromWlan);
+						fromWlanFutures.add(fromWlanExec.submit(fromWlan));
+						// fromWlanEcs.submit(fromWlan);
 						++numberWifiTasks;
 					}
 				}
@@ -198,12 +211,17 @@ public class ImportIntoMallet {
 				File[] wlanPrintUserDirs = dataRootFile.listFiles();
 				int wlanPrintUserDirsIx = 0;
 				HashMap<String, HashMap<String, Object>> pendingWlanPrintTasks = new HashMap<String, HashMap<String, Object>>();
-				for (int i = 0; i < numberWifiTasks; ++i) {
+				for (Future<KeyValuePair<String, HashMap<String, Object>>> finishedWlan : fromWlanFutures) {
 
 					System.out.println(PerfMon.asString());
 
-					Future<KeyValuePair<String, HashMap<String, Object>>> finishedWlan = fromWlanEcs
-							.take();
+					// for (int i = 0; i < numberWifiTasks; ++i) {
+					//
+					// System.out.println(PerfMon.asString());
+					//
+					// Future<KeyValuePair<String, HashMap<String, Object>>>
+					// finishedWlan = fromWlanEcs
+					// .take();
 					KeyValuePair<String, HashMap<String, Object>> wlanStat = finishedWlan
 							.get();
 
@@ -306,8 +324,10 @@ public class ImportIntoMallet {
 				}
 
 				if (wlanPrintUserDirsIx != Config.NUM_USERS_TO_PROCESS) {
-					throw new Exception("You printed wlan stats only users: "
-							+ printTasks);
+					// This will happen when NUM_USERS is greater than the actual users.
+					// throw new Exception(
+					System.err.println("You printed wlan stats only users: "
+							+ wlanPrintUserDirsIx);
 				}
 
 				// ////////// Print load stats
@@ -397,12 +417,13 @@ public class ImportIntoMallet {
 					wr.close();
 				}
 			}
+
 			delta = System.currentTimeMillis() - delta;
 			PerfMon.increment(TimeMetrics.IO_WRITE, delta);
-
-			System.out.println(PerfMon.asString());
-			System.out.println("Done!");
 		}
+		System.out.println(PerfMon.asString());
+		System.out.println("Done!");
+
 	}
 
 }
