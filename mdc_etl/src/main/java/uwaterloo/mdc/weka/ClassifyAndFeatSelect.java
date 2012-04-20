@@ -39,16 +39,12 @@ import uwaterloo.util.NotifyStream;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.AttributeTransformer;
-import weka.attributeSelection.CfsSubsetEval;
-import weka.attributeSelection.ConsistencySubsetEval;
 import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
 import weka.attributeSelection.InfoGainAttributeEval;
 import weka.attributeSelection.PrincipalComponents;
 import weka.attributeSelection.Ranker;
-import weka.attributeSelection.ReliefFAttributeEval;
 import weka.attributeSelection.SubsetEvaluator;
-import weka.attributeSelection.WrapperSubsetEval;
 import weka.classifiers.Classifier;
 import weka.classifiers.SingleClassifierEnhancer;
 import weka.classifiers.bayes.DMNBtext;
@@ -72,7 +68,7 @@ import weka.filters.unsupervised.attribute.Remove;
 
 public class ClassifyAndFeatSelect implements Callable<Void> {
 	// private static boolean validate = true;
-	private double superiorityRatio = 1.25;
+	private double superiorityRatio = 1;
 
 	// Commented out are Dimensionality reductions that failed
 	// Class<? extends ASEvaluation>[] cannot create!
@@ -86,12 +82,12 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 			// SVMAttributeEval.class,
 			// SymmetricalUncertAttributeEval.class,
 //			GainRatioAttributeEval.class, 
-			ReliefFAttributeEval.class,
-			CfsSubsetEval.class, 
-			PrincipalComponents.class,
-			ConsistencySubsetEval.class,
-//
-			WrapperSubsetEval.class,
+//			ReliefFAttributeEval.class,
+//			CfsSubsetEval.class, 
+//			PrincipalComponents.class,
+//			ConsistencySubsetEval.class,
+////
+//			WrapperSubsetEval.class,
 
 	};
 	// // // Attribute Transformers
@@ -1143,7 +1139,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										}
 									} else if (l == 1) {
 										for (int c = 0; c < instDistribs[i].length; ++c) {
-											int p = (c == 1 || c == 3 ? Config.LABLES_BINARY_POSITIVE_IX
+											int p = (c == 1 || c == 3 || c == 2 ? Config.LABLES_BINARY_POSITIVE_IX
 													: Config.LABLES_BINARY_NEGATIVE_IX);
 											double numerator = vClassDist[p]
 													* instDistribs[i][c];
@@ -1193,7 +1189,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										// vInst.classValue(),
 										// nearTiesClassifier,
 										// tieSizeClassifier, null, null);
-										if (honoredClassifier[i] == 2 || honoredClassifier[i] > 3) {
+//										honoredClassifier[i] == 2 ||
+										if (honoredClassifier[i] > 3) {
 											honoredClassifier[i] = 3;
 										} else if (honoredClassifier[i] > 0) {
 											honoredClassifier[i] = 2;
@@ -1205,8 +1202,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 										tieSizeClassifier.addValue(honorList
 												.size());
 										if ((honoredClassifier[i] == 3 && (vInst
-												.classValue() > 3|| vInst
-												.classValue() == 2)) ) {
+												.classValue() > 3))) {
+//												|| vInst.classValue() == 2)) ) {
 											prevLabelCorrectClassifier
 													.addValue(true);
 										} else if ((honoredClassifier[i] == 2 && vInst
@@ -1684,8 +1681,8 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 		}
 	}
 
-	private static String outputPath = "C:\\mdc-datasets\\weka\\validation_full-cascade_2-as-small";
-	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user_full-noweights_split";
+	private static String outputPath = "C:\\mdc-datasets\\weka\\validation_full_info-gain";
+	private String inPath = "C:\\mdc-datasets\\weka\\segmented_user-filtered";
 	private static String trainingPath = "C:\\mdc-datasets\\weka\\segmented_user";
 	private static String testPath = "C:\\mdc-datasets\\weka\\segmented_user_test";
 
@@ -2038,20 +2035,20 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 //					// catch block
 //					e.printStackTrace();
 //				}
-				try {
-					// Good
-					app = new ClassifyAndFeatSelect(DMNBtext.class, true,
-							false, true, attrSelectEvalClazz,
-							// new Class[] { GainRatioAttributeEval.class,
-							// // LatentSemanticAnalysis.class,
-							// PrincipalComponents.class, },
-							false);
-					lastFuture = appExec.submit(app);
-					// app.call();
-				} catch (Exception e) {
-					// catch block
-					e.printStackTrace();
-				}
+//				try {
+//					// Good
+//					app = new ClassifyAndFeatSelect(DMNBtext.class, true,
+//							false, true, attrSelectEvalClazz,
+//							// new Class[] { GainRatioAttributeEval.class,
+//							// // LatentSemanticAnalysis.class,
+//							// PrincipalComponents.class, },
+//							false);
+//					lastFuture = appExec.submit(app);
+//					// app.call();
+//				} catch (Exception e) {
+//					// catch block
+//					e.printStackTrace();
+//				}
 //
 //				try {
 //					// for (int n = 1; n <= 10; ++n) {
@@ -2070,19 +2067,19 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 //					e.printStackTrace();
 //				}
 				
-//				 try {
-//				 // C4.5 decision tree
-//				 app = new ClassifyAndFeatSelect(J48.class, true, false,
-//				 true, attrSelectEvalClazz, false);
-//				 // new Class[] { GainRatioAttributeEval.class,
-//				 // // LatentSemanticAnalysis.class,
-//				 // PrincipalComponents.class, }, false);
-//				 lastFuture = appExec.submit(app);
-//				 // app.call();
-//				 } catch (Exception e) {
-//				 // catch block
-//				 e.printStackTrace();
-//				 }
+				 try {
+				 // C4.5 decision tree
+				 app = new ClassifyAndFeatSelect(J48.class, true, false,
+				 true, attrSelectEvalClazz, false);
+				 // new Class[] { GainRatioAttributeEval.class,
+				 // // LatentSemanticAnalysis.class,
+				 // PrincipalComponents.class, }, false);
+				 lastFuture = appExec.submit(app);
+				 // app.call();
+				 } catch (Exception e) {
+				 // catch block
+				 e.printStackTrace();
+				 }
 				// // TODONE try these
 				// try {
 				// // OK
@@ -3103,7 +3100,7 @@ public class ClassifyAndFeatSelect implements Callable<Void> {
 				}
 				break;
 			case 1:
-//			case 2:
+			case 2:
 			case 3:
 				if (l == 0) {
 					trainingSet.instance(i).setClassValue("-1");

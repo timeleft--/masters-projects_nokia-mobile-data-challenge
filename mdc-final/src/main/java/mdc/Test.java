@@ -22,8 +22,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
+import org.apache.commons.io.FilenameUtils;
+
+import weka.attributeSelection.PrincipalComponents;
+import weka.attributeSelection.Ranker;
 import weka.classifiers.Classifier;
+import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.trees.RandomForest;
 import weka.core.EuclideanDistance;
 import weka.core.Instance;
@@ -33,16 +37,28 @@ import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.Add;
 import weka.filters.unsupervised.attribute.Remove;
 
-public class Test implements Callable<Void> {
-
+public class Test implements Callable<KeyValuePair<String, double[]>> {
+	static Class<? extends Classifier>[] classifiers = new Class[] {
+	// DMNBtext.class,
+	// DecisionStump.class,
+	RandomForest.class,
+	// J48.class
+	// AdaBoostM1.class,
+	// MultiBoostAB.class,
+	// LibSVM.class
+	};
 	private static final String[] LABELS = new String[] { "0", "1", "2", "3",
 			"4", "5", "6", "7", "8", "9", "10" };
 	public static final String[] LABELS_BINARY = new String[] { "+1", "-1" };
 	public static final int LABLES_BINARY_POSITIVE_IX = 0;
 	public static final int LABLES_BINARY_NEGATIVE_IX = 1;
-	private static final boolean validate = true;
+	private static final boolean validate = false;
 	private static final Properties placeLabels = new Properties();
 	private static final boolean verbose = false;
+	private static final int numFolds = 4;
+	private static final boolean DIM_REDUCE = false;
+	private static final boolean MAXIMIZE_ENTROPY = false;
+	private static boolean crossValidate = false;
 
 	private static int numThreads;
 	private static Instances trainingSet;
@@ -52,32 +68,45 @@ public class Test implements Callable<Void> {
 	double supRatio;
 	int backLength;
 	Random rand = new Random(System.currentTimeMillis());
+	Class<? extends Classifier> classifierClazz;
 
-	public Test(double s, int b) {
+	public Test(double s, int b, Class<? extends Classifier> c) {
 		supRatio = s;
 		backLength = b;
+		this.classifierClazz = c;
 	}
 
-	public Void call() throws Exception {
+	public KeyValuePair<String, double[]> call() throws Exception {
 
 		Map<File, double[][]> userInstDistribs = new HashMap<File, double[][]>();
 		Map<File, int[]> userHonoredClassifier = new HashMap<File, int[]>();
-		Map<String, SummaryStatistics[]> placeDistribsMap = new TreeMap<String, SummaryStatistics[]>();
+		Map<String, double[]> placeDistribsMap = new TreeMap<String, double[]>();
+		Map<String, Integer> placeCountMap = new TreeMap<String, Integer>();
+		long totalCount = 0;
 
 		for (int l = 0; l < 4; ++l) {
 			Instances training = copyInstancesIntoSets(trainingSet, l, true);
-			Classifier cls = new RandomForest();
+			Classifier cls = classifierClazz.getConstructor().newInstance();
+
+			if (DIM_REDUCE) {
+				AttributeSelectedClassifier atsc = new AttributeSelectedClassifier();
+				atsc.setClassifier(cls);
+				atsc.setEvaluator(new PrincipalComponents());
+				atsc.setSearch(new Ranker());
+				cls = atsc;
+			}
+
 			cls.buildClassifier(training);
 
 			for (File userFile : testFiles) {
-
-				String filenamePfx = "n" + supRatio + "_b" + backLength + "_l"
-						+ l + "_ALL";
 
 				Instances test = new Instances(Channels.newReader(FileUtils
 						.openInputStream(userFile).getChannel(), "US-ASCII"));
 				test.setClassIndex(test.numAttributes() - 1);
 				test = copyInstancesIntoSets(test, l, false);
+
+				String filenamePfx = test.relationName() + "_n" + supRatio
+						+ "_b" + backLength + "_l" + l + "_ALL";
 
 				double[][] instDistribs = userInstDistribs.get(userFile);
 				if (instDistribs == null) {
@@ -146,7 +175,7 @@ public class Test implements Callable<Void> {
 						} else if (l == 1) {
 							for (int c = 0; c < instDistribs[i].length; ++c) {
 
-								int p = (c == 1 || c == 3 ? LABLES_BINARY_POSITIVE_IX
+								int p = (c == 1 || c == 3 || c == 2? LABLES_BINARY_POSITIVE_IX
 										: LABLES_BINARY_NEGATIVE_IX);
 
 								double numerator = dist[p] * instDistribs[i][c];
@@ -173,8 +202,7 @@ public class Test implements Callable<Void> {
 							}
 							honoredClassifier[i] = honoredList.get(rand
 									.nextInt(honoredList.size()));
-							if (honoredClassifier[i] == 2
-									|| honoredClassifier[i] > 3) {
+							if (honoredClassifier[i] > 3) {
 								honoredClassifier[i] = 3;
 							} else if (honoredClassifier[i] > 0) {
 								honoredClassifier[i] = 2;
@@ -193,27 +221,32 @@ public class Test implements Callable<Void> {
 							if (honoredClassifier[i] == -1) {
 								normalizeProbabilities(instDistribs[i]);
 							}
-							if (verbose){
+							if (verbose) {
 								System.out.println("Replacing "
 										+ Arrays.toString(dist) + " by "
 										+ Arrays.toString(instDistribs[i]));
 							}
 							dist = instDistribs[i];
 
-							SummaryStatistics[] placeDistribs = placeDistribsMap
+							double[] placeDistribs = placeDistribsMap
 									.get(placeId);
 							if (placeDistribs == null) {
-								placeDistribs = new SummaryStatistics[LABELS.length];
-								for (int p = 0; p < placeDistribs.length; ++p) {
-									placeDistribs[p] = new SummaryStatistics();
-								}
-
+								placeDistribs = new double[LABELS.length];
 								placeDistribsMap.put(placeId, placeDistribs);
 							}
 
 							for (int p = 0; p < placeDistribs.length; ++p) {
-								placeDistribs[p].addValue(dist[p]);
+								if (dist[p] > 0) {
+									placeDistribs[p] += dist[p];
+								}
 							}
+
+							Integer placeCount = placeCountMap.get(placeId);
+							if (placeCount == null) {
+								placeCount = 0;
+							}
+							placeCountMap.put(placeId, placeCount + 1);
+							++totalCount;
 						}
 
 						double label = getClassFromDistrib(dist, tInst,
@@ -224,8 +257,8 @@ public class Test implements Callable<Void> {
 							throw new AssertionError(
 									"Visit times and labels are not inline");
 						}
-						instIDVisitTimeWr.append(line + "\t" + label + "\t"
-								+ Arrays.toString(dist) + "\n");
+						instIDVisitTimeWr.append(line + "\t" + label + "\t\""
+								+ Arrays.toString(dist) + "\"\n");
 						prevInstLabel = label;
 					}
 
@@ -238,14 +271,141 @@ public class Test implements Callable<Void> {
 			}
 		}
 
-		writePlaceSummary(placeDistribsMap, "AVG");
-//		writePlaceSummary(placeDistribsMap, "MAX");
+		double[] beforeEM = writePlaceSummary(placeDistribsMap, placeCountMap,
+				"beforeEM");
 
-		return null;
+		em(placeDistribsMap, placeCountMap, totalCount);
+
+		double[] afterEM = writePlaceSummary(placeDistribsMap, placeCountMap,
+				"afterEM");
+
+		double[] result = new double[6];
+		for (int i = 0; i < 6; ++i) {
+			if (i % 2 == 0) {
+				result[i] = beforeEM[i / 2];
+			} else {
+				result[i] = afterEM[i / 2];
+			}
+		}
+		return new KeyValuePair<String, double[]>(supRatio + "\t" + backLength,
+				result);
 	}
 
-	private void writePlaceSummary(
-			Map<String, SummaryStatistics[]> placeDistribsMap, String measure)
+//	double[] labelPriors = new double[] 	
+//			{ 1E-9, 0.15, 0.1-1E-9, 0.15, 0.05, 0.1,
+//			0.1, 0.1, 0.1, 0.1, 0.05 };
+//	{ 0.2, 0.15, 0.1, 0.15, 0.05, 0.05,
+//		0.05, 0.05, 0.05, 0.05, 0.05 };
+//			{ 0.1, 0.1, 0.1, 0.1, 0.05, 0.1,
+//			0.1, 0.1, 0.1, 0.1, 0.05 };
+//	{ 0.5, 0.15, 0.1, 0.15, 0.01, 0.02,
+//		0.02, 0.02, 0.01, 0.01, 0.01 };
+	// { 0.9, 0.02, 0.01, 0.02, 0.0075,
+		// 0.0075, 0.0075, 0.0075, 0.0075, 0.0075, 0.005 };
+
+
+	double[] prevalentPriors = new double[]  	
+	{ 1E-9, 0.5, 0.1, 0.33-1E-9, 0.01, 0.01,
+			0.01, 0.01, 0.01, 0.01, 0.01 };
+	double[] rarePriors = new double[] 
+			{ 1E-9, 1E-4, 0.15-(1E-9+2*1E-4), 1E-4, 0.05, 0.15,
+			0.15, 0.15, 0.15, 0.15, 0.05 };
+
+	private void em(Map<String, double[]> placeDistribsMap,
+			Map<String, Integer> placeCountMap, double totalCount) {
+
+		double avgCount = totalCount *  1.0 / placeCountMap.size();
+		double logLk = 0.0;
+		double sumOfW = 0.0;
+		double logLkOld = 0;
+		for (int i = 0; i < 1000; ++i) {
+
+			Map<String, double[]> emWeightsMap = new HashMap<String, double[]>();
+			logLkOld = logLk;
+
+			logLk = 0.0;
+			sumOfW = 0.0;
+			for (String placeId : placeDistribsMap.keySet()) {
+				double[] emWeights = emWeightsMap.get(placeId);
+				if (emWeights == null) {
+					emWeights = new double[11];
+					emWeightsMap.put(placeId, emWeights);
+				}
+
+				int count = placeCountMap.get(placeId);
+			
+				double[] priors;
+				if(count > avgCount){
+					priors = prevalentPriors;
+				} else {
+					priors = rarePriors;
+				}
+//				priors = labelPriors;
+				
+				double[] placeDistrib = placeDistribsMap.get(placeId);
+				
+				// Start messing up
+				placeDistrib[0] = 0;
+				normalizeProbabilities(placeDistrib);
+				// End messing up
+				
+				double[] logJoint = new double[LABELS.length];
+				double max = Double.MIN_VALUE;
+				for (int c = 0; c < LABELS.length; ++c) {
+					if (count > 0 && placeDistrib[c] > 0) {
+						if (MAXIMIZE_ENTROPY) {
+							logJoint[c] = priors[c]
+									* ((placeDistrib[c] / count) * (Math
+											.log(count) - Math
+											.log(placeDistrib[c])));
+						} else {
+							logJoint[c] = Math.log(placeDistrib[c] / count)
+									+ Math.log(priors[c]);
+						}
+					}
+					if (logJoint[c] > max) {
+						max = logJoint[c];
+						// maxIx = c;
+					}
+				}
+				double sum = 0.0;
+				for (int c = 0; c < LABELS.length; ++c) {
+					emWeights[c] = Math.exp(logJoint[c] - max);
+					sum += emWeights[c];
+				}
+
+				double logDensity = (max + Math.log(sum));
+				for (int c = 0; c < LABELS.length; ++c) {
+					
+					double w = 1;//(avgCount / count);
+					
+					logLk += w * logDensity;
+					sumOfW += w;
+
+					emWeights[c] /= sum;
+				}
+			}
+
+			logLk /= sumOfW;
+
+			if (i > 0) {
+				if ((logLk - logLkOld) < 1E-6) {
+					break;
+				}
+			}
+
+			for (String placeId : placeDistribsMap.keySet()) {
+				double[] emWeights = emWeightsMap.get(placeId);
+				double[] placeDistrib = placeDistribsMap.get(placeId);
+				for (int c = 0; c < LABELS.length; ++c) {
+					placeDistrib[c] *= emWeights[c];
+				}
+			}
+		}
+	}
+
+	private double[] writePlaceSummary(Map<String, double[]> placeDistribsMap,
+			Map<String, Integer> placeCountMap, String measure)
 			throws IOException {
 
 		int[][] confusion = new int[LABELS.length][LABELS.length];
@@ -272,16 +432,16 @@ public class Test implements Callable<Void> {
 				wr.append(userId + "\t").append(
 						placeId.substring(underScoreIx + 1) + "\t");
 
-				SummaryStatistics[] placeDist = placeDistribsMap.get(placeId);
-				wr.append(placeDist[0].getN() + "\t");
+				double[] placeDist = placeDistribsMap.get(placeId);
+				int placeCount = placeCountMap.get(placeId);
+				wr.append(placeCount + "\t");
 
-				double maxProb = 1E-9;
+				double maxProb = Double.MIN_VALUE;
 				LinkedList<Integer> result = new LinkedList<Integer>();
 
 				for (int c = 0; c < LABELS.length; ++c) {
 
-					double prob = ("AVG".equals(measure) ? placeDist[c]
-							.getMean() : placeDist[c].getMax());
+					double prob = placeDist[c] / placeCount;
 
 					wr.append(prob + "\t");
 
@@ -311,17 +471,19 @@ public class Test implements Callable<Void> {
 			wr.close();
 		}
 
+		double[] result;
 		wr = Channels.newWriter(
 				FileUtils.openOutputStream(
 						FileUtils.getFile(outPath, "n" + supRatio + "_b"
 								+ backLength + "_evaluation_" + measure
 								+ ".csv")).getChannel(), "US-ASCII");
 		try {
-			writeEvaluation(confusion, wr);
+			result = writeEvaluation(confusion, wr);
 		} finally {
 			wr.flush();
 			wr.close();
 		}
+		return result;
 	}
 
 	private double getClassFromDistrib(double[] dist, Instance tInst,
@@ -429,43 +591,93 @@ public class Test implements Callable<Void> {
 		File[] trainingFiles = FileUtils.getFile(trainingPath).listFiles(
 				arffFilter);
 
-		trainingSet = loadAugmentedInstances(trainingFiles);
-
 		String testPath = "/u/yaboulna/mdc/test";
 		a = argList.indexOf("-test");
 		if (a >= 0) {
 			testPath = argList.get(a + 1);
 		}
-		testFiles = FileUtils.getFile(testPath).listFiles(arffFilter);
 
-		// testSet = loadAugmentedInstances(testFiles);
+		if (crossValidate) {
+			String outPathOrig = outPath;
+			int foldWidth = trainingFiles.length / numFolds;
+			for (int v = 0; v < numFolds; ++v) {
+				LinkedList<File> foldTraining = new LinkedList<File>(
+						Arrays.asList(trainingFiles));
 
-		ExecutorService appExec = Executors.newFixedThreadPool(numThreads);
-
-		List<Future<Void>> listFuture = new LinkedList<Future<Void>>();
-
-		for (double s : Arrays.asList(1.0, 1.26, 1.51)) {
-			for (int b : Arrays.asList(1, 10, (6 * 24), 1000)) {
-				try {
-					listFuture.add(appExec.submit(new Test(s, b)));
-				} catch (Exception ex) {
-					ex.printStackTrace();
+				int foldStart = v * foldWidth;
+				int foldEnd = foldStart + foldWidth;
+				LinkedList<File> foldTesting = new LinkedList<File>();
+				for (int f = foldEnd - 1; f >= foldStart; --f) {
+					foldTesting.add(foldTraining.remove(f));
 				}
+				testFiles = new File[foldWidth];
+				foldTesting.toArray(testFiles);
+				File[] temp = new File[foldTraining.size()];
+				foldTraining.toArray(temp);
+				trainingSet = loadAugmentedInstances(temp);
+				outPath = FilenameUtils.concat(outPathOrig, "v" + v);
+				runFold();
 			}
+		} else {
+			trainingSet = loadAugmentedInstances(trainingFiles);
+			testFiles = FileUtils.getFile(testPath).listFiles(arffFilter);
+			runFold();
 		}
 
-		try {
-			for (Future<Void> future : listFuture)
-				future.get();
+	}
 
-			appExec.shutdown();
+	private static void runFold() throws IOException {
+		String outPathOrig = outPath;
 
-			while (!appExec.isTerminated()) {
-				System.out.println("Shutting down");
-				Thread.sleep(5000);
+		for (Class c : classifiers) {
+			outPath = FilenameUtils.concat(outPathOrig, c.getName());
+			outPath = FilenameUtils.concat(outPath, "info-gain");
+
+			ExecutorService appExec = Executors.newFixedThreadPool(numThreads);
+
+			List<Future<KeyValuePair<String, double[]>>> listFuture = new LinkedList<Future<KeyValuePair<String, double[]>>>();
+
+			for (double s : Arrays.asList(1.0,1.15)){
+					//1.0, 1.05, 1.10, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45/* , 1.51, 2.0 */)) {
+				for (int b : Arrays.asList(0,1,2)){
+//						1, 2,3,4,5,6,7,8,9,10/* , (6 * 24), 1000 */)) {
+					try {
+						listFuture.add(appExec.submit(new Test(s, b, c)));
+					} catch (Exception ex) {
+						ex.printStackTrace();
+					}
+				}
 			}
-		} catch (Exception ex) {
-			ex.printStackTrace();
+
+			Writer wr = Channels.newWriter(
+					FileUtils.openOutputStream(
+							FileUtils.getFile(outPath, "n_b_eval.csv"))
+							.getChannel(), "US-ASCII");
+			try {
+				wr.append("n\tb\ttcr\ttcr_em\tprecision\tprecision_em\trecall\trecall_em\n");
+
+				for (Future<KeyValuePair<String, double[]>> future : listFuture) {
+					KeyValuePair<String, double[]> res = future.get();
+					wr.append(res.getKey());
+					double[] measures = res.getValue();
+					for (int i = 0; i < measures.length; ++i) {
+						wr.append("\t" + measures[i]);
+					}
+					wr.append("\n");
+				}
+
+				appExec.shutdown();
+
+				while (!appExec.isTerminated()) {
+					System.out.println("Shutting down");
+					Thread.sleep(5000);
+				}
+			} catch (Exception ex) {
+				ex.printStackTrace();
+			} finally {
+				wr.flush();
+				wr.close();
+			}
 		}
 	}
 
@@ -527,7 +739,7 @@ public class Test implements Callable<Void> {
 				}
 				break;
 			case 1:
-				// case 2:
+			case 2:
 			case 3:
 				if (l == 0) {
 					trainingSet.instance(i).setClassValue("-1");
@@ -589,30 +801,39 @@ public class Test implements Callable<Void> {
 		return copyInsts;
 	}
 
-	static void writeEvaluation(int[][] confusionMatrix, Writer evalWr)
+	static double[] writeEvaluation(int[][] confusionMatrix, Writer evalWr)
 			throws IOException {
 		double[] precision = new double[11];
 		double[] recall = new double[11];
+		double tc = 0;
+		double grandTotal = 0;
 		double avgPrec = 0.0;
 		double avgRecall = 0.0;
 		for (int i = 0; i < 11; ++i) {
 			double numerator = confusionMatrix[i][i];
+			tc += numerator;
 			double precDenim = 0.0;
 			double recDenim = 0.0;
 			for (int j = 0; j < 11; ++j) {
 				precDenim += confusionMatrix[j][i];
 				recDenim += confusionMatrix[i][j];
 			}
-			precision[i] = numerator / precDenim;
-			recall[i] = numerator / recDenim;
+			if (precDenim > 0) {
+				precision[i] = numerator / precDenim;
+			}
+			if (recDenim > 0) {
+				recall[i] = numerator / recDenim;
+			}
 			avgPrec += precision[i];
 			avgRecall += recall[i];
 		}
+		avgPrec /= 11.0;
+		avgRecall /= 11.0;
 		evalWr.append(
 				"Precision: " + Arrays.toString(precision) + " Average: "
-						+ (avgPrec / 11) + "\n").append(
-				"Recall: " + Arrays.toString(recall) + " Average: "
-						+ (avgRecall / 11) + "\n");
+						+ avgPrec + "\n").append(
+				"Recall: " + Arrays.toString(recall) + " Average: " + avgRecall
+						+ "\n");
 
 		evalWr.append("Confusion Matrix:\n").append(
 				"label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\n");
@@ -626,10 +847,14 @@ public class Test implements Callable<Void> {
 				rowTotal += cnt;
 				evalWr.append('\t').append(Long.toString(Math.round(cnt)));
 			}
-
+			grandTotal += rowTotal;
 			evalWr.append('\t').append(Long.toString(rowTotal)).append('\n');
 		}
 
+		tc /= grandTotal;
+		evalWr.append("Truce Classification Rate: " + tc);
+
+		return new double[] { tc, avgPrec, avgRecall };
 	}
 
 	public static void normalizeProbabilities(double[] modifiedLabelDistrib) {

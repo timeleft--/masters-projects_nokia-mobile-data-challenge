@@ -9,6 +9,12 @@
   		<artifactId>commons-io</artifactId>
   		<version>2.1</version>
   	</dependency>
+  		<dependency>
+			<groupId>mdc2012-deps</groupId>
+			<artifactId>LibSVM</artifactId>
+			<version>3.11</version>
+		</dependency>
+	
   	<dependency>
   		<groupId>org.apache.commons</groupId>
   		<artifactId>commons-math3</artifactId>

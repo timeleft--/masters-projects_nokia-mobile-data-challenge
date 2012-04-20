@@ -521,10 +521,10 @@ public class LoadCountsAsAttributes implements
 	 */
 	public static void main(String[] args) throws Exception {
 		PrintStream errOrig = System.err;
-//		NotifyStream notifyStream = new NotifyStream(errOrig,
-//				"LoadCountsAsAttributes");
+		// NotifyStream notifyStream = new NotifyStream(errOrig,
+		// "LoadCountsAsAttributes");
 		try {
-//			System.setErr(new PrintStream(notifyStream));
+			// System.setErr(new PrintStream(notifyStream));
 
 			Config.placeLabels = new Properties();
 			Config.placeLabels.load(FileUtils.openInputStream(FileUtils
@@ -534,12 +534,16 @@ public class LoadCountsAsAttributes implements
 					.getFile(Config.QUANTIZED_FIELDS_PROPERTIES)));
 
 			featSelectedApps = new Properties();
-			featSelectedApps
-					.load(FileUtils.openInputStream(FileUtils
-							.getFile((Config.LOAD_FEAT_SELECTED_APPS_ONLY ? Config.FEAT_SELECTED_APPS_PATH
-									: Config.APPUID_PROPERTIES_FILE))));
-
-//			ImportIntoMallet.main(args);
+			if (Config.LOAD_APPS_FROM_DICTIONARY) {
+				featSelectedApps.load(FileUtils.openInputStream(FileUtils
+						.getFile(Config.APP_DICTIONARY_PATH)));
+			} else {
+				featSelectedApps
+						.load(FileUtils.openInputStream(FileUtils
+								.getFile((Config.LOAD_FEAT_SELECTED_APPS_ONLY ? Config.FEAT_SELECTED_APPS_PATH
+										: Config.APPUID_PROPERTIES_FILE))));
+			}
+			// ImportIntoMallet.main(args);
 			LoadCountsAsAttributes app = new LoadCountsAsAttributes();
 
 			if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
@@ -655,18 +659,31 @@ public class LoadCountsAsAttributes implements
 						+ rareWordAppTh);
 
 				appUsageAttrsFV = new FastVector();
-				for (String appUid : aggregateAppFreq.keySet()) {
-					Integer appUsageOccurs = aggregateAppFreq.get(appUid);
-					if ((Config.LOAD_DROP_VERYFREQUENT_VALS && appUsageOccurs > stopWordAppTh)
-							|| (Config.LOAD_DROP_VERYRARE_VALS && appUsageOccurs < rareWordAppTh)) {
-						continue;
+				if (Config.LOAD_APPS_FROM_DICTIONARY) {
+					Attribute[] appAttrArr = new Attribute[featSelectedApps
+							.size()];
+					for (Object appUid : featSelectedApps.keySet()) {
+						Attribute appAttr = new Attribute((String) appUid);
+						appAttrArr[Integer.parseInt((String) featSelectedApps
+								.get(appUid))] = appAttr;
 					}
+					for (Attribute appAttr : appAttrArr) {
+						appUsageAttrs.put(appAttr.name(), appAttr);
+						appUsageAttrsFV.addElement(appAttr);
+					}
+				} else {
+					for (String appUid : aggregateAppFreq.keySet()) {
+						Integer appUsageOccurs = aggregateAppFreq.get(appUid);
+						if ((Config.LOAD_DROP_VERYFREQUENT_VALS && appUsageOccurs > stopWordAppTh)
+								|| (Config.LOAD_DROP_VERYRARE_VALS && appUsageOccurs < rareWordAppTh)) {
+							continue;
+						}
 
-					Attribute appAttr = new Attribute(appUid);
-					appUsageAttrs.put(appUid, appAttr);
-					appUsageAttrsFV.addElement(appAttr);
+						Attribute appAttr = new Attribute(appUid);
+						appUsageAttrs.put(appUid, appAttr);
+						appUsageAttrsFV.addElement(appAttr);
+					}
 				}
-
 				if (Config.LOADCOUNTS_FOR_SVMLIGHT_MY_CODE) {
 					// TODO support more than LOO
 					AppsSVMLightSaver.init(app.inputPath,
@@ -835,11 +852,11 @@ public class LoadCountsAsAttributes implements
 			System.err.println(new Date() + ": Done in "
 					+ (System.currentTimeMillis() - time) + " millis");
 		} finally {
-//			try {
-////				notifyStream.close();
-//			} catch (IOException ignored) {
-//
-//			}
+			// try {
+			// // notifyStream.close();
+			// } catch (IOException ignored) {
+			//
+			// }
 			System.setErr(errOrig);
 		}
 	}
@@ -1083,8 +1100,8 @@ public class LoadCountsAsAttributes implements
 									prevLabel = null;
 								}
 								placeID = header.toString();
-								instLabel = Config.placeLabels
-										.getProperty(placeID, "0");
+								instLabel = Config.placeLabels.getProperty(
+										placeID, "0");
 							}
 							header.setLength(0);
 							++numTabs;
@@ -1602,8 +1619,8 @@ public class LoadCountsAsAttributes implements
 
 					generalRemove = new Remove();
 					String remIxes = "1,2,3,4,6,7,9,10,11,13,14,15,17,16,19,18,21,20,23,22,25,27,26,29,28,30,34,35,33,38,39,37,42,43,40,41,46,47,44,45,50,49,48,55,54,53,52,59,58,57,56,63,62,68,69,70,71,66,67,76,77,78,72,73,74,75,85,84,86,81,80,83,82,93,92,95,94,89,91,90,102,101,96,97,106,105,119,118,117,116,115,127,126,125,124,123,122,121,120,137,136,139,138,141,140,129,128,155,156,157,158,144,145,146,147,148,149,171,170,169,174,173,172,160,165,164,189,205,204,207,206,199,222,223,217,208,209,239,234,228";
-					
-//							PCA_CONCENSUS_REMOVE_FILTER;
+
+					// PCA_CONCENSUS_REMOVE_FILTER;
 					// FileUtils.readFileToString(FileUtils
 					// .getFile(AttributeConsensusRank.OUTPUT_PATH,
 					// CLASSIFIER_TO_HONOUR, "filter_ALL.txt"));
@@ -1614,15 +1631,16 @@ public class LoadCountsAsAttributes implements
 					if (numInstsBefore == joinedInsts.numAttributes()) {
 						String[] attrs = remIxes.split("\\,");
 						int[] filteredAttrs = new int[attrs.length];
-						for(int i=0; i<attrs.length; ++i){
+						for (int i = 0; i < attrs.length; ++i) {
 							filteredAttrs[i] = Integer.parseInt(attrs[i]);
 						}
 						Arrays.sort(filteredAttrs);
-						for(int i=filteredAttrs.length-1; i>=0; --i){
-							
+						for (int i = filteredAttrs.length - 1; i >= 0; --i) {
+
 							joinedInsts.deleteAttributeAt(filteredAttrs[i] - 1);
 						}
-						joinedInsts.setClassIndex(joinedInsts.numAttributes() - 1);
+						joinedInsts
+								.setClassIndex(joinedInsts.numAttributes() - 1);
 					}
 				}
 

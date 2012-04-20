@@ -34,6 +34,7 @@ import javax.swing.SwingUtilities;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.math.stat.Frequency;
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 import org.apache.http.impl.cookie.DateUtils;
 import org.math.plot.Plot2DPanel;
 import org.math.plot.plots.ScatterPlot;
@@ -45,22 +46,24 @@ import weka.core.Instances;
 import weka.core.converters.CSVLoader;
 
 public class PlaceLabelSeriesPlot extends JFrame {
-	private static final boolean WEKA = false;
-	private static boolean validate = true;
+	private static final boolean WEKA = true;
+	private static boolean validate = false;
 	private static boolean guess = false;
 	private static boolean show = false;
-	private static boolean save = false;
+	private static boolean save = true;
 	// private static String classifierAndFeatSelector =
 	// "weka.classifiers.trees.J48\\weka.attributeSelection.GainRatioAttributeEval";
 	// "weka.classifiers.trees.RandomForest\\weka.attributeSelection.GainRatioAttributeEval";
-	private static String inBase = "C:\\mdc-datasets\\weka\\"; // validation_sample-noweight_cascade-base_max1.5";
+	private static String inBase = "D:\\mdc-datasets\\weka\\";//"C:\\mdc-datasets\\weka\\"; // validation_sample-noweight_cascade-base_max1.5";
 	// + classifierAndFeatSelector; //
 	// \v0_u0_n1_ALL_feat-selected_instid-time_prediction.csv"
-	private static String outBase = "C:\\mdc-datasets\\weka\\results";
+	private static String outBase = "D:\\mdc-datasets\\weka\\results_likely";
 	// "visualization\\place-label_time-series_validation_sample-noweight_cascade-base_max1.5\\";
 	// + classifierAndFeatSelector;
-	private static String FILENAME_SUFFIX = "ALL_feat-selected_instid-time_prediction.csv";
-	private static String instIdPlaceIdMapsPath = "C:\\mdc-datasets\\weka\\segmented_user_sample-noweight\\";
+	private static String FILENAME_SUFFIX = "ALL_feat-selected_instid-time_prediction.csv"; //""ALL_feat-selected_instid-time_prediction.csv";
+	private static String FILENAME_SUFFIX2 = "ALL_feat-selected-classifications.txt";
+	private static String instIdPlaceIdMapsPath = "D:\\mdc-datasets\\weka\\segmented_user-test";
+			//"C:\\mdc-datasets\\weka\\segmented_user-filtered";
 	private static String instIdPlaceIdMapsFname = "_instid-placeid_map.properties";
 	private static FilenameFilter fnFilter = new FilenameFilter() {
 
@@ -76,7 +79,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 	private static double[][] visitsConfusionMatrix;
 	private static double[][] placesConfusionMatrix;
 	private static Properties instIdPlaceId;
-	static TreeMap<String, Frequency> placePredictions = new TreeMap<String, Frequency>();
+	static TreeMap<String, SummaryStatistics[]> placePredictions = new TreeMap<String, SummaryStatistics[]>();
 	static SimpleDateFormat reverseDate = new SimpleDateFormat("yyyyMMddHHmm");
 	private static double superiorityRatio = 1.1;
 
@@ -105,48 +108,104 @@ public class PlaceLabelSeriesPlot extends JFrame {
 
 	}
 
-	static void writeConfusionMatrix(double[][] confusionMatrix, Writer evalWr)
+	static double[] writeEvaluation(double[][] visitsConfusionMatrix2, Writer evalWr)
 			throws IOException {
 		double[] precision = new double[11];
 		double[] recall = new double[11];
+		double tc = 0;
+		double grandTotal = 0;
 		double avgPrec = 0.0;
 		double avgRecall = 0.0;
 		for (int i = 0; i < 11; ++i) {
-			double numerator = confusionMatrix[i][i];
+			double numerator = visitsConfusionMatrix2[i][i];
+			tc += numerator;
 			double precDenim = 0.0;
 			double recDenim = 0.0;
 			for (int j = 0; j < 11; ++j) {
-				precDenim += confusionMatrix[j][i];
-				recDenim += confusionMatrix[i][j];
+				precDenim += visitsConfusionMatrix2[j][i];
+				recDenim += visitsConfusionMatrix2[i][j];
 			}
-			precision[i] = numerator / precDenim;
-			recall[i] = numerator / recDenim;
+			if (precDenim > 0) {
+				precision[i] = numerator / precDenim;
+			}
+			if (recDenim > 0) {
+				recall[i] = numerator / recDenim;
+			}
 			avgPrec += precision[i];
 			avgRecall += recall[i];
 		}
+		avgPrec /= 11.0;
+		avgRecall /= 11.0;
 		evalWr.append(
 				"Precision: " + Arrays.toString(precision) + " Average: "
-						+ (avgPrec / 11) + "\n").append(
-				"Recall: " + Arrays.toString(recall) + " Average: "
-						+ (avgRecall / 11) + "\n");
+						+ avgPrec + "\n").append(
+				"Recall: " + Arrays.toString(recall) + " Average: " + avgRecall
+						+ "\n");
 
 		evalWr.append("Confusion Matrix:\n").append(
 				"label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\n");
 
-		for (int i = 0; i < confusionMatrix.length; ++i) {
+		for (int i = 0; i < visitsConfusionMatrix2.length; ++i) {
 			evalWr.append(Integer.toString(i));
 			long rowTotal = 0;
 
-			for (int j = 0; j < Config.LABELS_SINGLES.length; ++j) {
-				double cnt = confusionMatrix[i][j];
+			for (int j = 0; j < 11; ++j) {
+				double cnt = visitsConfusionMatrix2[i][j];
 				rowTotal += cnt;
 				evalWr.append('\t').append(Long.toString(Math.round(cnt)));
 			}
-
+			grandTotal += rowTotal;
 			evalWr.append('\t').append(Long.toString(rowTotal)).append('\n');
 		}
 
+		tc /= grandTotal;
+		evalWr.append("Truce Classification Rate: " + tc);
+
+		return new double[] { tc, avgPrec, avgRecall };
 	}
+
+//	static void writeConfusionMatrix(double[][] confusionMatrix, Writer evalWr)
+//			throws IOException {
+//		double[] precision = new double[11];
+//		double[] recall = new double[11];
+//		double avgPrec = 0.0;
+//		double avgRecall = 0.0;
+//		for (int i = 0; i < 11; ++i) {
+//			double numerator = confusionMatrix[i][i];
+//			double precDenim = 0.0;
+//			double recDenim = 0.0;
+//			for (int j = 0; j < 11; ++j) {
+//				precDenim += confusionMatrix[j][i];
+//				recDenim += confusionMatrix[i][j];
+//			}
+//			precision[i] = numerator / precDenim;
+//			recall[i] = numerator / recDenim;
+//			avgPrec += precision[i];
+//			avgRecall += recall[i];
+//		}
+//		evalWr.append(
+//				"Precision: " + Arrays.toString(precision) + " Average: "
+//						+ (avgPrec / 11) + "\n").append(
+//				"Recall: " + Arrays.toString(recall) + " Average: "
+//						+ (avgRecall / 11) + "\n");
+//
+//		evalWr.append("Confusion Matrix:\n").append(
+//				"label\t0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\n");
+//
+//		for (int i = 0; i < confusionMatrix.length; ++i) {
+//			evalWr.append(Integer.toString(i));
+//			long rowTotal = 0;
+//
+//			for (int j = 0; j < Config.LABELS_SINGLES.length; ++j) {
+//				double cnt = confusionMatrix[i][j];
+//				rowTotal += cnt;
+//				evalWr.append('\t').append(Long.toString(Math.round(cnt)));
+//			}
+//
+//			evalWr.append('\t').append(Long.toString(rowTotal)).append('\n');
+//		}
+//
+//	}
 
 	private static void writeFreqMap(String userId) throws IOException {
 		Writer wr = Channels.newWriter(
@@ -156,17 +215,19 @@ public class PlaceLabelSeriesPlot extends JFrame {
 		try {
 			Random rand = new Random(System.currentTimeMillis());
 			wr.append("placeid\tL0\tL1\tL2\tL3\tL4\tL5\tL6\tL7\tL8\tL9\tL10\tTotalCount\tSelected\tActual\n");
-			TreeMap<String, Frequency> freqMap = placePredictions;
+			TreeMap<String, SummaryStatistics[]> freqMap = placePredictions;
 			for (String placeid : freqMap.keySet()) {
 				wr.append(placeid);
-				Frequency freq = freqMap.get(placeid);
+				SummaryStatistics[] freq = freqMap.get(placeid);
 				int total = 0;
 				double maxPct = 1E-6;
 				LinkedList<String> selLabels = new LinkedList<String>();
 				for (String label : Config.LABELS_SINGLES) {
-					double pct = freq.getPct(Double.parseDouble(label));
+					double pct = freq[Integer.parseInt(label)].getMean();
+//							.getPct(Double.parseDouble(label));
 					wr.append('\t').append(Double.toString(pct));
-					total += freq.getCount(label);
+					total += freq[Integer.parseInt(label)].getN();
+//							freq.getCount(label);
 
 					double ratio = pct / maxPct;
 					if (ratio >= 1 / superiorityRatio) {
@@ -224,6 +285,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 
 	private static Frequency plotAndCalcAccuracy(String currUserId, String pfx,
 			TreeMap<Double, Double> predicted, TreeMap<Double, Double> actual,
+			TreeMap<Double, Double[]> densities,
 			LinkedList<String> instIds, String outPath) throws IOException,
 			InterruptedException {
 		Frequency accuracy = new Frequency();
@@ -265,11 +327,11 @@ public class PlaceLabelSeriesPlot extends JFrame {
 			actualArr[m][1] = 0;
 		}
 		userStart -= tsmm * Config.TIME_SECONDS_IN_10MINS;
-		int i = 0;
+		int i = tsmm;
 		for (Double time : predicted.keySet()) {
 			predictedArr[i][0] = time - userStart;
 			predictedArr[i][1] = predicted.get(time);
-			instIdArr[i] = instIds.get(i);
+			instIdArr[i] = instIds.get(i-tsmm);
 
 			if (validate) {
 				actualArr[i][0] = predictedArr[i][0];
@@ -282,12 +344,19 @@ public class PlaceLabelSeriesPlot extends JFrame {
 				if (WEKA) {
 					String placeId = instIdPlaceId.getProperty(instIdArr[i]
 							+ ".0");
-					Frequency placeFreq = placePredictions.get(placeId);
+					SummaryStatistics[] placeFreq = placePredictions.get(placeId);
 					if (placeFreq == null) {
-						placeFreq = new Frequency();
+						placeFreq = new SummaryStatistics[Config.LABELS_SINGLES.length];
+						for(int l=0; l<11; ++l){
+							placeFreq[l] = new SummaryStatistics();
+						}
 						placePredictions.put(placeId, placeFreq);
 					}
-					placeFreq.addValue(predictedArr[i][1]);
+					if(densities!= null)
+					for(int l=0; l<11; ++l){
+						placeFreq[l].addValue(densities.get(time)[l]);
+					}
+//					placeFreq.addValue(predictedArr[i][1]);
 				}
 			}
 			++i;
@@ -332,7 +401,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 
 			plotPannel.addScatterPlot("Predicted", Color.BLUE,
 					predictedArrSlice);
-			ScatterPlot predictedPlot = ((ScatterPlot) plotPannel.getPlot(1));
+			ScatterPlot predictedPlot = ((ScatterPlot) plotPannel.getPlot(validate?1:0));
 			predictedPlot.setTags(Arrays.copyOfRange(instIdArr, rangeStart,
 					rangeEnd));
 
@@ -396,8 +465,8 @@ public class PlaceLabelSeriesPlot extends JFrame {
 		FileFilter validationFilter = new FileFilter() {
 			@Override
 			public boolean accept(File arg0) {
-				return arg0.getName().startsWith(
-						"validation_full-compare-diff-feat-sel")// validation_sample-noweight_cascade-base_ties
+				return arg0.getName().startsWith("final-out_likely")
+//						"final")// validation_sample-noweight_cascade-base_ties
 						&& arg0.isDirectory();
 			}
 		};
@@ -424,6 +493,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 					placesConfusionMatrix = new double[11][11];
 					TreeMap<Double, Double> predicted = new TreeMap<Double, Double>();
 					TreeMap<Double, Double> actual = new TreeMap<Double, Double>();
+					TreeMap<Double, Double[]> densities = new TreeMap<Double, Double[]>();
 					LinkedList<String> instIds = new LinkedList<String>();
 
 					try {
@@ -435,8 +505,11 @@ public class PlaceLabelSeriesPlot extends JFrame {
 									break;
 								}
 
+								File densFile = FileUtils.getFile(seriesFile.getAbsolutePath().replace(FILENAME_SUFFIX, FILENAME_SUFFIX2));
+								
 								predicted.clear();
 								actual.clear();
+								densities.clear();
 								instIds.clear();
 
 								String pfx = seriesFile.getParentFile()
@@ -453,13 +526,27 @@ public class PlaceLabelSeriesPlot extends JFrame {
 								csvLoad.setSource(seriesFile);
 								// Instances struct = csvLoad.getStructure();
 								Instances data = csvLoad.getDataSet();
+								CSVLoader densLoad = new CSVLoader();
+								Instances dens = null;
+								if(densFile.exists()){
+								densLoad.setSource(densFile);
+								// Instances struct = csvLoad.getStructure();
+								 dens = densLoad.getDataSet();	
+								}
 
 								String currUserId = null;
-								Enumeration instEnum = data
-										.enumerateInstances();
-								while (instEnum.hasMoreElements()) {
-									Instance inst = (Instance) instEnum
-											.nextElement();
+//								Enumeration instEnum = data
+//										.enumerateInstances();
+//								while (instEnum.hasMoreElements()) {
+//									Instance inst = (Instance) instEnum
+//											.nextElement();
+								for(int i=0; i<data.numInstances(); ++i){
+									Instance inst = data.instance(i);
+									Instance density = null;
+									if(densFile.exists()){
+										
+										density= dens.instance(i);
+									}
 									String instUserId = StringUtils
 											.numberToId((int) Math.round(inst
 													.value(0)));
@@ -472,6 +559,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 													pfx,
 													predicted,
 													actual,
+													densFile.exists()?densities:null,
 													instIds,
 													FilenameUtils
 															.concat(outPath,
@@ -497,6 +585,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 
 											predicted.clear();
 											actual.clear();
+											densities.clear();
 											instIds.clear();
 
 											writeFreqMap(currUserId);
@@ -520,11 +609,17 @@ public class PlaceLabelSeriesPlot extends JFrame {
 									Double endTime = inst.value(3);
 									Double instPredicted = inst.value(4);
 									Double instActual = inst.value(5);
-
+									Double[] densArr = new Double[11];
+									if(densFile.exists()){
+									for(int l=0; l<11; ++l){
+										densArr[l] = density.value(l+1);
+									}
+									}
 									for (double time = startTime; time <= endTime; time += Config.TIME_SECONDS_IN_10MINS) {
 										predicted.put(time, instPredicted);
 										if (validate) {
 											actual.put(time, instActual);
+											densities.put(time, densArr);
 										}
 										instIds.add(instId);
 									}
@@ -532,7 +627,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 								}
 
 								Frequency accuracy = plotAndCalcAccuracy(
-										currUserId, pfx, predicted, actual,
+										currUserId, pfx, predicted, actual,densFile.exists()?densities:null,
 										instIds, FilenameUtils.concat(outPath,
 												validationName));
 								long userCount = appendAccuracy(accuracyWr,
@@ -584,7 +679,8 @@ public class PlaceLabelSeriesPlot extends JFrame {
 						evalWr.append(trueCount + " / " + totalCount + " = "
 								+ (trueCount * 1.0 / totalCount) + "\n");
 
-						writeConfusionMatrix(visitsConfusionMatrix, evalWr);
+						writeEvaluation(visitsConfusionMatrix, evalWr);
+//						writeConfusionMatrix(visitsConfusionMatrix, evalWr);
 
 					} finally {
 						evalWr.flush();
@@ -597,7 +693,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 							Config.OUT_CHARSET);
 					try {
 
-						writeConfusionMatrix(placesConfusionMatrix, evalWr);
+						writeEvaluation(placesConfusionMatrix, evalWr);
 
 					} finally {
 						evalWr.flush();
@@ -728,7 +824,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 
 							Frequency accuracy = plotAndCalcAccuracy(
 									validationDir.getName(), pfx, predicted,
-									actual, instIds, FilenameUtils.concat(
+									actual,null, instIds, FilenameUtils.concat(
 											outPath, validationName));
 							long userCount = appendAccuracy(accuracyWr,
 									accuracy, validationDir.getName());
@@ -779,7 +875,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 				evalWr.append(trueCount + " / " + totalCount + " = "
 						+ (trueCount * 1.0 / totalCount) + "\n");
 
-				writeConfusionMatrix(visitsConfusionMatrix, evalWr);
+				writeEvaluation(visitsConfusionMatrix, evalWr);
 
 			} finally {
 				evalWr.flush();
@@ -792,7 +888,7 @@ public class PlaceLabelSeriesPlot extends JFrame {
 					Config.OUT_CHARSET);
 			try {
 
-				writeConfusionMatrix(placesConfusionMatrix, evalWr);
+				writeEvaluation(placesConfusionMatrix, evalWr);
 
 			} finally {
 				evalWr.flush();

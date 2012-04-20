@@ -8,7 +8,7 @@ public class Config {
 	}
 
 	public static final String USERID_COLNAME = "userid";
-	public static final int NUM_THREADS =8;
+	public static final int NUM_THREADS =1;
 	public static final int NUM_USERS_TO_PROCESS = 80;
 	public static final int VALIDATION_SAMPLE_USERS = 20;
 	public static final int VALIDATION_FOLDS = 4; //Config.NUM_USERS_TO_PROCESS; 
@@ -166,6 +166,10 @@ public class Config {
 	public static final boolean LOAD_COUNT_WEIGHT = false;
 	public static final boolean LOAD_WEIGHT_USERS = false;
 	public static final boolean LOAD_COUNT_TRANSDUCTIVE_ZERO = false;
+	public static final boolean LOAD_APPS_FROM_DICTIONARY = true;
+	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\hand-picked_apps.properties";
+	public static final String APP_DICTIONARY_PATH = "C:\\mdc-datasets\\dictionary_apps.properties";
+
 	
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_USING_SAVER = false;
 	public static final boolean LOADCOUNTS_FOR_SVMLIGHT_MY_CODE = false;
@@ -179,9 +183,7 @@ public class Config {
 //	public static final boolean CLASSIFY_USING_BIANRY_ENSEMBLE = true;
 //	public static final boolean CLASSIFY_IGNORING_MISSING_LABELS = true;
 //	public static final boolean CALSSIFYFEATSELECT_FEAT_SELECT = false;
-
-	public static final String FEAT_SELECTED_APPS_PATH = "C:\\mdc-datasets\\feat-selected_apps.properties";
-
+	
 	public static final boolean CALC_ATTR_PAIRSWISE_CORRELATION = false;
 
 	public static final boolean CALC_ATTR_PAIRSWISE_MUTUALINFO = true;
@@ -221,7 +223,7 @@ public class Config {
 	public static final boolean CLASSIFY_PENALIZE_ZERO = false;
 	public static final boolean CLASSIFY_SEPARATE_PREVALENCE = false;
 	public static final boolean CLASSIFY_USING_SAMPLE_FIXED_NUMBER_FROM_USER =false;
-	public static final boolean CLASSIFY_FEAT_SELECTED_CLASSIFIER =true;
+	public static final boolean CLASSIFY_FEAT_SELECTED_CLASSIFIER =false;
 	
 	
 	
